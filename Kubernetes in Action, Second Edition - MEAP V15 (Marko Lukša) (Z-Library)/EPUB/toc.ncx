@@ -1,0 +1,128 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta content="83264" name="dtb:uid"/>
+    <meta content="0" name="dtb:depth"/>
+    <meta content="0" name="dtb:totalPageCount"/>
+    <meta content="0" name="dtb:maxPageNumber"/>
+  </head>
+  <docTitle>
+    <text>Kubernetes in Action, Second Edition MEAP V15</text>
+  </docTitle>
+  <navMap>
+    <navPoint id="Copyright_2023_Manning_Publications">
+      <navLabel>
+        <text>Copyright_2023_Manning_Publications</text>
+      </navLabel>
+      <content src="copyright-2023-manning-publications.html"/>
+    </navPoint>
+    <navPoint id="welcome">
+      <navLabel>
+        <text>welcome</text>
+      </navLabel>
+      <content src="welcome.html"/>
+    </navPoint>
+    <navPoint id="1_Introducing_Kubernetes">
+      <navLabel>
+        <text>1_Introducing_Kubernetes</text>
+      </navLabel>
+      <content src="chapter-1.html"/>
+    </navPoint>
+    <navPoint id="2_Understanding_containers">
+      <navLabel>
+        <text>2_Understanding_containers</text>
+      </navLabel>
+      <content src="chapter-2.html"/>
+    </navPoint>
+    <navPoint id="3_Deploying_your_first_application">
+      <navLabel>
+        <text>3_Deploying_your_first_application</text>
+      </navLabel>
+      <content src="chapter-3.html"/>
+    </navPoint>
+    <navPoint id="4_Introducing_Kubernetes_API_objects">
+      <navLabel>
+        <text>4_Introducing_Kubernetes_API_objects</text>
+      </navLabel>
+      <content src="chapter-4.html"/>
+    </navPoint>
+    <navPoint id="5_Running_workloads_in_Pods">
+      <navLabel>
+        <text>5_Running_workloads_in_Pods</text>
+      </navLabel>
+      <content src="chapter-5.html"/>
+    </navPoint>
+    <navPoint id="6_Manging_the_Pod_lifecycle">
+      <navLabel>
+        <text>6_Manging_the_Pod_lifecycle</text>
+      </navLabel>
+      <content src="chapter-6.html"/>
+    </navPoint>
+    <navPoint id="7_Attaching_storage_volumes_to_Pods">
+      <navLabel>
+        <text>7_Attaching_storage_volumes_to_Pods</text>
+      </navLabel>
+      <content src="chapter-7.html"/>
+    </navPoint>
+    <navPoint id="8_Persisting_data_in_PersistentVolumes">
+      <navLabel>
+        <text>8_Persisting_data_in_PersistentVolumes</text>
+      </navLabel>
+      <content src="chapter-8.html"/>
+    </navPoint>
+    <navPoint id="9_Configuration_via_ConfigMaps,_Secrets,_and_the_Downward_API">
+      <navLabel>
+        <text>9_Configuration_via_ConfigMaps,_Secrets,_and_the_Downward_API</text>
+      </navLabel>
+      <content src="chapter-9.html"/>
+    </navPoint>
+    <navPoint id="10_Organizing_objects_using_Namespaces_and_Labels">
+      <navLabel>
+        <text>10_Organizing_objects_using_Namespaces_and_Labels</text>
+      </navLabel>
+      <content src="chapter-10.html"/>
+    </navPoint>
+    <navPoint id="11_Exposing_Pods_with_Services">
+      <navLabel>
+        <text>11_Exposing_Pods_with_Services</text>
+      </navLabel>
+      <content src="chapter-11.html"/>
+    </navPoint>
+    <navPoint id="12_Exposing_Services_with_Ingress">
+      <navLabel>
+        <text>12_Exposing_Services_with_Ingress</text>
+      </navLabel>
+      <content src="chapter-12.html"/>
+    </navPoint>
+    <navPoint id="13_Replicating_Pods_with_ReplicaSets">
+      <navLabel>
+        <text>13_Replicating_Pods_with_ReplicaSets</text>
+      </navLabel>
+      <content src="chapter-13.html"/>
+    </navPoint>
+    <navPoint id="14_Managing_Pods_with_Deployments">
+      <navLabel>
+        <text>14_Managing_Pods_with_Deployments</text>
+      </navLabel>
+      <content src="chapter-14.html"/>
+    </navPoint>
+    <navPoint id="15_Deploying_stateful_workloads_with_StatefulSets">
+      <navLabel>
+        <text>15_Deploying_stateful_workloads_with_StatefulSets</text>
+      </navLabel>
+      <content src="chapter-15.html"/>
+    </navPoint>
+    <navPoint id="16_Deploying_node_agents_and_daemons_with_DaemonSets">
+      <navLabel>
+        <text>16_Deploying_node_agents_and_daemons_with_DaemonSets</text>
+      </navLabel>
+      <content src="chapter-16.html"/>
+    </navPoint>
+    <navPoint id="17_Running_finite_workloads_with_Jobs_and_CronJobs">
+      <navLabel>
+        <text>17_Running_finite_workloads_with_Jobs_and_CronJobs</text>
+      </navLabel>
+      <content src="chapter-17.html"/>
+    </navPoint>
+  </navMap>
+</ncx>

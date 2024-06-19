@@ -1,0 +1,1574 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="93a035db57011284b796bc62c2b1ad2f" data-text-hash="4d7c882341395f8264e3860124f94247" id="1" refid="1">
+<h1>14 Managing Pods with Deployments</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="8adc9023fb8e294ec34344176d59e00f" data-text-hash="5b286e4a69b3fd3e851e0ac5e44f042f" id="2" refid="2"> <span>Deploying stateless workloads with the Deployment object</span></li>
+<li class="readable-text" data-hash="42aa754f715f3c9e7a0952393d669e72" data-text-hash="3cb6799d64393880899271f9fec59fa1" id="3" refid="3"> <span>Horizontally scaling Deployments</span></li>
+<li class="readable-text" data-hash="9f5c0da7d3d0a5289c108c6e33ab0352" data-text-hash="0ab41d2b61ed8b351392c8671dcc8318" id="4" refid="4"> <span>Updating workloads declaratively</span></li>
+<li class="readable-text" data-hash="a5e03cb0459803797037bd487d3b0f2b" data-text-hash="cae88c672197e7e1e9cc72f48934e79d" id="5" refid="5"> <span>Preventing rollouts of faulty workloads</span></li>
+<li class="readable-text" data-hash="c4a427fe5526b885203837dc069d6b54" data-text-hash="77e83758af391b7259bd86a0af8ecb78" id="6" refid="6"> <span>Implementing various deployment strategies</span></li>
+</ul>
+</div>
+<div class="readable-text" data-hash="91eca4b298edf50aefab848af7ce1f54" data-text-hash="4aaaef17f7724b7bd8d68b1aa891a4a5" id="7" refid="7">
+<p><span>In the previous chapter, you learned how to deploy Pods via ReplicaSets. However, workloads are rarely deployed this way because ReplicaSets don&#8217;t provide the functionality necessary to easily update these Pods. This functionality is provided by the Deployment object type. By the end of this chapter, each of the three services in the Kiada suite will have its own Deployment object.</span></p>
+</div>
+<div class="readable-text" data-hash="ead4c7ac1bba930b5f82af5f513c4ef4" data-text-hash="b3736c7e8317d2439f1526f37b36f2a6" id="8" refid="8">
+<p><span>Before you begin, make sure that the Pods, Services, and other objects of the Kiada suite are present in your cluster. If you followed the exercises in the previous chapter, they should already be there. If not, you can create them by creating the</span> <code>kiada</code> <span>namespace and applying all the manifests in the</span> <code>Chapter14/SETUP/</code> <span>directory with the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d4799377f52a3cd0f9a6ae7d43b563c4" data-text-hash="793765f6f10f418df0bb0c36178a15b1" id="9" refid="9">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f SETUP -R</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="10" refid="10">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="22c1c64d12c47708b1ed14840494a59c" data-text-hash="7ccbc7a6a16f625826bb3201b4c01f33" id="11" refid="11">
+<p> <span>You can find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter14</a>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="cbdcd6ebd9be5554407648bf8658af72" data-text-hash="dbb2ce26c19b4b585a97b073d2c5a28d" id="12" refid="12">
+<h2 id="sigil_toc_id_250">14.1&#160;Introducing Deployments</h2>
+</div>
+<div class="readable-text" data-hash="54dc446f13096929fb84a7f646362a4e" data-text-hash="ccb31a50cccc91e691418bd3d2eb705a" id="13" refid="13">
+<p><span>When you deploy a workload to Kubernetes, you typically do so by creating a Deployment object.</span> A Deployment object doesn't <span>directly</span> manage the Pod objects, but manages them <span>through a ReplicaSet object that&#8217;s automatically created when you create the Deployment object. As shown in the next figure, the Deployment controls the ReplicaSet, which in turn controls the individual Pods.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="e653260c0fca454d85edec45f0afba6f" data-text-hash="533d153482adc18b382300810b9e4073" id="14" refid="14">
+<h5>Figure 14.1 The relationship between Deployments, ReplicaSets and Pods.</h5>
+<img alt="" data-processed="true" height="205" id="Picture_1" loading="lazy" src="EPUB/images/14_img_0001.png" width="778">
+</div>
+<div class="readable-text" data-hash="9408a80188382e3f6759a9d4cd8c08bd" data-text-hash="39f87fe05bb39dae96ff1aef946fbc42" id="15" refid="15">
+<p><span>A Deployment allows you to update the application declaratively. This means that rather than manually performing a series of operations to replace a set of Pods with ones running an updated version of your application, you just update the configuration in the Deployment object and let Kubernetes automate the update.</span></p>
+</div>
+<div class="readable-text" data-hash="9151303f9e7a7c43e844571048dbff7a" data-text-hash="f6a3d5f579cafc6cb2b419580dbc8f50" id="16" refid="16">
+<p><span>As with ReplicaSets, you specify a Pod template, the desired number of replicas, and a label selector in a Deployment. The Pods created based on this Deployment are exact replicas of each other and are fungible. For this and other reasons, Deployments are mainly used for stateless workloads, but you can also use them to run a single instance of a stateful workload. However, because there&#8217;s no built-in way to prevent users from scaling the Deployment to multiple instances, the application itself must ensure that only a single instance is active when multiple replicas are running simultaneously.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="17" refid="17">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3c88293669c9309b2c6b537ee4d228ae" data-text-hash="24e5e69f379bb3a357ba7f6fb065b59b" id="18" refid="18">
+<p> <span>To run replicated stateful workloads, a <i>StatefulSet</i> is the better option. You&#8217;ll learn about them in the next chapter.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="56a999053fff74a4cfa1bc212f576bfe" data-text-hash="2cf4f7bf1c3bff7bc0f6bc250beb446e" id="19" refid="19">
+<h3 id="sigil_toc_id_251">14.1.1&#160;Creating a Deployment</h3>
+</div>
+<div class="readable-text" data-hash="375699308566de3bfbd40da3ce341778" data-text-hash="3c0e0935980201d078ccc501731f7556" id="20" refid="20">
+<p><span>In this section, you&#8217;ll replace the kiada ReplicaSet with a Deployment. Delete the ReplicaSet without deleting the Pods as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="21f97ea8a8e03ce005577427aee8f5ed" data-text-hash="d14ed6811accf1bcaf14a0901a3affd9" id="21" refid="21">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete rs kiada --cascade=orphan</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="735bf55db6a773fe95d07710ac0ed772" data-text-hash="262f95176db6d88388ed42c4b5360fdc" id="22" refid="22">
+<p><span>Let&#8217;s see what you need to specify in the</span> <code>spec</code> <span>section of a Deployment and how it compares to that of the ReplicaSet.</span></p>
+</div>
+<div class="readable-text" data-hash="6f3e170edad9acf8ef1c08396622f4c4" data-text-hash="4a3489a7c8b4c5ae2b00cb868ececaad" id="23" refid="23">
+<h4>Introducing the Deployment spec</h4>
+</div>
+<div class="readable-text" data-hash="8dcc44d3fd6d0a1450223124a313be56" data-text-hash="a3cb0489dea20a513998d61c0ff02e03" id="24" refid="24">
+<p><span>The</span> <code>spec</code> <span>section of a Deployment object isn&#8217;t much different from a ReplicaSet&#8217;s. As you can see in the following table, the main fields are the same as the ones in a ReplicaSet, with only one additional field.</span></p>
+</div>
+<div class="browsable-container" data-hash="ec2682e162d1739c6690673ee25b4a90" data-text-hash="3c5e41b88f4c57e0034a5ece26f17e41" id="25" refid="25">
+<h5><span>Table 14.</span><span xml:lang="SL">1</span> <span>The main fields you specify in a Deployment&#8217;s spec section</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p><span>Field name</span></p> </td>
+<td> <p><span>Description</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>replicas
+</pre> </td>
+<td> <p><span>The desired number of replicas. When you create the Deployment object, Kubernetes creates this many Pods from the Pod template. It keeps this number of Pods until you delete the Deployment.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>selector
+</pre> </td>
+<td> <p><span>The label selector contains either a map of labels in the</span> <code>matchLabels</code> <span>subfield or a list of label selector requirements in the</span> <code>matchExpressions</code> <span>subfield. Pods that match the label selector are considered part of this Deployment.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>template
+</pre> </td>
+<td> <p><span>The Pod template for the Deployment&#8217;s Pods. When a new Pod needs to be created, the object is created using this template.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>strategy
+</pre> </td>
+<td> <p><span>The update strategy defines how Pods in this Deployment are replaced when you update the Pod template.</span></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="7f0d022b3d115f3e111cb668b33a93dd" data-text-hash="ab6e77a05b762211d25c7be94874e30d" id="26" refid="26">
+<p><span>The</span> <code>replicas</code><span>,</span> <code>selector</code><span>, and</span> <code>template</code> <span>fields serve the same purpose as those in ReplicaSets. In the additional</span> <code>strategy</code> <span>field, you can configure the update strategy to be used when you update this Deployment.</span></p>
+</div>
+<div class="readable-text" data-hash="7df1ccf0ffd0ce879125bb4d4a5f867e" data-text-hash="f1fd0be45cdd43cdf44509cf56100852" id="27" refid="27">
+<h4>Creating a Deployment manifest from scratch</h4>
+</div>
+<div class="readable-text" data-hash="92228e76e64238d1301b10d1e0b31a4a" data-text-hash="3098b9bb5f36d1b655b93d6614a1b694" id="28" refid="28">
+<p><span>When we need to create a new Deployment manifest, most of us usually copy an existing manifest file and modify it. However, if you don&#8217;t have an existing manifest handy, there&#8217;s a clever way to create the manifest file from scratch.</span></p>
+</div>
+<div class="readable-text" data-hash="424d56854f193e2475366d0bbb86bb7c" data-text-hash="cfbf2fa300e399f1a9863a0053056aab" id="29" refid="29">
+<p><span>You may remember that you first created a Deployment in chapter 3 of this book. This is the command you used then:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="652b10c15e80c100058140a65be8fded" data-text-hash="effafe821fcf6957cb8e23a6bfcd3db2" id="30" refid="30">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create deployment kiada --image=luksa/kiada:0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="483a8d22aa18696449ae5de21453b47c" data-text-hash="bdac8bc8f097f6552414186de9c9c1ba" id="31" refid="31">
+<p><span>But since this command creates the object directly instead of creating the manifest file, it&#8217;s not quite what you want. However, you may recall that you learned in chapter 5 that you can pass the</span> <code>--dry-run=client</code> <span>and</span> <code>-o yaml</code> <span>options to the</span> <code>kubectl create</code> <span>command if you want to create an object manifest without posting it to the API. So, to create a rough version of a Deployment manifest file, you can use the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="2329e5ee431846538414ab4d254ba307" data-text-hash="c54ffc435f4662e69fdfc8eebfb44025" id="32" refid="32">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create deployment my-app --image=my-image --dry-run=client -o yaml &gt; deploy.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="834c5206f3b9a5c70bdeff91c99e9b33" data-text-hash="766c49122622eb784fc1abeea479f5dd" id="33" refid="33">
+<p><span>You can then edit the manifest file to make your final changes, such as adding additional containers and volumes or changing the existing container definition. However, since you already have a manifest file for the kiada ReplicaSet, the fastest option is to turn it into a Deployment manifest.</span></p>
+</div>
+<div class="readable-text" data-hash="91dda86e6f708704e2acbb051c99bd17" data-text-hash="2cdebc94013e776e3c8f1ef9afabb190" id="34" refid="34">
+<h4>Creating a Deployment object manifest</h4>
+</div>
+<div class="readable-text" data-hash="c8eb8a4d602af9c5ea1ee1c113d79544" data-text-hash="293c78a6bceddd7e1a80fe2063c25c23" id="35" refid="35">
+<p><span>Creating a Deployment manifest is trivial if you already have the ReplicaSet manifest. You just need to copy the</span> <code>rs.kiada.versionLabel.yaml</code> <span>file to</span> <code>deploy.kiada.yaml</code><span>, for example, and then edit it to change the</span> <code>kind</code> <span>field from</span> <code>ReplicaSet</code> <span>to</span> <code>Deployment</code><span>. While you&#8217;re at it, please also change the number of replicas from two to three. Your Deployment manifest should look like the following listing.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="046da1eaae9172690acfb1a82163a1b1" data-text-hash="439dd62b42fced7684e9ae8a47304c05" id="36" refid="36">
+<h5>Listing 14.1 The kiada Deployment object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: Deployment    #A
+metadata:
+  name: kiada
+spec:
+  replicas: 3    #B
+  selector:    #C
+    matchLabels:    #C
+      app: kiada    #C
+      rel: stable    #C
+  template:    #D
+    metadata:    #D
+      labels:    #D
+        app: kiada    #D
+        rel: stable    #D
+        ver: '0.5'    #D
+    spec:    #D
+      ...    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5zdGVhZCBvZiBSZXBsaWNhU2V0LCB0aGUgb2JqZWN0IGtpbmQgaXMgRGVwbG95bWVudC4KI0IgWW91IHdhbnQgdGhlIERlcGxveW1lbnQgdG8gcnVuIHRocmVlIHJlcGxpY2FzLgojQyBUaGUgbGFiZWwgc2VsZWN0b3IgbWF0Y2hlcyB0aGUgb25lIGluIHRoZSBraWFkYSBSZXBsaWNhU2V0IHlvdSBjcmVhdGVkIGluIHRoZSBwcmV2aW91cyBjaGFwdGVyLgojRCBUaGUgUG9kIHRlbXBsYXRlIGFsc28gbWF0Y2hlcyB0aGUgb25lIGluIHRoZSBSZXBsaWNhU2V0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e6cc4efcedefa6526516abef665cdb9b" data-text-hash="29c4fa4e52087b7c59f10bd438cebe37" id="37" refid="37">
+<h4>Creating and inspecting the Deployment object</h4>
+</div>
+<div class="readable-text" data-hash="bafd991b24a8359dce0c29e75818cdeb" data-text-hash="8da684401fb3eabe7791383dc7d2b0d2" id="38" refid="38">
+<p><span>To create the Deployment object from the manifest file, use the</span> <code>kubectl apply</code> <span>command. You</span> <span>can use the usual commands like</span> <code>kubectl get deployment</code> <span>and</span> <code>kubectl</code> <code>describe</code> <code>deployment</code> <span>to get information about the Deployment you created. For example:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="cdcf8ab6d354b0cbe4f95b7c39e62f45" data-text-hash="c27e6902a3bc24f1d9091aab2c76f8ef" id="39" refid="39">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get deploy kiada
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kiada   3/3     3            3           25s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="40" refid="40">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f57247979c1948e0e9c12812764a4e09" data-text-hash="7b7048ebc9c51c4b1f75c0d3fd6d9011" id="41" refid="41">
+<p> <span>The shorthand for</span> <code>deployment</code> <span>is</span> <code>deploy</code><span>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="58d73c7de343f4f1ba3d269eec9e543d" data-text-hash="c7ce8fc0b8209202cc0273451705d68f" id="42" refid="42">
+<p><span>The Pod number information that the</span> <code>kubectl get</code> <span>command displays is read from the</span> <code>readyReplicas</code><span>,</span> <code>replicas</code><span>,</span> <code>updatedReplicas</code><span>, and</span> <code>availableReplicas</code> <span>fields in the</span> <code>status</code> <span>section of the Deployment object. Use the</span> <code>-o yaml</code> <span>option to see the full status.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="43" refid="43">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="07ecddc66437389e57223a741af8c51f" data-text-hash="5ee1da87ce02a1d27bc4626f846a1153" id="44" refid="44">
+<p> <span>Use the wide output option (</span><code>-o wide</code><span>) with</span> <code>kubectl get deploy</code> <span>to display the label selector and the container names and images used in the Pod template.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="d12e7fd58ca70bd63c9eea97d098ac48" data-text-hash="93640d2084b3d53d0f496629e21a94ef" id="45" refid="45">
+<p><span>If you just want to know if the Deployment rollout was successful, you can also use the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="7303759aeac44d4715204524bb6b23e9" data-text-hash="51534b86c3f89f7a4effa7ec6c017745" id="46" refid="46">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout status deployment kiada
+Waiting for deployment "kiada" rollout to finish: 0 of 3 updated replicas are available...
+Waiting for deployment "kiada" rollout to finish: 1 of 3 updated replicas are available...
+Waiting for deployment "kiada" rollout to finish: 2 of 3 updated replicas are available...
+deployment "kiada" successfully rolled out</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="79a48fff80d756e541691f3fa5d57e72" data-text-hash="9f4eb745a062acb39c968c68198ee75b" id="47" refid="47">
+<p><span>If you run this command immediately after creating the Deployment, you can track how the deployment of Pods is progressing. According to the output of the command, the Deployment has successfully rolled out the three Pod replicas.</span></p>
+</div>
+<div class="readable-text" data-hash="3095dd5bb525383f5ff7afdfeccf3f11" data-text-hash="ed51d40b6c2fc0147b0576ad169d8a76" id="48" refid="48">
+<p><span>Now list the Pods that belong to the Deployment. It uses the same selector as the ReplicaSet from the previous chapter, so you should see three Pods, right? To check, list the Pods with the label selector</span> <code>app=kiada,rel=stable</code> <span>as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="dfd92815d73b84fb3583b64b614b3009" data-text-hash="146fcf3f396f416e7c6b6cec1d91eace" id="49" refid="49">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada,rel=stable
+NAME                     READY   STATUS    RESTARTS   AGE
+kiada-4t87s              2/2     Running   0          16h    #A
+kiada-5lg8b              2/2     Running   0          16h    #A
+kiada-7bffb9bf96-4knb6   2/2     Running   0          6m    #B
+kiada-7bffb9bf96-7g2md   2/2     Running   0          6m    #B
+kiada-7bffb9bf96-qf4t7   2/2     Running   0          6m    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgdHdvIFBvZHMgYXJlIG9sZGVyIHRoYW4gdGhlIG90aGVyIHRocmVlIFBvZHMuCiNCIEdpdmVuIHRoZSBhZ2Ugb2YgdGhlc2UgUG9kcywgdGhlc2UgbG9vayBsaWtlIHRoZSBQb2RzIGNyZWF0ZWQgYnkgdGhlIERlcGxveW1lbnQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ef9bdedc1f013179a2bfc6c95864ed89" data-text-hash="11f2a6525fdf35df914df2ae8fff876c" id="50" refid="50">
+<p><span>Surprisingly, there are five Pods that match the selector. The first two are those created by the ReplicaSet from the previous chapter, while the last three were created by the Deployment. Although the label selector in the Deployment matches the two existing Pods, they weren&#8217;t picked up like you would expect. How come?</span></p>
+</div>
+<div class="readable-text" data-hash="13ede2399016fbc78a12429284e46374" data-text-hash="0b86ecac62c4d49d281e7d4cb915c4b7" id="51" refid="51">
+<p><span>At the beginning of this chapter, I explained that the Deployment doesn&#8217;t directly control the Pods but delegates this task to an underlying ReplicaSet. Let&#8217;s take a quick look at this ReplicaSet:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="21d2c9ee2c059f6882901fc680b95f7f" data-text-hash="b3a14c5b8302a4c5e6a411ff22a354c8" id="52" refid="52">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs
+NAME               DESIRED   CURRENT   READY   AGE
+kiada-7bffb9bf96   3         3         3       17m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="17e4a6896ecead3f2798e6a0a069a419" data-text-hash="8cfdb619ffb27675045240a5a2eeaacf" id="53" refid="53">
+<p><span>You&#8217;ll notice that the name of the ReplicaSet isn&#8217;t simply</span> <code>kiada</code><span>, but also contains an alphanumeric suffix (</span><code>-7bffb9bf96</code><span>) that seems to be randomly generated like the names of the Pods. Let&#8217;s find out what it is. Take a closer look at the ReplicaSet as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="7e55798cfe83f179411262bb184f012b" data-text-hash="f55f4689de309144cbcd68ece9aa2c5e" id="54" refid="54">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe rs kiada    #A
+Name:           kiada-7bffb9bf96
+Namespace:      kiada
+Selector:       app=kiada,pod-template-hash=7bffb9bf96,rel=stable    #B
+Labels:         app=kiada
+                pod-template-hash=7bffb9bf96    #C
+                rel=stable
+                ver=0.5
+Annotations:    deployment.kubernetes.io/desired-replicas: 3
+                deployment.kubernetes.io/max-replicas: 4
+                deployment.kubernetes.io/revision: 1
+Controlled By:  Deployment/kiada    #D
+Replicas:       3 current / 3 desired
+Pods Status:    3 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:  app=kiada
+           pod-template-hash=7bffb9bf96    #C
+           rel=stable
+           ver=0.5
+  Containers:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGt1YmVjdGwgZGVzY3JpYmUgY29tbWFuZCBkb2VzbuKAmXQgcmVxdWlyZSB5b3UgdG8gdHlwZSB0aGUgZnVsbCBuYW1lIG9mIGFuIG9iamVjdCwgc28ganVzdCB0eXBpbmcgcGFydCBvZiB0aGUgbmFtZSBzdWZmaWNlcy4KI0IgVGhlIFJlcGxpY2FTZXTigJlzIGxhYmVsIHNlbGVjdG9yIGRvZXNu4oCZdCBxdWl0ZSBtYXRjaCB0aGUgb25lIGluIHRoZSBEZXBsb3ltZW50LgojQyBBbiBhZGRpdGlvbmFsIHBvZC10ZW1wbGF0ZS1oYXNoIGxhYmVsIGFwcGVhcnMgaW4gYm90aCB0aGUgUmVwbGljYVNldOKAmXMgbGFiZWxzIGFuZCB0aGUgUG9kIGxhYmVscy4KI0QgVGhpcyBSZXBsaWNhU2V0IGlzIG93bmVkIGFuZCBjb250cm9sbGVkIGJ5IHRoZSBraWFkYSBEZXBsb3ltZW50Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9644e61ff1b7cc6fd71ab9168ecc2d0f" data-text-hash="8f3f793180f410cf11da4dac00daea03" id="55" refid="55">
+<p><span>The</span> <code>Controlled By</code> <span>line indicates that this ReplicaSet has been created and is owned and controlled by the</span> <code>kiada</code> <span>Deployment. You&#8217;ll notice that the Pod template, selector, and the ReplicaSet itself contain an additional label key</span> <code>pod-template-hash</code> <span>that you never defined in the Deployment object. The value of this label matches the last part of the ReplicaSet&#8217;s name. This additional label is why the two existing Pods weren&#8217;t acquired by this ReplicaSet. List the Pods with all their labels to see how they differ:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="757be8fb80b991d719fb971bea39e188" data-text-hash="29f4d48a2b06d45fbc25a8557c02e1d3" id="56" refid="56">
+<div class="code-area-container">
+<pre class="code-area">&lt;pre class="codeacxspfirst"&gt;$&amp;nbsp;&lt;b class="charbold"&gt;kubectl&amp;nbsp;get&amp;nbsp;pods&amp;nbsp;-l&amp;nbsp;app=kiada,rel=stable&amp;nbsp;--show-labels&lt;/b&gt;
+&lt;/pre&gt; &lt;pre class="codeacxspmiddle"&gt;NAME&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;...&amp;nbsp;&amp;nbsp;LABELS
+&lt;/pre&gt; &lt;pre class="codeacxspmiddle"&gt;kiada-4t87s&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;...&amp;nbsp;&amp;nbsp;app=kiada,rel=stable,ver=0.5&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;#A
+&lt;/pre&gt; &lt;pre class="codeacxspmiddle"&gt;kiada-5lg8b&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;&lt;a id="id_Hlk96249295" href=""&gt;...&amp;nbsp;&amp;nbsp;&lt;/a&gt;app=kiada,rel=stable,ver=0.5&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;#A
+&lt;/pre&gt; &lt;pre class="codeacxspmiddle"&gt;kiada-7bffb9bf96-4knb6&amp;nbsp;&amp;nbsp;...&amp;nbsp;&amp;nbsp;app=kiada,&lt;b class="charbold"&gt;pod-template-hash=7bffb9bf96,rel=stable,ver=0.5&amp;nbsp;&amp;nbsp;&amp;nbsp;#B&lt;/b&gt;
+&lt;/pre&gt; &lt;pre class="codeacxspmiddle"&gt;kiada-7bffb9bf96-7g2md&amp;nbsp;&amp;nbsp;...&amp;nbsp;&amp;nbsp;app=kiada,&lt;b class="charbold"&gt;pod-template-hash=7bffb9bf96,rel=stable,ver=0.5&amp;nbsp;&amp;nbsp;&amp;nbsp;#B&lt;/b&gt;
+&lt;/pre&gt; &lt;pre class="codeacxsplast"&gt;kiada-7bffb9bf96-qf4t7&amp;nbsp;&amp;nbsp;...&amp;nbsp;&amp;nbsp;app=kiada,&lt;b class="charbold"&gt;pod-template-hash=7bffb9bf96,rel=stable,ver=0.5&amp;nbsp;&amp;nbsp;&amp;nbsp;#B&lt;/b&gt;
+&lt;/pre&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHR3byBQb2RzIHRoYXQgZXhpc3RlZCBiZWZvcmUgZG8gbm90IGhhdmUgdGhlIHBvZC10ZW1wbGF0ZS1oYXNoIGxhYmVsLgojQiBUaGUgdGhyZWUgdGhhdCB3ZXJlIGNyZWF0ZWQgYnkgdGhlIERlcGxveW1lbnQgZG8u"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8a81bac3ade86859612d7d8b819e9781" data-text-hash="0e55bf3fd088589f40d2ca90483dcd6f" id="57" refid="57">
+<p>As <span>you can see</span> in the following figure, w<span>hen the ReplicaSet was created, the ReplicaSet controller couldn&#8217;t find any Pods that matched the label selector, so it created three new Pods. If you had added this label to the two existing Pods before creating the Deployment, they&#8217;d have been picked up by the ReplicaSet.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="e5e5e35471b90d4f8295a5c057228528" data-text-hash="6f5803f2ad75e60c4038060a031fb630" id="58" refid="58">
+<h5>Figure 14.2 Label selectors in the Deployment and ReplicaSet, and the labels in the Pods.</h5>
+<img alt="" data-processed="true" height="395" id="Picture_109" loading="lazy" src="EPUB/images/14_img_0002.png" width="783">
+</div>
+<div class="readable-text" data-hash="30b83715dd9995ffe11c487ffef2107f" data-text-hash="efb92b50419436517461fbcc7363fab9" id="59" refid="59">
+<p><span>The value of the</span> <code>pod-template-hash</code> <span>label isn&#8217;t random but calculated from the contents of the Pod template. Because the same value is used for the ReplicaSet name, the name depends on the contents of the Pod template. It follows that every time you change the Pod template, a new ReplicaSet is created. You&#8217;ll learn more about this in section 14.2, which explains Deployment updates.</span></p>
+</div>
+<div class="readable-text" data-hash="f5c73f6b8a7f620564e07eea42e841ce" data-text-hash="82132e7b1c32b4d91be14c344aabc2da" id="60" refid="60">
+<p><span>You can now delete the two kiada Pods that aren&#8217;t part of the Deployment. To do this, you use the</span> <code>kubectl delete</code> <span>command with a label selector that selects only the Pods that have the labels</span> <code>app=kiada</code> <span>and</span> <code>rel=stable</code> <span>and don&#8217;t have the label</span> <code>pod-template-hash</code><span>. This is what the full command looks like:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="2688d4166f7b68a8841539ea3ae33d62" data-text-hash="168acafc5111716d0490f61f195c56c8" id="61" refid="61">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po -l 'app=kiada,rel=stable,!pod-template-hash'</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="6fabea1d44e8c7ae8a1ecd8014d71191" data-text-hash="96876bc7fab73838e64afb4a11dcff0b" id="62" refid="62">
+<h5><span>Troubleshooting Deployments that fail to produce any Pods</span></h5>
+</div>
+<div class="readable-text" data-hash="13a2692d90d2e7a22853098b0eecd128" data-text-hash="625db84ed3342f5a0f8acd23deb15927" id="63" refid="63">
+<p>Under certain circumstances, when creating a Deployment, Pods may not appear. Troubleshooting in this case is easy if you know where to look. To try this out for yourself, apply the manifest file <code>deploy.where-are-the-pods.yaml</code>. This will create a Deployment object called <code>where-are-the-pods</code>. You&#8217;ll notice that no Pods are created for this Deployment, even though the desired number of replicas is three. To troubleshoot, you can inspect the Deployment object with <code>kubectl describe</code>. The Deployment&#8217;s events don&#8217;t show anything useful, but its Conditions do:</p>
+</div>
+</div>
+<div class="browsable-container listing-container" data-hash="6d3e1a1d39d4889d8b2bd10618285a71" data-text-hash="9f01eaa71b90a576e59f2b0da1ecea0c" id="64" refid="64">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe deploy where-are-the-pods
+...
+Conditions:
+Type Status Reason
+---- ------ ------
+Progressing True NewReplicaSetCreated
+Available False MinimumReplicasUnavailable
+ReplicaFailure True FailedCreate #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFJlcGxpY2FGYWlsdXJlIGNvbmRpdGlvbnMgaW5kaWNhdGVzIHRoYXQgYSByZXBsaWNhIGZhaWxlZCB0byBiZSBjcmVhdGVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0db4f9f5105356f81c030aea35388979" data-text-hash="4d822e4b40bec024c28e40614a0f848b" id="65" refid="65">
+<p>The <code>ReplicaFailure</code> condition is <code>True</code>, indicating an error. The reason for the error is <code>FailedCreate</code>, which doesn&#8217;t mean much. However, if you look at the conditions in the status section of the Deployment's YAML manifest, you&#8217;ll notice that the <code>message</code> field of the <code>ReplicaFailure</code> condition tells you exactly what happened. Alternatively, you can examine the ReplicaSet and its events to see the same message as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8ac3bbd6ad889fc290cf4b102f627fa7" data-text-hash="bb336fdd7a296c8e01bbcd8b1345cb9f" id="66" refid="66">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe rs where-are-the-pods-67cbc77f88
+...
+Events:
+Type Reason Age From Message
+---- ------ ---- ---- -------
+Warning FailedCreate 61s (x18 over 11m) replicaset-controller Error creating: pods "where-are-the-pods-67cbc77f88-" is forbidden: error looking up service account default/missing-service-account: serviceaccount "missing-service-account" not found</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="100ab00ea62d03e5c7f01869db93d574" data-text-hash="4aae953eedcaf0a6a7c7285aa7d04fe5" id="67" refid="67">
+<p>There are many possible reasons why the ReplicaSet controller can't create a Pod, but they&#8217;re usually related to user privileges. In this example, the ReplicaSet controller couldn't create the Pod because a service account is missing. You'll learn more about service accounts in chapter 25. The most important conclusion from this exercise is that if Pods don&#8217;t appear after you create (or update) a Deployment, you should look for the cause in the underlying ReplicaSet.</p>
+</div>
+<div>
+<div class="readable-text" data-hash="4b17a4ad278e820c39dea5d2aeb19fc5" data-text-hash="8df6fbcc43d31d99e5112eb009ed8a2d" id="68" refid="68">
+<p><span>&#160;</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="6d649321aca91a316fa81e3563e0bb75" data-text-hash="85926b12584761f8601803f2f06ebf2a" id="69" refid="69">
+<h3 id="sigil_toc_id_252">14.1.2&#160;Scaling a Deployment</h3>
+</div>
+<div class="readable-text" data-hash="65c1510885053db02b9ced5bec915373" data-text-hash="c582829ece2a3e853671048aa54ddaf7" id="70" refid="70">
+<p><span>Scaling a Deployment is no different from scaling a ReplicaSet. When you scale a Deployment, the Deployment controller does nothing but scale the underlying ReplicaSet, leaving the ReplicaSet controller to do the rest, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="2409eb7c20e17eeeaff918c3e1eb1a17" data-text-hash="f7ad9e0ac33f623df5d3380626bf60ce" id="71" refid="71">
+<h5><span>Figure 14.3 Scaling a Deployment</span></h5>
+<img alt="" data-processed="true" height="175" id="Picture_110" loading="lazy" src="EPUB/images/14_img_0003.png" width="791">
+</div>
+<div class="readable-text" data-hash="ac6e71a5fa0c4b2f9f78d9231bba9eb5" data-text-hash="1543ff335fed0a2445df805ec4e60143" id="72" refid="72">
+<h4>Scaling a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="ba9e6b6f9a6149f73156b732e0cb2681" data-text-hash="b4cb28b3d7f0179b1d011fdc1dea380e" id="73" refid="73">
+<p><span>You can scale a Deployment by editing the object with the</span> <code>kubectl edit</code> <span>command and changing the value of the</span> <code>replicas</code> <span>field, by changing the value in the manifest file and reapplying it, or by using the</span> <code>kubectl scale</code> <span>command. For example, scale the</span> <code>kiada</code> <span>Deployment to 5 replicas as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="af10b0cc74f904836844c192cf82ffe6" data-text-hash="c84e800c49268bea834c7e0f6dfc4f91" id="74" refid="74">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale deploy kiada --replicas 5
+deployment.apps/kiada scaled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="582b0f84ebaef8caddefacfc2c310f78" data-text-hash="31a2bb259fd96cfe23a92ae248107bb0" id="75" refid="75">
+<p><span>If you list the Pods, you&#8217;ll see that there are now five</span> <code>kiada</code> <span>Pods. If you check the events associated with the Deployment using the</span> <code>kubectl describe</code> <span>command, you&#8217;ll see that the Deployment controller has scaled the ReplicaSet.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="1113b75ba9bf854863f4819580f466dd" data-text-hash="11426a1c9aed24eca0583faeca0d218f" id="76" refid="76">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe deploy kiada
+...
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  4s    deployment-controller  Scaled up replica set kiada-
+                                                          7bffb9bf96 to 5</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="403c3cee0c049cee71d2d3ede818b783" data-text-hash="dc8e685d7fa48262cae1c53ee7266cb7" id="77" refid="77">
+<p><span>If you check the events associated with the ReplicaSet using</span> <code>kubectl describe rs kiada</code><span>, you&#8217;ll see that it was indeed the ReplicaSet controller that created the Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="37fc133fc04a74ac86be3a1895dd88f0" data-text-hash="1f7901e6143caa4ac2def4ed442170b0" id="78" refid="78">
+<p><span>Everything you learned about ReplicaSet scaling and how the ReplicaSet controller ensures that the actual number of Pods always matches the desired number of replicas also applies to Pods deployed via a Deployment.</span></p>
+</div>
+<div class="readable-text" data-hash="5412e3871c3f260105056e206bbc243c" data-text-hash="1277b3eefed71c9e45390d095c038222" id="79" refid="79">
+<h4>Scaling a ReplicaSet owned by a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="1152ba081907cd356667de7c143e6455" data-text-hash="4cb79006ae8ad1fd5280df301c1be8b8" id="80" refid="80">
+<p><span>You might wonder what happens when you scale a ReplicaSet object owned and controlled by a Deployment. Let&#8217;s find out. First, start watching ReplicaSets by running the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="ccbad4d68d569910bee3a5804f9599c8" data-text-hash="98a99214e20e995019916c4079c310fb" id="81" refid="81">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1818de3e37cd0a6fd534bb9c0e30fbce" data-text-hash="34c44c382bf7d2a53a90d6e7959d7e1b" id="82" refid="82">
+<p><span>Now scale the</span> <code>kiada-7bffb9bf96</code> <span>ReplicaSet by running the following command in another terminal:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="378b3a9a14c80e22b86217c31f8f99e3" data-text-hash="bf5bd2b6d6e0bc9b1c5aad34ca07ddb0" id="83" refid="83">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale rs kiada-7bffb9bf96 --replicas 7
+replicaset.apps/kiada-7bffb9bf96 scaled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d04ecaf135b9b30e8e8781ce1e3450a0" data-text-hash="97c81a7ddec1aa35667eab69987e4316" id="84" refid="84">
+<p><span>If you look at the output of the first command, you&#8217;ll see that the desired number of replicas goes up to seven but is soon reverted to five. This happens because the Deployment controller detects that the desired number of replicas in the ReplicaSet no longer matches the number in the Deployment object and so it changes it back.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="ce7d3fa2d1c31421f7068edc2beb0e4e" data-text-hash="0ab984d91ab0a037bdf692bf0e73c349" id="85" refid="85">
+<h5>Important</h5>
+</div>
+<div class="readable-text" data-hash="116b00811a9990d67d0ad58cdd133010" data-text-hash="5a7e37e5898cdc9c3744c71f145f1029" id="86" refid="86">
+<p> <span>If you make changes to an object that is owned by another object, you should expect that your changes will be undone by the controller that manages the object.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="bfb7d9635260ad190704025bc205c065" data-text-hash="4f5b49db5bb5bf6ad121555ba70d84de" id="87" refid="87">
+<p><span>Depending on whether the ReplicaSet controller noticed the change before the Deployment controller undid it, it may have created two new Pods. But when the Deployment controller then reset the desired number of replicas back to five, the ReplicaSet controller deleted the Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="8c55157a764703c90635f46e1ed1382a" data-text-hash="e1ad2763a1743411b66d9939d942c964" id="88" refid="88">
+<p><span>As you might expect, the Deployment controller will undo any changes you make to the ReplicaSet, not just when you scale it. Even if you delete the ReplicaSet object, the Deployment controller will recreate it. Feel free to try this now.</span></p>
+</div>
+<div class="readable-text" data-hash="816d8d3b06caa2b09685bf24ddc669e0" data-text-hash="0576d602def6b9f9d774375f2996776d" id="89" refid="89">
+<h4>Inadvertently scaling a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="fb96e0cee97b281fdcbaf1a4d9824267" data-text-hash="58eb8b884e2a9617476cf4e5f5aaa7b9" id="90" refid="90">
+<p><span>To conclude this section on Deployment scaling, I should warn you about a scenario in which you might accidentally scale a Deployment without meaning to.</span></p>
+</div>
+<div class="readable-text" data-hash="27c176e07b0f23c88fca1c6e7288c4c7" data-text-hash="5930b4861ff0d43d92cadebf9aa515e6" id="91" refid="91">
+<p><span>In the Deployment manifest you applied to the cluster, the desired number of replicas was three. Then you changed it to five with the</span> <code>kubectl scale</code> <span>command. Imagine doing the same thing in a production cluster. For example, because you need five replicas to handle all the traffic that the application is receiving.</span></p>
+</div>
+<div class="readable-text" data-hash="c7a938a7b0ab1396be2563a2bfffb38c" data-text-hash="c4f45a42b7679828c3de6bc9d501a261" id="92" refid="92">
+<p><span>Then you notice that forgot to add the</span> <code>app</code> <span>and</span> <code>rel</code> <span>labels to the Deployment object. You added them to the Pod template inside the Deployment object, but not to the object itself. This doesn&#8217;t affect the operation of the Deployment, but you want all your objects to be nicely labelled, so you decide to add the labels now. You could use the</span> <code>kubectl label</code> <span>command, but you&#8217;d rather fix the original manifest file and reapply it. This way, when you use the file to create the Deployment in the future, it&#8217;ll contain the labels you want.</span></p>
+</div>
+<div class="readable-text" data-hash="c2fc5a8832ae8c57bc3488c0d7ec8d53" data-text-hash="a3f9010a195d5fe75c776205bcb904b4" id="93" refid="93">
+<p><span>To see what happens in this case, apply the manifest file</span> <code>deploy.kiada.labelled.yaml</code><span>. The only difference between from the original manifest file</span> <code>deploy.kiada.yaml</code> <span>are the labels added to the Deployment. If you list the Pods after applying the manifest, you&#8217;ll see that you no longer have five Pods in your Deployment. Two of the Pods have been deleted:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="b4355e354c0de99144be922b3cac7530" data-text-hash="1d186f279aa1e51f5bc521f3a2d9e3b9" id="94" refid="94">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada
+NAME                    READY   STATUS        RESTARTS   AGE
+kiada-7bffb9bf96-4knb6   2/2     Running       0          46m
+kiada-7bffb9bf96-7g2md   2/2     Running       0          46m
+kiada-7bffb9bf96-lkgmx   2/2     Terminating   0          5m     #A
+kiada-7bffb9bf96-qf4t7   2/2     Running       0          46m
+kiada-7bffb9bf96-z6skm   2/2     Terminating   0          5m     #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVHdvIFBvZHMgYXJlIGJlaW5nIGRlbGV0ZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b1e6ac17ceb373111e8209ad6dcfcb21" data-text-hash="558b7f18182c206dbf4e09fadc2da502" id="95" refid="95">
+<p><span>To see why two Pods were removed, check the Deployment object:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="a1ca829d3caba687334199fe2612af4b" data-text-hash="1c30f12493b99c8ad471455322e833ed" id="96" refid="96">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kiada   3/3     3            3           46m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="70d446171808bad8db5ac8d14176e043" data-text-hash="13304191029f7e9f2fc9767318871a26" id="97" refid="97">
+<p><span>The Deployment is now configured to have only three replicas, instead of the five it had before you applied the manifest. However, you never intended to change the number of replicas, only to add labels to the Deployment object. So, what happened?</span></p>
+</div>
+<div class="readable-text" data-hash="6e193e9dee4b09a498560df21147cf1f" data-text-hash="140f12219d6d2b4cc2246e6af19280d4" id="98" refid="98">
+<p><span>The reason that applying the manifest changed the desired number of replicas is that the</span> <code>replicas</code> <span>field in the manifest file is set to</span> <code>3</code><span>. You might think that removing this field from the updated manifest would have prevented the problem, but in fact it would make the problem worse. Try applying the</span> <code>deploy.kiada.noReplicas.yaml</code> <span>manifest file that doesn&#8217;t contain the</span> <code>replicas</code> <span>field to see what happens.</span></p>
+</div>
+<div class="readable-text" data-hash="552603417d4630d491c0a73dc3502343" data-text-hash="d2fd8a2bb3e5dd7730a07d3dcc48c66b" id="99" refid="99">
+<p><span>If you apply the file, you&#8217;ll only have one replica left. That&#8217;s because the Kubernetes API sets the value to</span> <code>1</code> <span>when the</span> <code>replicas</code> <span>field is omitted. Even if you explicitly set the value to</span> <code>null</code><span>, the effect is the same.</span></p>
+</div>
+<div class="readable-text" data-hash="576093bba4ed1b4ddcb9cc9e8aa11488" data-text-hash="774e03032bd04d52d4e9526cf90e8690" id="100" refid="100">
+<p><span>Imagine this happening in your production cluster when the load on your application is so high that dozens or hundreds of replicas are needed to handle the load. An innocuous update like the one in this example would severely disrupt the service.</span></p>
+</div>
+<div class="readable-text" data-hash="5847966aef5e314dc035f34f408a1858" data-text-hash="7784eec097878e8764d3cbf4fa3653f8" id="101" refid="101">
+<p><span>You can prevent this by not specifying the</span> <code>replicas</code> <span>field in the original manifest when you create the Deployment object. If you forget to do this, you can still repair the existing Deployment object by running the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d1b73bbff51d1d244c9247e83b268aae" data-text-hash="dec8e7f5e2bc89891c93b5d3c34ec5cd" id="102" refid="102">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply edit-last-applied deploy kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="de79f67aa7d4f513443653b98e385d21" data-text-hash="d65420ca2057107b1cd636675491aea8" id="103" refid="103">
+<p><span>This opens the contents of the</span> <code>kubectl.kubernetes.io/last-applied-configuration</code> <span>annotation of the Deployment object in a text editor and allows you to remove the</span> <code>replicas</code> <span>field. When you save the file and close the editor, the annotation in the Deployment object is updated. From that point on, updating the Deployment with</span> <code>kubectl apply</code> <span>no longer overwrites the desired number of replicas, as long as you don&#8217;t include the</span> <code>replicas</code> <span>field.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="104" refid="104">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="95f3f7de0b9282012055b84130284fcd" data-text-hash="8649818754e93ec9b892b7e349b42652" id="105" refid="105">
+<p> <span>When you</span> <code>kubectl apply</code><span>, the value of the</span> <code>kubectl.kubernetes.io/last-applied-configuration</code> <span>is used to calculate the changes needed to be made to the API object.</span></p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="106" refid="106">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="5c746d33530043dca05cf71ab36a6c22" data-text-hash="ca27a3a573ee54beb3696b367eee929a" id="107" refid="107">
+<p> <span>To avoid accidentally scaling a Deployment each time you reapply its manifest file, omit the</span> <code>replicas</code> <span>field in the manifest when you create the object. You initially only get one replica, but you can easily scale the Deployment to suit your needs.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="da55f180cc07f1372e2bd7d0af4e4f96" data-text-hash="51b7da05ea4a66a2ca1c2c640c4480e2" id="108" refid="108">
+<h3 id="sigil_toc_id_253">14.1.3&#160;Deleting a Deployment</h3>
+</div>
+<div class="readable-text" data-hash="1911c69165389dd4593441e6c8f5ee6d" data-text-hash="d54d5ef2f22acdf69c79cfd2d293b359" id="109" refid="109">
+<p><span>Before we get to Deployment updates, which are the most important aspect of Deployments, let&#8217;s take a quick look at what happens when you delete a Deployment. After learning what happens when you delete a ReplicaSet, you probably already know that when you delete a Deployment object, the underlying ReplicaSet and Pods are also deleted.</span></p>
+</div>
+<div class="readable-text" data-hash="69c3e991fd135b7d31ae85bc83243ac0" data-text-hash="997c91164fe788dd0be7d78f3eaf1121" id="110" refid="110">
+<h4>Preserving the ReplicaSet and Pods when deleting a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="ae513ecda75ff512ca5c4aebd746398d" data-text-hash="158c29352bbb877fd6786220344641b6" id="111" refid="111">
+<p><span>If you want to keep the Pods, you can run the</span> <code>kubectl delete</code> <span>command with the</span> <code>--cascade=orphan</code> <span>option, as you can with a ReplicaSet. If you use this approach with a Deployment, you&#8217;ll find that this not only preserves the Pods, but also the ReplicaSets. The Pods still belong to and are controlled by that ReplicaSet.</span></p>
+</div>
+<div class="readable-text" data-hash="ed2511d16b6713b8ab59f237cbb16c45" data-text-hash="81581bb5229c3f593bf552a54ed05ccc" id="112" refid="112">
+<h4>Adopting an existing ReplicaSet and Pods</h4>
+</div>
+<div class="readable-text" data-hash="16bace2c75e640ba9ec2fa9064a34f28" data-text-hash="8e617379ce5d45ca873e99058ca73c3d" id="113" refid="113">
+<p><span>If you recreate the Deployment, it picks up the existing ReplicaSet, assuming you haven&#8217;t changed the Deployment&#8217;s Pod template in the meantime. This happens because the Deployment controller finds an existing ReplicaSet with a name that matches the ReplicaSet that the controller would otherwise create.</span></p>
+</div>
+<div class="readable-text" data-hash="41c4bf550fc49dba16524d87793e9df8" data-text-hash="23a81fa6de44f7f0087d609cabf1ebe1" id="114" refid="114">
+<h2 id="sigil_toc_id_254">14.2&#160;Updating a Deployment</h2>
+</div>
+<div class="readable-text" data-hash="cdd3a362e6fc1c24f1d1e6e366622471" data-text-hash="43a02c023549c63774a44eb38f4fcc7f" id="115" refid="115">
+<p><span>In the previous section where you learned about the basics of Deployments, you probably didn&#8217;t see any advantage in using a Deployment instead of a ReplicaSet. The advantage only becomes clear when you update the Pod template in the Deployment. You may recall that this has no immediate effect with a ReplicaSet. The updated template is only used when the ReplicaSet controller creates a new Pod. However, when you update the Pod template in a Deployment, the Pods are replaced immediately.</span></p>
+</div>
+<div class="readable-text" data-hash="3c33824889ae6d3406d8c8600cde2d45" data-text-hash="4718e158175c4a6c906aa385fe86c925" id="116" refid="116">
+<p><span>The kiada Pods are currently running version 0.5 of the application, which you&#8217;ll now update to version 0.6. You can find the files for this new version in the directory</span> <code>Chapter14/kiada-0.6</code><span>. You can build the container image yourself or use the image</span> <code>luksa/kiada:0.6</code> <span>that I created.</span></p>
+</div>
+<div class="readable-text" data-hash="241a2d56f55867475eb7419fd04c9cad" data-text-hash="3258a5d65956876d8a2a1bc4d82bfe6c" id="117" refid="117">
+<h4>Introducing the available update strategies</h4>
+</div>
+<div class="readable-text" data-hash="bddfd423a09284584cbe82ed947bc13c" data-text-hash="aa2a7948546732c002558aff3756a6c4" id="118" refid="118">
+<p><span>When you update the Pod template to use the new container image, the Deployment controller stops the Pods running with the old image and replaces them with the new Pods. The way the Pods are replaced depends on the update strategy configured in the Deployment. At the time of writing, Kubernetes supports the two strategies described in the following table.</span></p>
+</div>
+<div class="browsable-container" data-hash="1983606606e2ce844e30da818f2d1844" data-text-hash="6f2e580032301856bf72704ad5ac44a5" id="119" refid="119">
+<h5><span>Table 14.2 Update strategies supported by Deployments</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p><span>Strategy type</span></p> </td>
+<td> <p><span>Description</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Recreate
+</pre> </td>
+<td> <p><span>In the</span> <code>Recreate</code> <span>strategy, all Pods are deleted at the same time, and then, when all their containers are finished, the new Pods are created at the same time. For a short time, while the old Pods are being terminated and before the new Pods are ready, the service is unavailable. Use this strategy if your application doesn&#8217;t allow you to run the old and new versions at the same time and service downtime isn&#8217;t an issue.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>RollingUpdate
+</pre> </td>
+<td> <p><span>The</span> <code>RollingUpdate</code> <span>strategy causes old Pods to be gradually removed and replaced with new ones. When a Pod is removed, Kubernetes waits until the new Pod is ready before removing the next Pod. This way, the service provided by the Pods remains available throughout the upgrade process. This is the default strategy.</span></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="4aff9c772e0d68903ae60f0eba690525" data-text-hash="8af43ed0c8e23221b514814268f4ed9b" id="120" refid="120">
+<p>The following figure illustrates the difference between the two strategies. <span>It shows how the Pods are replaced over time for each of the strategies.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="bb24321a97565dae1ec855302889ecd2" data-text-hash="1e8ee7192e8c480f8c7c2b0b6372219c" id="121" refid="121">
+<h5>Figure 14.4 The difference between the Recreate and the RollingUpdate strategies</h5>
+<img alt="" data-processed="true" height="278" id="Picture_111" loading="lazy" src="EPUB/images/14_img_0004.png" width="791">
+</div>
+<div class="readable-text" data-hash="33fa4e877c47585553aec379ea22b712" data-text-hash="310b6c08aa85c8be515ad20e2a8e1cc2" id="122" refid="122">
+<p><span>The</span> <code>Recreate</code> <span>strategy has no configuration options, while</span> the <code>RollingUpdate</code> strategy <span>lets you configure how many Pods Kubernetes replaces at a time. You&#8217;ll learn more about this later.</span></p>
+</div>
+<div class="readable-text" data-hash="128bd116562b5fce9587299b38693cd2" data-text-hash="1897973a500cb4fd2053a9ada5a2a702" id="123" refid="123">
+<h3 id="sigil_toc_id_255">14.2.1&#160;The Recreate strategy</h3>
+</div>
+<div class="readable-text" data-hash="638e568e94bcacdb7e9300953c24a089" data-text-hash="c02a35aa2f67c3640f61ddc83399b799" id="124" refid="124">
+<p><span>The</span> <code>Recreate</code> <span>strategy is much simpler than</span> <code>RollingUpdate</code><span>, so I&#8217;ll cover it first. Since you didn&#8217;t specify the strategy in the Deployment object, it default</span>s <span>to</span> <code>RollingUpdate</code><span>, so you need to change it before triggering the update.</span></p>
+</div>
+<div class="readable-text" data-hash="7cd1982e0fe8b2e3bb1055cdee75d941" data-text-hash="415bea5bdcc4190975245d5d6a4b5d26" id="125" refid="125">
+<h4>Configuring the Deployment to use the Recreate strategy</h4>
+</div>
+<div class="readable-text" data-hash="4e28a575b63e4b42439014eabe59ac8a" data-text-hash="713f2bd26b2eefb3bc8d7ea126cb6f56" id="126" refid="126">
+<p><span>To configure a Deployment to use the Recreate update strategy, you must include the lines highlighted in the following listing in your Deployment manifest. You can find this manifest in the</span> <code>deploy.kiada.recreate.yaml</code> <span>file.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="0e2926cbae1117de200c9f3aa9e5f29f" data-text-hash="1f680ff18d0ea33bab5578d9551ac447" id="127" refid="127">
+<h5>Listing 14.2 Enabling the Recreate update strategy in a Deployment</h5>
+<div class="code-area-container">
+<pre class="code-area">...
+spec:
+  strategy:    #A
+    type: Recreate    #A
+  replicas: 3
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBob3cgeW91IGVuYWJsZSB0aGUgUmVjcmVhdGUgdXBkYXRlIHN0cmF0ZWd5IGluIGEgRGVwbG95bWVudC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="34a0b5a213862d9c835139a3859f7357" data-text-hash="7f8eb69607466934f5896d17bb2d1b29" id="128" refid="128">
+<p><span>You can add these lines to the Deployment object by editing it with the</span> <code>kubectl edit</code> <span>command or by applying the updated manifest file with</span> <code>kubectl apply</code><span>. Since this change doesn&#8217;t affect the Pod template, it doesn&#8217;t trigger an update. Changing the Deployment&#8217;s labels, annotations, or the desired number of replicas also doesn&#8217;t trigger it.</span></p>
+</div>
+<div class="readable-text" data-hash="d91489c5df1ea844e2ebfd75a90a49ba" data-text-hash="a7e31cfac3d7c3b5800955cd1c53f277" id="129" refid="129">
+<h4>Updating the container image with kubectl set image</h4>
+</div>
+<div class="readable-text" data-hash="c59f91cdae95b4355d7bbaea006e3257" data-text-hash="1fd9d0bd281ce021aab2b0f00e418246" id="130" refid="130">
+<p><span>To update the Pods to the new version of the Kiada container image, you need to update the</span> <code>image</code> <span>field in the</span> <code>kiada</code> <span>container definition within the Pod template. You can do this by updating the manifest with</span> <code>kubectl edit</code> <span>or</span> <code>kubectl apply</code><span>, but for a simple image change you can also use the</span> <code>kubectl set image</code> <span>command. With this command, you can change the image name of any container of any API object that contains containers. This includes Deployments, ReplicaSets, and even Pods. For example, you could use the following command to update the</span> <code>kiada</code> <span>container in your</span> <code>kiada</code> <span>Deployment to use version</span> <code>0.6</code> <span>of the</span> <code>luksa/kiada</code> <span>container image like so:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="cfc6a25b2d76bec70aac3e24f46b69ac" data-text-hash="fba373e7d72d8476b771318c28d2ae57" id="131" refid="131">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl set image deployment kiada kiada=luksa/kiada:0.6</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="14f29070d602cb1868bda0e1c4444177" data-text-hash="502f888882fbea5d2bf31ad89db9943c" id="132" refid="132">
+<p><span>However, since the Pod template in your Deployment also specifies the application version in the Pod labels, changing the image without also changing the label value would result in an inconsistency.</span></p>
+</div>
+<div class="readable-text" data-hash="2df723501a490d4d8f65d061918c3608" data-text-hash="33a71fd93e938b6468b82b0730d4822d" id="133" refid="133">
+<h4>Updating the container image and labels using kubectl patch</h4>
+</div>
+<div class="readable-text" data-hash="480e0c261d46ea46c4abceb59c07e6a3" data-text-hash="a170c7c4d93f7537aa85efbe23701eb9" id="134" refid="134">
+<p><span>To change the image name and label value at the same time, you can use the</span> <code>kubectl patch</code> <span>command, which allows you to update multiple manifest fields without having to manually edit the manifest or apply an entire manifest file. To update both the image name and the label value, you could run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="480ace17f29448306aabf4a3cebeb80d" data-text-hash="8730c256ed91ae676900f66aeeae88b8" id="135" refid="135">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch deploy kiada --patch '{"spec": {"template": {"metadata": {"labels": {"ver": "0.6"}}, "spec": {"containers": [{"name": "kiada", "image": "luksa/kiada:0.6"}]}}}}'</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4a5dff9b0a13bf98193f5b21f075f879" data-text-hash="2252f4837d194922a5b42971fd9a8a35" id="136" refid="136">
+<p><span>This command may be hard for you to parse because the patch is given as a single-line JSON string. In this string, you&#8217;ll find a partial Deployment manifest that contains only the fields you want to change. If you specify the patch in a multi-line YAML string, it&#8217;ll be much clearer. The complete command then looks as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="f21b92532c050665e8c46a0ff552aa46" data-text-hash="82f764a7a00034525a8f4819f9ce6ce4" id="137" refid="137">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch deploy kiada --patch '    #A
+spec:    #B
+  template:    #B
+    metadata:    #B
+      labels:    #B
+        ver: "0.6"    #B
+    spec:    #B
+      containers:    #B
+      - name: kiada    #B
+        image: luksa/kiada:0.6'    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTm90ZSB0aGUgc2luZ2xlIHF1b3RlIGF0IHRoZSBlbmQgb2YgdGhpcyBsaW5lLgojQiBBIHBhcnRpYWwgRGVwbG95bWVudCBtYW5pZmVzdCB0aGF0IG9ubHkgc3BlY2lmaWVzIHRoZSBmaWVsZHMgeW91IHdhbnQgdG8gdXBkYXRlLg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="138" refid="138">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3a48c3840e59575b55b138f04d1ca0be" data-text-hash="b5c43dc95bb816c8933df3e1e3784c61" id="139" refid="139">
+<p> <span>You can also write this partial manifest to a file and use</span> <code>--patch-file</code> <span>instead of</span> <code>--patch</code><span>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="8067f286ac81171418e69e1bb8bf03d9" data-text-hash="b45cd754d03d994dc6c57f344882785b" id="140" refid="140">
+<p><span>Now run one of the</span> <code>kubectl patch</code> <span>commands to update the Deployment, or apply the manifest file</span> <code>deploy.kiada.0.6.recreate.yaml</code> <span>to get the same result.</span></p>
+</div>
+<div class="readable-text" data-hash="8cf4bcb2fc1fec548496677eb00fa30f" data-text-hash="9f1ccc83c1e14904ff04bfaae339603b" id="141" refid="141">
+<h4>Observing the Pod state changes during an update</h4>
+</div>
+<div class="readable-text" data-hash="65003225d8e4da7af1ea4a1e11ef0474" data-text-hash="df4a7d3dbc4bf03239d8cc248d28e643" id="142" refid="142">
+<p><span>Immediately after you update the Deployment, run the following command repeatedly to observe what happens to the Pods:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="0bdb2950c1b858bdfc630299174ad4d0" data-text-hash="d9ba9d0ea162b16a1a5ef53e4be17cc1" id="143" refid="143">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l app=kiada -L ver</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="84b6e225e2ffd3b65160eb1708d87e73" data-text-hash="bceead23f7bc78d1caefcbd9a0e39f4a" id="144" refid="144">
+<p><span>This command lists the</span> <code>kiada</code> <span>Pods and displays the value of their version label in the</span> <code>VER</code> <span>column. You&#8217;ll notice that the status of all these Pods changes to</span> <code>Terminating</code> <span>at the same time, as shown here:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="26bb23637742a44d2d4d6cb5f1c0cf41" data-text-hash="b0a0386d43b0019f72f9d2b28147c59a" id="145" refid="145">
+<div class="code-area-container">
+<pre class="code-area">NAME                     READY   STATUS        RESTARTS   AGE     VER
+kiada-7bffb9bf96-7w92k   0/2     Terminating   0          3m38s   0.5
+kiada-7bffb9bf96-h8wnv   0/2     Terminating   0          3m38s   0.5
+kiada-7bffb9bf96-xgb6d   0/2     Terminating   0          3m38s   0.5</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e53a7865afd7ae7626c15bb77b0dd23d" data-text-hash="49b65f0a311b070cbf8405a2c2422c33" id="146" refid="146">
+<p><span>The Pods soon disappear, but are immediately replaced by Pods that run the new version:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="2089f9531b9be081518b69f2b0517993" data-text-hash="e5fa15577154f25189e96b299f2bfaed" id="147" refid="147">
+<div class="code-area-container">
+<pre class="code-area">NAME                     READY   STATUS              RESTARTS   AGE   VER
+kiada-5d5c5f9d76-5pghx   0/2     ContainerCreating   0          1s    0.6    #A
+kiada-5d5c5f9d76-qfkts   0/2     ContainerCreating   0          1s    0.6    #A
+kiada-5d5c5f9d76-vkdrl   0/2     ContainerCreating   0          1s    0.6    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgUG9kcyBydW4gdGhlIG5ldyB2ZXJzaW9uIG9mIHRoZSBhcHBsaWNhdGlvbi4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="26523b82fd6866924b9167f578a7b079" data-text-hash="aae31c9936f1276388ca6632cfee097c" id="148" refid="148">
+<p><span>After a few seconds, all new Pods are ready. The whole process is very fast, but you can repeat it as many times as you want. Revert the Deployment by applying the previous version of the manifest in the</span> <code>deploy.kiada.recreate.yaml</code> <span>file, wait until the Pods are replaced, and then update to version 0.6 by applying the</span> <code>deploy.kiada.0.6.recreate.yaml</code> <span>file again.</span></p>
+</div>
+<div class="readable-text" data-hash="a059270792ad7da831ce5e80aa86bede" data-text-hash="50486e68ca0c313f93576d3619b8581e" id="149" refid="149">
+<h4>Understanding how an update using the Recreate strategy affects service availability</h4>
+</div>
+<div class="readable-text" data-hash="179861394b5ab993e8b15677d904c9a4" data-text-hash="55162f637d7f9e5b75149cee8f2e9bdc" id="150" refid="150">
+<p><span>In addition to watching the Pod list, try to access the service via Ingress in your web browser, as described in chapter 12, while the update is in progress.</span></p>
+</div>
+<div class="readable-text" data-hash="a858c1763f35c3bf9a13d17187bf1b9e" data-text-hash="f7938661eae67a0463f0013658799c7b" id="151" refid="151">
+<p><span>You&#8217;ll notice the short time interval when the Ingress proxy returns the status</span> <code>503 Service Temporarily Unavailable</code><span>. If you try to access the service directly using the internal cluster IP, you&#8217;ll find that the connection is rejected during this time.</span></p>
+</div>
+<div class="readable-text" data-hash="e3de4a9ab4a3b59384431fc7e9e5f2d0" data-text-hash="921ea9cf68bcec6a806dfc5c371c828d" id="152" refid="152">
+<h4>Understanding the relationship between a Deployment and its ReplicaSets</h4>
+</div>
+<div class="readable-text" data-hash="4a2a7a22126154f7fba1ea5cba78495b" data-text-hash="adf6efd1504fadefc561b1bb366f7417" id="153" refid="153">
+<p><span>When you list the Pods, you&#8217;ll notice that the names of the Pods that ran version 0.5 are different from those that run version 0.6. The names of the old Pods</span> start <span>with</span> <code>kiada-7bffb9bf96</code><span>, while the names of the new Pods start with</span> <code>kiada-5d5c5f9d76</code><span>. You may recall that Pods created by a ReplicaSet get their names from that ReplicaSet. The name change indicates that these new Pods belong to a different ReplicaSet. List the ReplicaSets to confirm this as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="6eeffcde747278afb3f5e10aac1c4698" data-text-hash="10de51a1aa8bcc3e288aa84381f6b6e9" id="154" refid="154">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs -L ver
+NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-5d5c5f9d76   3         3         3       13m   0.6    #A
+kiada-7bffb9bf96   0         0         0       16m   0.5    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB0aGUgUmVwbGljYVNldCB0aGF0IG1hbmFnZXMgdGhlIFBvZHMgcnVubmluZyB0aGUgbmV3IGFwcGxpY2F0aW9uIHZlcnNpb24uCiNCIFRoaXMgaXMgdGhlIFJlcGxpY2FTZXQgdGhhdCBtYW5hZ2VkIHRoZSBQb2RzIHdpdGggdGhlIG9sZCB2ZXJzaW9uLiBJdCBub3cgaGFzIG5vIFBvZHMu"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="155" refid="155">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b24ccfa65258ee2bb8f5508cf11ddb7e" data-text-hash="08735a0f94e18d1f7d00b3b09242c61b" id="156" refid="156">
+<p> <span>The labels you specify in the Pod template in a Deployment are also applied to the ReplicaSet. So if you add a label with the version number of the application, you can see the version when you list the ReplicaSets. This way you can easily distinguish between different ReplicaSets since you can&#8217;t do that by looking at their names.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="ecefa8fb518274178c58e6977dde19dd" data-text-hash="b66ba3a74def63085a31b8da4f32894a" id="157" refid="157">
+<p><span>When you originally created the Deployment, only one ReplicaSet was created and all Pods belonged to it. When you updated the Deployment, a new ReplicaSet was created. Now the all the Pods of this Deployment are controlled by this ReplicaSet, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="3c0d288ac5a0d64f0feab151f6aa2e89" data-text-hash="559467c65c1b811c42822bd87398f478" id="158" refid="158">
+<h5><span>Figure 14.5 Updating a Deployment</span></h5>
+<img alt="" data-processed="true" height="308" id="Picture_112" loading="lazy" src="EPUB/images/14_img_0005.png" width="753">
+</div>
+<div class="readable-text" data-hash="a259cd13722e4b67edb6d0ed0963eb2e" data-text-hash="c76ba661cc0e96690da9be5dfa19627b" id="159" refid="159">
+<h4>Understanding how the Deployment&#8217;s Pods transitioned from one ReplicaSet to the other</h4>
+</div>
+<div class="readable-text" data-hash="f3fdfccbcd7ddec4164c00c37f630206" data-text-hash="38cf07c0eb4816a7864ca5caea52e385" id="160" refid="160">
+<p><span>If you&#8217;d been watching the ReplicaSets when you triggered the update, you&#8217;d have seen the following progression. At the beginning, only the old ReplicaSet was present:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="aeb8d9ae9be234d53c87e878e4d9f3a4" data-text-hash="9b6525eac946f8fb1036468b9290d14f" id="161" refid="161">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-7bffb9bf96   3         3         3       16m   0.5    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB0aGUgb25seSBSZXBsaWNhU2V0LiBBbGwgdGhyZWUgUG9kcyBhcmUgcGFydCBvZiBpdC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="751a31ac7c5524443ebc6418fb54f49c" data-text-hash="af5f126da2036f10a590677d91536335" id="162" refid="162">
+<p><span>The Deployment controller then scaled the ReplicaSet to zero replicas, causing the ReplicaSet controller to delete all the Pods:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="c39b6865fdfcf9b902e1b5e727b81ba0" data-text-hash="d90d0426c8e87ab0e1b863ecf7d2e9a3" id="163" refid="163">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-7bffb9bf96   0         0         0       16m   0.5    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWxsIHRoZSBQb2QgY291bnRzIGFyZSB6ZXJvLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="430975da45868341096133e0de786704" data-text-hash="77a286118655aac839455824afdc5003" id="164" refid="164">
+<p><span>Next, the Deployment controller created the new ReplicaSet and configured it with three replicas.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="5d966ced2c104d51f0bd2a324203c699" data-text-hash="ae49164963d8e77cbe45230a11507b99" id="165" refid="165">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-5d5c5f9d76   3         0         0       0s    0.6   #A
+kiada-7bffb9bf96   0         0         0       16m   0.5   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRlc2lyZWQgbnVtYmVyIG9mIHJlcGxpY2FzIGlzIHRocmVlLCBidXQgdGhlcmUgYXJlIG5vIFBvZHMgeWV0LgojQiBUaGUgb2xkIFJlcGxpY2FTZXQgaXMgc3RpbGwgaGVyZSBidXQgaGFzIG5vIFBvZHMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8520d45957ad7b306c9ba72c64246bec" data-text-hash="3fc2d23926ac563b642f574fa151a40f" id="166" refid="166">
+<p><span>The ReplicaSet controller creates the three new Pods, as indicated by the number in the</span> <code>CURRENT</code> <span>column. When the containers in these Pods start and begin accepting connections, the value in the</span> <code>READY</code> <span>column also changes to three.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="ad4d38fee3c5d2a2a0c6eb401ef42b92" data-text-hash="cfdaeb854a79ddeebdd82e0a1bb3ff04" id="167" refid="167">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-5d5c5f9d76   3         3         0       1s    0.6   #A
+kiada-7bffb9bf96   0         0         0       16m   0.5</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5ldyBSZXBsaWNhU2V0IGhhcyB0aHJlZSByZXBsaWNhcywgYnV0IG5vbmUgYXJlIHJlYWR5IHlldC4gVGhleSBiZWNvbWUgcmVhZHkgbW9tZW50cyBhZnRlci4="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="168" refid="168">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b41e036c6b7b20a92844e4150c4c0f2e" data-text-hash="93022527d244763ecff1f4d988fef8b4" id="169" refid="169">
+<p> <span>You can see what the Deployment controller and the ReplicaSet controller did by looking at the events associated with the Deployment object and the two ReplicaSets.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="8a2f12725c1d1c6e58c582be2740633f" data-text-hash="f0d71efef00941428283eb653f2c19eb" id="170" refid="170">
+<p><span>The update is now complete. If you open the Kiada service in your web browser, you should see the updated version. In the lower right corner you&#8217;ll see four boxes indicating the version of the Pod that processed the browser&#8217;s request for each of the HTML, CSS, JavaScript, and the main image file. These boxes will be useful when you perform a rolling update to version 0.7 in the next section.</span></p>
+</div>
+<div class="readable-text" data-hash="eb511a7c140708a5d87ec79c0eb95a03" data-text-hash="36f5377c6cfce00087501e951aab7ebc" id="171" refid="171">
+<h3 id="sigil_toc_id_256">14.2.2&#160;The RollingUpdate strategy</h3>
+</div>
+<div class="readable-text" data-hash="c07e6f82a787db47048e9751290d2a43" data-text-hash="f4d84ff8864b27f4d960330a6dfafc36" id="172" refid="172">
+<p><span>The service disruption associated with the</span> <code>Recreate</code> <span>strategy is usually not acceptable. That&#8217;s why the default strategy in Deployments is</span> <code>RollingUpdate</code><span>. When you use this strategy, the Pods are replaced gradually, by scaling down the old ReplicaSet and simultaneously scaling up the new ReplicaSet by the same number of replicas. The Service is never left with no Pods to which to forward traffic.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="9eac41a2c317f3f7a3d4cd727d4fbd87" data-text-hash="ada60ac101037cce64ffaa4cc116da37" id="173" refid="173">
+<h5><span>Figure 14.6 What happens with the ReplicaSets, Pods, and the Service during a rolling update.</span></h5>
+<img alt="" data-processed="true" height="316" id="Picture_113" loading="lazy" src="EPUB/images/14_img_0006.png" width="807">
+</div>
+<div class="readable-text" data-hash="3f8b964af7276139ab63d10559a5bd75" data-text-hash="233e401bf061be0bf3bfc1557fd0497f" id="174" refid="174">
+<h4>Configuring the Deployment to use the RollingUpdate strategy</h4>
+</div>
+<div class="readable-text" data-hash="21caab32b0ab79a02ee1ca3100803906" data-text-hash="a4d996b0416a1dedccf86829af2c75e2" id="175" refid="175">
+<p><span>To configure a Deployment to use the</span> <code>RollingUpdate</code> <span>update strategy, you must set its</span> <code>strategy</code> <span>field as shown in the following listing. You can find this manifest in the file</span> <code>deploy.kiada.0.7.rollingUpdate.yaml</code><span>.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="fa7968f626da4071b7da22015faeeeb5" data-text-hash="6e6b6d24a75caa37c6362c8958b2dee3" id="176" refid="176">
+<h5>Listing 14.3 Enabling the Recreate update strategy in a Deployment</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiada
+spec:
+  strategy:
+    type: RollingUpdate    #A
+    rollingUpdate:    #B
+      maxSurge: 0    #B
+      maxUnavailable: 1    #B
+  minReadySeconds: 10
+  replicas: 3
+  selector:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFJvbGxpbmdVcGRhdGUgc3RyYXRlZ3kgaXMgZW5hYmxlZCB0aHJvdWdoIHRoaXMgZmllbGQuCiNCIFRoZSBwYXJhbWV0ZXJzIGZvciB0aGUgc3RyYXRlZ3kgYXJlIGNvbmZpZ3VyZWQgaGVyZS4gVGhlc2UgdHdvIHBhcmFtZXRlcnMgYXJlIGV4cGxhaW5lZCBsYXRlci4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="879c749e917947a83e29ca99925484cc" data-text-hash="1669708f35fe9f079482af09da52f7e5" id="177" refid="177">
+<p><span>In the</span> <code>strategy</code> <span>section, the</span> <code>type</code> <span>field sets the strategy to</span> <code>RollingUpdate</code><span>, while the</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>parameters in the</span> <code>rollingUpdate</code> <span>subsection configure how the update should be performed. You could omit this entire subsection and set only the</span> <code>type</code><span>, but since the default values of the</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>parameters make it difficult to explain the update process, you set them to the values shown in the listing to make it easier to follow the update process. Don&#8217;t worry about these two parameters for now, because they&#8217;ll be explained later.</span></p>
+</div>
+<div class="readable-text" data-hash="f76259218404c0f23d29b7186c507058" data-text-hash="14469573dd835eaa7d8516d359cf1ddc" id="178" refid="178">
+<p><span>You may have noticed that the Deployment&#8217;s</span> <code>spec</code> <span>in the listing also includes the</span> <code>minReadySeconds</code> <span>field. Although this field isn&#8217;t part of the update strategy, it affects how fast the update progresses. By setting this field to 10, you&#8217;ll be able to follow the progression of the rolling update even better. You&#8217;ll learn what this attribute does by the end of this chapter.</span></p>
+</div>
+<div class="readable-text" data-hash="780e716bffb3c364127aa0cee2318685" data-text-hash="b6ea52cd44aeb5cf2185a6ad9a5e26e9" id="179" refid="179">
+<h4>Updating the image name in the manifest</h4>
+</div>
+<div class="readable-text" data-hash="e79708dd3073c7aad7a17fb154baca2c" data-text-hash="9a8876acc3455188ad85bc8958eccdbc" id="180" refid="180">
+<p><span>In addition to setting the</span> <code>strategy</code> <span>and</span> <code>minReadySeconds</code> <span>in the Deployment manifest, let&#8217;s also set the image name to</span> <code>luksa/kiada:0.7</code> <span>and update the version label, so that when you apply this manifest file, you immediately trigger the update. This is to show that you can change the strategy and trigger an update in a single</span> <code>kubectl apply</code> <span>operation. You don&#8217;t have to change the strategy beforehand for it to be used in the update.</span></p>
+</div>
+<div class="readable-text" data-hash="6aa8052e38ed99193a981dbc3a11938a" data-text-hash="5bbd92a31650a754b2064570a41f8467" id="181" refid="181">
+<h4>Triggering the update and Observing the rollout of the new version</h4>
+</div>
+<div class="readable-text" data-hash="a87850f52068dece0b318a9185f0dc90" data-text-hash="6815bcfd0619362ccdfbfff0138e4cab" id="182" refid="182">
+<p><span>To start the rolling update, apply the manifest file</span> <code>deploy.kiada.0.7.rollingUpdate.yaml</code><span>. You can track the progress of the rollout with the</span> <code>kubectl rollout status</code> <span>command, but it only shows the following:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="9f903d08e2248fa510251754ed38f9a9" data-text-hash="5aeb88bcf8ac60c2fb7aa51cbe34e7d5" id="183" refid="183">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout status deploy kiada
+Waiting for deploy "kiada" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deploy "kiada" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deploy "kiada" rollout to finish: 2 of 3 updated replicas are available...
+deployment "kiada" successfully rolled out</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ede0a4e1aa66d747d5522d5a1648d4d4" data-text-hash="ddef9f38e05603b73573e7351102f607" id="184" refid="184">
+<p><span>To see exactly how the Deployment controller performs the update, it&#8217;s best to look at how the state of the underlying ReplicaSets changes. First, the ReplicaSet with version 0.6 runs all three Pods. The ReplicaSet for version 0.7 doesn&#8217;t exist yet. The ReplicaSet for the previous version 0.5 is also there, but let&#8217;s ignore it, as it&#8217;s not involved in this update. The initial state of 0.6 ReplicaSet is as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="aa4df2aa3cdc693ad5c4411fa22efe4f" data-text-hash="b7549d40b10bedefce915ea0ca6455cf" id="185" refid="185">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-5d5c5f9d76   3         3         3       53m   0.6   #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWxsIHRocmVlIFBvZHMgYXJlIG1hbmFnZWQgYnkgdGhlIDAuNiBSZXBsaWNhU2V0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4164530281c7e606ddec36571a18368c" data-text-hash="c340037258a8f84015e351cd91c5ca47" id="186" refid="186">
+<p><span>When the update begins, the ReplicaSet running version 0.6 is scaled down by one Pod, while the ReplicaSet for version 0.7 is created and configured to run a single replica:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="f0c005c7851e7f624a7e12f86a861899" data-text-hash="d3cf1c770d02767ae3579998f03f32e8" id="187" refid="187">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-58df67c6f6   1         1         0       2s    0.7    #A
+kiada-5d5c5f9d76   2         2         2       53m   0.6    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHJlcGxpY2EgZm9yIHZlcnNpb24gMC43IGFwcGVhcnMsIGNvbmZpZ3VyZWQgdG8gcnVuIG9uZSByZXBsaWNhLgojQiBUaGUgcmVwbGljYSBmb3IgdmVyc2lvbiAwLjYgbm93IHJ1bnMgdHdvIHJlcGxpY2FzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="af46befc5e638ba10ce9802159dc6a8d" data-text-hash="1e5e0c6d33f37d553c0d75ccebcc9427" id="188" refid="188">
+<p><span>Because the old ReplicaSet has been scaled down, the ReplicaSet controller has marked one of the old Pods for deletion. This Pod is now terminating and is no longer considered ready, while the other two old Pods take over all the service traffic. The Pod that&#8217;s part of the new ReplicaSet is just starting up and therefore isn&#8217;t ready. The Deployment controller waits until this new Pod is ready before resuming the update process. When this happens, the state of the ReplicaSets is as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="caee77bdad0e268bd68c3cce289e6f93" data-text-hash="636eb1ffb8c02ec150ef94c4f1ae112f" id="189" refid="189">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-58df67c6f6   1         1         1       6s    0.7    #A
+kiada-5d5c5f9d76   2         2         2       53m   0.6</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5ldyBQb2QgaXMgcmVhZHkgYW5kIGlzIHJlY2VpdmluZyB0cmFmZmljLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c558cd1a57b1dc2e902600a34f36ce8f" data-text-hash="866ae9422a8db6441ecdd4d88e0a90a4" id="190" refid="190">
+<p><span>At this point, traffic is again handled by three Pods. Two are still running version 0.6 and one is running version 0.7. Because you set</span> <code>minReadySeconds</code> <span>to 10, the Deployment controller waits that many seconds before proceeding with the update. It then scales the old ReplicaSet down by one replica, while scaling the new ReplicaSet up by one replica. The ReplicaSets now look as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="e38593a78e13d4ef6c59ae9b0290dbd6" data-text-hash="f625be79a48374aec7e8a351daa38381" id="191" refid="191">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-58df67c6f6   2         2         1       16s   0.7    #A
+kiada-5d5c5f9d76   1         1         1       53m   0.6    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5ldyBSZXBsaWNhU2V0IGlzIHNjYWxlZCB1cCBieSBvbmUuCiNCIFRoZSBvbGQgUmVwbGljYVNldCBpcyBzY2FsZWQgZG93biBieSBvbmUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cd6a34fc7f1a94bdfc2f8691e0471481" data-text-hash="cbada83da2d58e297876355cbb4b90eb" id="192" refid="192">
+<p><span>The service load is now handled by one old and one new Pod. The second new Pod isn&#8217;t yet ready, so it&#8217;s not yet receiving traffic. Ten seconds after the Pod is ready, the Deployment controller makes the final changes to the two ReplicaSets. Again, the old ReplicaSet is scaled down by one, bringing the desired number of replicas to zero. The new ReplicaSet is scaled up so that the desired number of replicas is three, as shown here:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d26999a93491fceeafbadf6c2c157ce6" data-text-hash="0bdaf4664d0a9bc77da42e643a546304" id="193" refid="193">
+<div class="code-area-container">
+<pre class="code-area">NAME               DESIRED   CURRENT   READY   AGE   VER
+kiada-58df67c6f6   3         3         2       29s   0.7    #A
+kiada-5d5c5f9d76   0         0         0       54m   0.6    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5ldyBSZXBsaWNhU2V0IGlzIHNjYWxlZCB0byB0aGUgZmluYWwgcmVwbGljYSBjb3VudC4KI0IgVGhlIG9sZCBSZXBsaWNhU2V0IGlzIG5vdyBzY2FsZWQgdG8gemVyby4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d4a2787171d23ae3b95612598f209034" data-text-hash="ae88602f42b8e127602f84ed65ddc3ad" id="194" refid="194">
+<p><span>The last remaining old Pod is terminated and no longer receives traffic. All client traffic is now handled by the new version of the application. When the third new Pod is ready, the rolling update is complete.</span></p>
+</div>
+<div class="readable-text" data-hash="6bef1931242c64e60346125687ae5802" data-text-hash="080310bf9396e7544f41107d00d70358" id="195" refid="195">
+<p><span>At no time during the update was the service unavailable. There were always at least two replicas handling the traffic. You can see for yourself by reverting to the old version and triggering the update again. To do this, reapply the</span> <code>deploy.kiada.0.6.recreate.yaml</code> <span>manifest file. Because this manifest uses the</span> <code>Recreate</code> <span>strategy, all the Pods are deleted immediately and then the Pods with the version 0.6 are started simultaneously.</span></p>
+</div>
+<div class="readable-text" data-hash="611278bb035ed1755fc22b1b30245a9f" data-text-hash="d2ed7590c1e48644d48778f9c166a433" id="196" refid="196">
+<p><span>Before you trigger the update to 0.7 again, run the following command to track the update process from the clients&#8217; point of view:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="c2a0342bf4bc787680802d8756ecb368" data-text-hash="ca3d6244992f5f383a422cb727fbdddc" id="197" refid="197">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl run -it --rm --restart=Never kiada-client --image curlimages/curl -- sh -c \
+  'while true; do curl -s http://kiada | grep "Request processed by"; done'</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a516aa81fe6a29cffe87088290b12d7c" data-text-hash="bd049c6be8792190c63194868c1709d5" id="198" refid="198">
+<p><span>When you run this command, you create a Pod called</span> <code>kiada-client</code> <span>that uses</span> <code>curl</code> <span>to continuously send requests to the</span> <code>kiada</code> <span>service. Instead of printing the entire response, it prints only the line with the version number and the Pod and node names.</span></p>
+</div>
+<div class="readable-text" data-hash="5f6f2125c217e38f36d8b2d9d962dfd2" data-text-hash="685876c73e72a6dc0835ef7528e61b46" id="199" refid="199">
+<p><span>While the client is sending requests to the service, trigger another update by reapplying the manifest file</span> <code>deploy.kiada.0.7.rollingUpdate.yaml</code><span>. Observe how the output of the</span> <code>curl</code> <span>command changes during the rolling update. Here&#8217;s a short summary:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="ade9c80b3e3c5f3b43d3856f8e3bb1fd" data-text-hash="8e7a3715636e606b4a699f73372be296" id="200" refid="200">
+<div class="code-area-container">
+<pre class="code-area">Request processed by Kiada 0.6 running in pod "kiada-5d5c5f9d76-qfx9p" ...    #A
+Request processed by Kiada 0.6 running in pod "kiada-5d5c5f9d76-22zr7" ...    #A
+...
+Request processed by Kiada 0.6 running in pod "kiada-5d5c5f9d76-22zr7" ...    #B
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-468bd" ...    #B
+Request processed by Kiada 0.6 running in pod "kiada-5d5c5f9d76-6wb87" ...    #B
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-468bd" ...    #B
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-468bd" ...    #B
+...
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-468bd" ...    #C
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-fjnpf" ...    #C
+Request processed by Kiada 0.7 running in pod "kiada-58df67c6f6-lssdp" ...    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5pdGlhbGx5LCBhbGwgcmVxdWVzdHMgYXJlIHByb2Nlc3NlZCBieSB0aGUgUG9kcyBydW5uaW5nIHZlcnNpb24gMC42LgojQiBUaGVuLCBzb21lIHJlcXVlc3RzIGFyZSBwcm9jZXNzZWQgYnkgUG9kcyBydW5uaW5nIHZlcnNpb24gMC43IGFuZCBzb21lIGJ5IHRoZSBvbmVzIHJ1bm5pbmcgdGhlIG9sZGVyIHZlcnNpb24uCiNDIEV2ZW50dWFsbHksIGFsbCB0aGUgcmVxdWVzdHMgYXJlIHByb2Nlc3NlZCBieSB0aGUgUG9kcyBydW5uaW5nIHRoZSBuZXcgdmVyc2lvbi4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="90a2acc7fcb38e7b0d6bec3082c1d390" data-text-hash="a8bc3fce5339804cfd86177cdc623d6d" id="201" refid="201">
+<p><span>During the rolling update, some client requests are handled by the new Pods that run version 0.6, while others are handled by the Pods with version 0.6. Due to the increasing share of the new Pods, more and more responses come from the new version of the application. When the update is complete, the responses come only from the new version.</span></p>
+</div>
+<div class="readable-text" data-hash="d09985036ed717c5b2a592155a286e1f" data-text-hash="44e399dfc6829e71b1e528e64701384b" id="202" refid="202">
+<h3 id="sigil_toc_id_257">14.2.3&#160;Configuring how many Pods are replaced at a time</h3>
+</div>
+<div class="readable-text" data-hash="3d77836d2eb0e29a23ef702a487ab243" data-text-hash="063a89b0facfb452f487c417361f561a" id="203" refid="203">
+<p><span>In the rolling update shown in the previous section, the Pods were replaced one by one. You can change this by changing the parameters of the rolling update strategy.</span></p>
+</div>
+<div class="readable-text" data-hash="7abceaa76533503f3dc16b91e45769d5" data-text-hash="2a81437e1e5bba968699d619f4591892" id="204" refid="204">
+<h4>Introducing the maxSurge and maxUnavailable configuration options</h4>
+</div>
+<div class="readable-text" data-hash="06de1b38534a2d34451ec755afebb1a3" data-text-hash="620872ac097369aa16ef994a797d8509" id="205" refid="205">
+<p><span>The two</span> <span>parameters that affect how fast <span>Pod</span>s are replaced during a rolling update are</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code><span>, which I mentioned briefly when I introduced the</span> <code>RollingUpdate</code> <span>strategy. You can set these parameters in the</span> <code>rollingUpdate</code> <span>subsection of the Deployment&#8217;s</span> <code>strategy</code> <span>field, as shown in the following listing.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="eb60614726b300a8036416982692b1f3" data-text-hash="935057f2dfafec03ad61a1a1b202975a" id="206" refid="206">
+<h5>Listing 14.4 Specifying parameters for the <code class="codechar">rollingUpdate</code> strategy</h5>
+<div class="code-area-container">
+<pre class="code-area">spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0    #A
+      maxUnavailable: 1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUGFyYW1ldGVycyBvZiB0aGUgcm9sbGluZyB1cGRhdGUgc3RyYXRlZ3k="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5b724ec2a181c0b54d72d35bcf483668" data-text-hash="9b666caf42855aa28d9064ea769fcc80" id="207" refid="207">
+<p><span>The following table explains the effect of each parameter.</span></p>
+</div>
+<div class="browsable-container" data-hash="adac8d54e98fb85c97d4d3dacb376c0c" data-text-hash="13b2777b2772bb1718e6ed9eab5d0419" id="208" refid="208">
+<h5><span>Table 14.</span><span xml:lang="SL">3</span> <span>About the maxSurge and maxUnavailable configuration options</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p><span>Property</span></p> </td>
+<td> <p><span>Description</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>maxSurge
+</pre> </td>
+<td> <p><span>The maximum number of Pods above the desired number of replicas that the Deployment can have during the rolling update. The value can be an absolute number or a percentage of the desired number of replicas.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>maxUnavailable
+</pre> </td>
+<td> <p><span>The maximum number of Pods relative to the desired replica count that can be unavailable during the rolling update. The value can be an absolute number or a percentage of the desired number of replicas.</span></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="cc2edaeb6d89b5a15c08d75e4f94f42e" data-text-hash="d61e6610f4b752c35828ae1bb071283c" id="209" refid="209">
+<p><span>The most important thing about these two parameters is that their values are relative to the desired number of replicas. For example, if the desired number of replicas is three,</span> <code>maxUnavailable</code> <span>is one, and the current number of Pods is five, the number of Pods that must be available is two, not four.</span></p>
+</div>
+<div class="readable-text" data-hash="5bc30396f682fb6627cecb0b64e0113d" data-text-hash="3cedc20723665869ac196e2910282677" id="210" refid="210">
+<p><span>Let&#8217;s look at how these two parameters affect how the Deployment controller performs the update. This is best explained by going through the possible combinations one by one.</span></p>
+</div>
+<div class="readable-text" data-hash="668c3e770b28cbf449351c18d5d04a2a" data-text-hash="3d9290d08b9b375fae4e4e173ba9bb92" id="211" refid="211">
+<h4>MaxSurge=0, maxUnavailable=1</h4>
+</div>
+<div class="readable-text" data-hash="38b8732ea82b217f84288b1e9f6a9f2b" data-text-hash="dc39a8443b9aac038954e12d0486d76d" id="212" refid="212">
+<p><span>When you performed the rolling update in the previous section, the desired number of replicas was three,</span> <code>maxSurge</code> <span>was zero and</span> <code>maxUnavailable</code> <span>was one. The following figure shows how the Pods were updated over time.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="9c5d47a43b7de6a823442880125da48c" data-text-hash="1effeb29f804f778400eee35f4f836eb" id="213" refid="213">
+<h5><span>Figure 14.7 How Pods are replaced when maxSurge is 0 and maxUnavailable is 1</span></h5>
+<img alt="" data-processed="true" height="258" id="Picture_114" loading="lazy" src="EPUB/images/14_img_0007.png" width="769">
+</div>
+<div class="readable-text" data-hash="d93c8b4f711b043def6cbbbc9e7c95c3" data-text-hash="54262c58fb8cc261f2d31281410523ae" id="214" refid="214">
+<p><span>Because</span> <code>maxSurge</code> <span>was set to</span> <code>0</code><span>, the Deployment controller wasn&#8217;t allowed to add Pods beyond the desired number of replicas. Therefore, there were never more than 3 Pods associated with the Deployment. Because</span> <code>maxUnavailable</code> <span>was set to</span> <code>1</code><span>, the Deployment controller had to keep the number of available replicas above two and therefore could only delete one old Pod at a time. It couldn&#8217;t delete the next Pod until the new Pod that replaced the deleted Pod became available.</span></p>
+</div>
+<div class="readable-text" data-hash="5c7cd86211b48bdce445f3cb809dd5e0" data-text-hash="e483c458e44e8cc1fd876ca416e8c6dc" id="215" refid="215">
+<h4>MaxSurge=1, maxUnavailable=0</h4>
+</div>
+<div class="readable-text" data-hash="5f4e935584bb3a71573dcdd70d0383ab" data-text-hash="f1a9499749af1376e6b16a82cbf268b6" id="216" refid="216">
+<p><span>What happens if you reverse the two parameters and set</span> <code>maxSurge</code> <span>to</span> <code>1</code> <span>and</span> <code>maxUnavailable</code> <span>to</span> <code>0</code><span>? If the desired number of replicas is three, there must be at least three replicas available throughout the process. Because the</span> <code>maxSurge</code> <span>parameter is set to</span> <code>1</code><span>, there should never be more than four Pods total. The following figure shows how the update unfolds.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="04ee585994aac3d6631c86b8c5f6f932" data-text-hash="9561502f4e841637c0714d5cd707b2f6" id="217" refid="217">
+<h5><span>Figure 14.8 How Pods are replaced when maxSurge is 1 and maxUnavailable is 0</span></h5>
+<img alt="" data-processed="true" height="277" id="Picture_115" loading="lazy" src="EPUB/images/14_img_0008.png" width="779">
+</div>
+<div class="readable-text" data-hash="1ff00dd3dbf07d8ac6b8f8a317406d22" data-text-hash="27137eea1e8b75798d801f175ca94249" id="218" refid="218">
+<p><span>First, the Deployment controller can&#8217;t scale the old ReplicaSet down because that would cause the number of available Pods to fall below the desired number of replicas. But the controller can scale the new ReplicaSet up by one Pod, because the</span> <code>maxSurge</code> <span>parameter allows the Deployment to have one Pod above the desired number of replicas.</span></p>
+</div>
+<div class="readable-text" data-hash="952d8078eaa811e2789c06917d5b0b21" data-text-hash="3224e2a13fd7d93bf58a6315a8af8793" id="219" refid="219">
+<p><span>At this point, the Deployment has three old Pods and one new Pod. When the new Pod is available, the traffic is handled by all four Pods for a moment. The Deployment controller can now scale down the old ReplicaSet by one Pod, since there would still be three Pods available. The controller can then scale up the new ReplicaSet. This process is repeated until the new ReplicaSet has three Pods and the old ReplicaSet has none.</span></p>
+</div>
+<div class="readable-text" data-hash="9527b9d659f2fc16ea08f68b238b3c75" data-text-hash="8046759897a86bd77d2be455fcffb6a9" id="220" refid="220">
+<p><span>At all times during the update, the desired number of Pods was available and the total number of Pods never exceeded one over the desired replica count.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="221" refid="221">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="295093aa000740ff650c732c547acfa6" data-text-hash="b03b560b9b5d0c54fb1367d7a52525af" id="222" refid="222">
+<p> <span>You can&#8217;t set both</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>to zero, as this wouldn&#8217;t allow the Deployment to exceed the desired number of replicas or remove Pods, as one Pod would then be unavailable.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="e1721f2290c56cc3f340baaa47868d30" data-text-hash="4e81b83796055d4cdfbc7fd0e898cf2d" id="223" refid="223">
+<h4>maxSurge=1, maxUnavailable=1</h4>
+</div>
+<div class="readable-text" data-hash="90adb56ac52e8161267fa8cdbe0294e1" data-text-hash="1e29447554d88a830803c9449c3b969d" id="224" refid="224">
+<p><span>If you set both</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>to</span> <code>1</code><span>, the total number of replicas in the Deployment can be up to four,</span> and two must <span>always</span> be <span>available. The following figure shows the progression over time.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="4fde02c7c3c321c52cf94f1550a01dbe" data-text-hash="78feb2425ccd4fea32b4a342597d2550" id="225" refid="225">
+<h5><span>Figure 14.9 How Pods are replaced when both maxSurge and maxUnavailable are 1</span></h5>
+<img alt="" data-processed="true" height="290" id="Picture_116" loading="lazy" src="EPUB/images/14_img_0009.png" width="778">
+</div>
+<div class="readable-text" data-hash="8393449901304c483dba2ac6ec952c85" data-text-hash="c5222bb7be87db687278226e44de12a3" id="226" refid="226">
+<p><span>The Deployment controller immediately scales the new ReplicaSet up by one replica and the old ReplicaSet down the same amount. As soon as the old ReplicaSet reports that it has marked one of the old Pods for deletion, the Deployment controller scales the new ReplicaSet up by another Pod.</span></p>
+</div>
+<div class="readable-text" data-hash="1e33ebece0bf4770d0ad0e9f174ac3e3" data-text-hash="06600f808b9d9aecc8d3b2157c34c728" id="227" refid="227">
+<p><span>Each ReplicaSet is now configured with two replicas. The two Pods in the old ReplicaSet are still running and available, while the two new Pods are starting. When one of the new Pods is available, another old Pod is deleted and another new Pod is created. This continues until all the old Pods are replaced. The total number of Pods never exceeds four, and at least two Pods are available at any given time.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="228" refid="228">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d18cb627598d3361b70db9cbca926b8a" data-text-hash="a7bffe2bd8c6125bf04b5c69cef00ce1" id="229" refid="229">
+<p> <span>Because the Deployment controller doesn&#8217;t count the Pods itself, but gets the information about the number of Pods from the status of the underlying ReplicaSets, and because the ReplicaSet never counts the Pods that are being terminated, the total number of Pods may actually exceed 4 if you count the Pods that are being terminated.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="b4469be1f53bc1776924ede44badd4de" data-text-hash="3eacb8a1af91fc78322e8af750f376ff" id="230" refid="230">
+<h4>Using higher values of maxSurge and maxUnavailable</h4>
+</div>
+<div class="readable-text" data-hash="8f7307fb135f470f93d4d362d112c770" data-text-hash="ce284f1fa7c012a2ba1b035be7f17a85" id="231" refid="231">
+<p><span>If</span> <code>maxSurge</code> <span>is set to a value higher than one, the Deployment controller is allowed to add even more Pods at a time. If</span> <code>maxUnavailable</code> <span>is higher than one, the controller is allowed to remove more Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="62db153f62debbe3d5a95cbee914a1d0" data-text-hash="d4001e02ec18b50862f260802a7ebcf8" id="232" refid="232">
+<h4>Using percentages</h4>
+</div>
+<div class="readable-text" data-hash="724fb9b162cdb2aa5eaa08be68e79ccc" data-text-hash="eb0707da232b2d7e1a4433cf8ffc0007" id="233" refid="233">
+<p><span>Instead of setting</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>to an absolute number, you can set them to a percentage of the desired number of replicas. The controller calculates the absolute</span> <code>maxSurge</code> <span>number by rounding up, and</span> <code>maxUnavailable</code> <span>by rounding down.</span></p>
+</div>
+<div class="readable-text" data-hash="bd40ca0cf41fce2e79f373b56d1efecc" data-text-hash="7c944590004ad675a22de202df447126" id="234" refid="234">
+<p><span>Consider a case where</span> <code>replicas</code> <span>is set to</span> <code>10</code> <span>and</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>are set to</span> <code>25%</code><span>. If you calculate the absolute values,</span> <code>maxSurge</code> <span>becomes</span> <code>3</code><span>, and</span> <code>maxUnavailable</code> <span>becomes</span> <code>2</code><span>. So, during the update process, the Deployment may have up to 13 Pods, at least 8 of which are always available and handling the traffic.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="235" refid="235">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9bae988934df5d6276ca077765aa19cf" data-text-hash="4fb9212a2067203a5bd6a04249cc8bfb" id="236" refid="236">
+<p> <span>The default value for</span> <code>maxSurge</code> <span>and</span> <code>maxUnavailable</code> <span>is 25%.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="fb53bfb192490eb64dff76c0ebeafdc4" data-text-hash="d8ee85247a651fa46f6eba08280a3f4a" id="237" refid="237">
+<h3 id="sigil_toc_id_258">14.2.4&#160;Pausing the rollout process</h3>
+</div>
+<div class="readable-text" data-hash="0759dcda15904a215b522c4388e4e8d8" data-text-hash="85fc90a1d62106a4a76574bba734ed66" id="238" refid="238">
+<p><span>The rolling update process is fully automated. Once you update the Pod template in the Deployment object, the rollout process begins and doesn&#8217;t end until all Pods are replaced with the new version. However, you can pause the rolling update at any time. You may want to do this to check the behavior of the system while both versions of the application are running, or to see if the first new Pod behaves as expected before replacing the other Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="75af30212e6def208aea5b80b69239f1" data-text-hash="9b964ae142fef56ffff807dd9ff9e2ec" id="239" refid="239">
+<h4>Pausing the rollout</h4>
+</div>
+<div class="readable-text" data-hash="9e850620a096447229c61b80f3c0baf1" data-text-hash="8fc4fc3e8ddd6db71c80d6e5849c5aab" id="240" refid="240">
+<p><span>To pause an update in the middle of the rolling update process, use the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="8f0d019c2859621de0ed3a42cc72ce73" data-text-hash="d632d70dbce9ebeb0799ff446276bbd8" id="241" refid="241">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout pause deployment kiada
+deployment.apps/kiada paused</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9d88fb46547fee0789f039184da47f7a" data-text-hash="60cbd24292caa603870a2c23321ae72b" id="242" refid="242">
+<p><span>This command sets the value of the</span> <code>paused</code> <span>field in the Deployment&#8217;s</span> <code>spec</code> <span>section to</span> <code>true</code><span>. The Deployment controller checks this field before any change to the underlying ReplicaSets.</span></p>
+</div>
+<div class="readable-text" data-hash="ddf329aba04c767649378f3aff59a7e6" data-text-hash="23fe2b29c597c9eefddf29f46ed82428" id="243" refid="243">
+<p><span>Try the update from version 0.6 to version 0.7 again and pause the Deployment when the first Pod is replaced. Open the application in your web browser and observe its behavior. Read the sidebar to learn what to look for.</span></p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="61a67d20e07fedc4bb4df484cf3c71c2" data-text-hash="be0eee59a8d025513bbc91505c9b6ff0" id="244" refid="244">
+<h5><span>Be careful when using rolling updates with a web application</span></h5>
+</div>
+<div class="readable-text" data-hash="668c25061d542e38b6eff097fb5fa54e" data-text-hash="fe04872832cfd2b731befbc75cc9c3a2" id="245" refid="245">
+<p>If you pause the update while the Deployment is running both the old and new versions of the application and access it through your web browser, you&#8217;ll notice an issue that can occur when using this strategy with web applications.</p>
+</div>
+<div class="readable-text" data-hash="bbb399b627b39b58e43c4e5483b5f56e" data-text-hash="dcb4e8caa74957f78bdc266224df2106" id="246" refid="246">
+<p>Refresh the page in your browser several times and watch the colors and version numbers displayed in the four boxes in the lower right corner. You&#8217;ll notice that you get version 0.6 for some resources and version 0.7 for others. This is because some requests sent by your browser are routed to Pods running version 0.6 and some are routed to those running version 0.7. For the Kiada application, this doesn&#8217;t matter, because there aren&#8217;t any major changes in the CSS, JavaScript, and image files between the two versions. However, if this were the case, the HTML could be rendered incorrectly.</p>
+</div>
+<div class="readable-text" data-hash="fcbbdd87bc962887a57bd6ae7d7542a7" data-text-hash="837fb621e5aeb10f09167f08b7dee571" id="247" refid="247">
+<p>To prevent this, you could use session affinity or update the application in two steps. First, you&#8217;d add the new features to the CSS and other resources, but maintain backwards compatibility. After you&#8217;ve fully rolled out this version, you can then roll out the version with the changes to the HTML. Alternatively, you can use the blue-green deployment strategy, explained later in this chapter.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0f2ab95990e2d5fd11c467fc4e05cf77" data-text-hash="a6db020afdd374bdc96bb3d27f39ca30" id="248" refid="248">
+<h4>Resuming the rollout</h4>
+</div>
+<div class="readable-text" data-hash="155869e555c3f0ed79b45af0af6c5a71" data-text-hash="e7d22dfa11c53c72b0f592b007a687fb" id="249" refid="249">
+<p><span>To resume a paused rollout, execute the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="728884d491d68e4caa93a50b9906fb2b" data-text-hash="d118b9cadf799255b00fd4c47393e7e3" id="250" refid="250">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout resume deployment kiada
+deployment.apps/kiada resumed</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c81d1e0a0fe434db5b4054ac877c17d5" data-text-hash="fb89a13b5b222f4dd0a700e2e328c2e2" id="251" refid="251">
+<h4>Using the pause feature to block rollouts</h4>
+</div>
+<div class="readable-text" data-hash="085a254f4c6c21e74d2fe5aae8ce0fd9" data-text-hash="73fe2891f983c3acefc84b9c7e34c254" id="252" refid="252">
+<p><span>Pausing</span> <span>a Deployment can also be used to prevent updates to the Deployment from immediately triggering the update process. This allows you to make multiple changes to the Deployment and not start the rollout until you&#8217;ve made all the necessary changes. Once you&#8217;re ready for the changes to take effect, you resume the Deployment and the rollout process begins.</span></p>
+</div>
+<div class="readable-text" data-hash="4f1a2b6f50dcae168eb6d304c39567f7" data-text-hash="5fdf12e580120d0c09217e7c8967de6e" id="253" refid="253">
+<h3 id="sigil_toc_id_259">14.2.5&#160;Updating to a faulty version</h3>
+</div>
+<div class="readable-text" data-hash="f8e4de0c9b5e9dfdede25f7ac21049a7" data-text-hash="46e7ec6531fc61a1d9a12b6b40a35088" id="254" refid="254">
+<p><span>When you roll out a new version of an application, you can use the</span> <code>kubectl rollout pause</code> <span>command to verify that the Pods running the new version are working as expected before you resume the rollout. You can also let Kubernetes do this for you automatically.</span></p>
+</div>
+<div class="readable-text" data-hash="f44b06eb12ec585eb52e227e3d1d32e0" data-text-hash="4ac22c255e4496d149fec04206aeb5fe" id="255" refid="255">
+<h4>Understanding Pod availability</h4>
+</div>
+<div class="readable-text" data-hash="a83ec9ce80d71fac118a87c42c18b53b" data-text-hash="f19485dc49e778c1d20e8564a1c4eb46" id="256" refid="256">
+<p><span>In chapter 11, you learned what it means for a Pod and its containers to be considered ready. However, when you list Deployments with</span> <code>kubectl get deployments</code><span>, you see both how many Pods are ready and how many are available. For example, during a rolling update, you might see the following output:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="74eae6a3f70980d197f0501def49e76d" data-text-hash="f03f0814e435e65d0e51094ff51639c4" id="257" refid="257">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get deploy kiada
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kiada   3/3     1            2           50m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhyZWUgUG9kcyBhcmUgcmVhZHksIGJ1dCBvbmx5IHR3byBhcmUgYXZhaWxhYmxlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="19997638b862621d6d0a578e3dc08f42" data-text-hash="897d228e4a1068209d71bb2b8c6e85c6" id="258" refid="258">
+<p><span>Although three Pods are ready, not all three are available. For a Pod to be available, it must be ready for a certain amount of time. This time is configurable via the</span> <code>minReadySeconds</code> <span>field that I mentioned briefly when I introduced the</span> <code>RollingUpdate</code> <span>strategy.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="259" refid="259">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="47704ec744e9fe957676e63c08cbc684" data-text-hash="7f2446d45f65b2d3bb7937b7ff54b654" id="260" refid="260">
+<p> <span>A Pod that&#8217;s ready but not yet available is included in your services and thus receives client requests.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="bcc74bd09002d261dbc115ce9dea74c0" data-text-hash="26d4ebd4943580bcc3086aff9e902416" id="261" refid="261">
+<h4>Delaying Pod availability with minReadySeconds</h4>
+</div>
+<div class="readable-text" data-hash="822989358b6ecc10c89aa905e2cea378" data-text-hash="c23188a8df84a912cd0fad7f4327d97d" id="262" refid="262">
+<p><span>When a new Pod is created in a rolling update, the Deployment controller waits until the Pod is available before continuing the rollout process. By default, the Pod is considered available when it&#8217;s ready (as indicated by the Pod&#8217;s readiness probe). If you specify</span> <code>minReadySeconds</code><span>, the Pod isn&#8217;t considered available until the specified amount of time has elapsed after the Pod is ready. If the Pod&#8217;s containers crash or fail their readiness probe during this time, the timer is reset.</span></p>
+</div>
+<div class="readable-text" data-hash="b44ee38cdb9d58ca0171d3545877cc4a" data-text-hash="93bff6af3b33a8f3c05e5d0a5c67337e" id="263" refid="263">
+<p><span>In one of the previous sections, you set</span> <code>minReadySeconds</code> <span>to</span> <code>10</code> <span>to slow down the rollout so you could track it more easily. In practice, you can set this property to a much higher value to automatically pause the rollout for a longer period after the new Pods are created. For example, if you set</span> <code>minReadySeconds</code> <span>to</span> <code>3600</code><span>, you ensure that the update won&#8217;t continue until the first Pods with the new version prove that they can operate for a full hour without problems.</span></p>
+</div>
+<div class="readable-text" data-hash="3caf04d030c878a4fcbb3eb893c5e24f" data-text-hash="708ade00350c6a4b7f63822a10dfbbc7" id="264" refid="264">
+<p><span>Although you should obviously test your <span>application</span> in both a test and staging environment before moving it to production, using</span> <code>minReadySeconds</code> <span>is like an airbag that helps avoid disaster if a faulty version slips through all the tests. The downside is that it slows down the entire rollout, not just the first stage.</span></p>
+</div>
+<div class="readable-text" data-hash="f973ce0d77186192b3fcec62cd217e65" data-text-hash="75dc1ba2d278b5d5272bc15909d72b8d" id="265" refid="265">
+<h4>Deploying a broken application version</h4>
+</div>
+<div class="readable-text" data-hash="faa641842ac1c5334cf4d8a1ed891dc0" data-text-hash="f5c80d8cbb2e44b029151be8bd6443ef" id="266" refid="266">
+<p><span>To see how the combination of a readiness probe and</span> <code>minReadySeconds</code> <span>can save you from rolling out a faulty application version, you&#8217;ll deploy version 0.8 of the Kiada service. This is a special version that returns</span> <code>500 Internal Server Error</code> <span>responses a while after the process starts. This time is configurable via the</span> <code>FAIL_AFTER_SECONDS</code> <span>environment variable.</span></p>
+</div>
+<div class="readable-text" data-hash="4539070a9c927406aecfbc4b647be727" data-text-hash="1f461bd4f54ed82a4abcbdedf70eebcb" id="267" refid="267">
+<p><span>To deploy this version, apply the</span> <code>deploy.kiada.0.8.minReadySeconds60.yaml</code> <span>manifest file. The relevant parts of the manifest are shown in the following listing.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="609e537b24184e554fa5d5e00abf920f" data-text-hash="3bd53d0d1bec56d188a17e6af9824cc2" id="268" refid="268">
+<h5>Listing 14.5 Deployment manifest with a readiness probe and minReadySeconds</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: Deployment
+...
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  minReadySeconds: 60    #A
+  ...
+  template:
+    ...
+    spec:
+      containers:
+      - name: kiada
+        image: luksa/kiada:0.8    #B
+        env:
+        - name: FAIL_AFTER_SECONDS    #C
+          value: "30"    #C
+        ...
+        readinessProbe:    #D
+          initialDelaySeconds: 0    #D
+          periodSeconds: 10    #D
+          failureThreshold: 1    #D
+          httpGet:    #D
+            port: 8080    #D
+            path: /healthz/ready    #D
+            scheme: HTTP    #D
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRWFjaCBQb2QgbXVzdCBiZSByZWFkeSBmb3IgNjBzIGJlZm9yZSBpdCBpcyBjb25zaWRlcmVkIGF2YWlsYWJsZS4KI0IgVmVyc2lvbiAwLjggb2YgdGhlIEtpYWRhIHNlcnZpY2UgaXMgYSBzcGVjaWFsIHZlcnNpb24gdGhhdCBmYWlscyBhZnRlciBhIGdpdmVuIGFtb3VudCBvZiB0aW1lLgojQyBUaGUgYXBwbGljYXRpb24gcmVhZHMgdGhpcyBlbnZpcm9ubWVudCB2YXJpYWJsZSBhbmQgZmFpbHMgdGhpcyBtYW55IHNlY29uZHMgYWZ0ZXIgaXQgc3RhcnRzLgojRCBUaGUgcmVhZGluZXNzIHByb2JlIGlzIGNvbmZpZ3VyZWQgdG8gcnVuIG9uIHN0YXJ0dXAgYW5kIHRoZW4gZXZlcnkgMTAgc2Vjb25kcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c58bc3546519e25d7bd8e13286c780bb" data-text-hash="9d4c025ae2bbbd90a343ba828f444d5a" id="269" refid="269">
+<p><span>As you can see in the listing,</span> <code>minReadySeconds</code> <span>is set to</span> <code>60</code><span>, whereas</span> <code>FAIL_AFTER_SECONDS</code> <span>is set to</span> <code>30.</code> <span>The readiness probe runs every</span> <code>10</code> <span>seconds. The first Pod created in the rolling update process runs smoothly for the first thirty seconds. It&#8217;s marked ready and therefore receives client requests. But after the 30 seconds, those requests and the requests made as part of the readiness probe fail. The Pod is marked as not ready and is never considered available due to the</span> <code>minReadySeconds</code> <span>setting. This causes the rolling update to stop.</span></p>
+</div>
+<div class="readable-text" data-hash="5c3bf8b30c7b825b2cfbeb0b6398bea3" data-text-hash="87463b9093052eaac48e561f2976db18" id="270" refid="270">
+<p><span>Initially, some responses that clients receive will be sent by the new version. Then, some requests will fail, but soon afterward, all responses will come from the old version again.</span></p>
+</div>
+<div class="readable-text" data-hash="e9c739512ab1895bf07c769ce963f0c4" data-text-hash="cfd213506a386cd10d971bac17e75c98" id="271" refid="271">
+<p><span>Setting</span> <code>minReadySeconds</code> <span>to</span> <code>60</code> <span>minimizes the negative impact of the faulty version. Had you not set</span> <code>minReadySeconds</code><span>, the new Pod would have been considered available immediately and the rollout would have replaced all the old Pods with the new version. All these new Pods would soon fail, resulting in a complete service outage. If you&#8217;d like to see this yourself, you can try applying the</span> <code>deploy.kiada.0.8.minReadySeconds0.yaml</code> <span>manifest file later. But first, let&#8217;s see what happens when the rollout gets stuck for a long time.</span></p>
+</div>
+<div class="readable-text" data-hash="3e04fb73f3733be19da968a0edc5a50a" data-text-hash="b93eb08966015cfd2033cc74ce9b00ba" id="272" refid="272">
+<h4>Checking whether the rollout is progressing</h4>
+</div>
+<div class="readable-text" data-hash="7f97c3fa746f78c726e6539f8511850a" data-text-hash="606438079b35c6539dd56d83c65f8fec" id="273" refid="273">
+<p><span>The Deployment object indicates whether the rollout process is progressing via the</span> <code>Progressing</code> <span>condition, which you can find in the object&#8217;s</span> <code>status.conditions</code> <span>list. If no progress is made for 10 minutes, the status of this condition changes to</span> <code>false</code> <span>and the reason changes to</span> <code>ProgressDeadlineExceeded</code><span>. You can see this by running the</span> <code>kubectl describe</code> <span>command as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="38c95d1e8554bebd2d5af54461dbcfc9" data-text-hash="87cf2e2cd8bf223f83b1797c1ff471e7" id="274" refid="274">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe deploy kiada
+...
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    False   ProgressDeadlineExceeded    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRlcGxveW1lbnQgcHJvY2VzcyBpcyBub3QgcHJvZ3Jlc3Npbmcu"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="275" refid="275">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="dd4276b8085583d5b7e8a9a1448ceaa3" data-text-hash="cdd5bf6eb4f8e8008f21568d6ccecc3b" id="276" refid="276">
+<p> <span>You can configure a different progress deadline by setting the</span> <code>spec.progressDeadlineSeconds</code> <span>field in the Deployment object. If you increase</span> <code>minReadySeconds</code> <span>to more than</span> <code>600</code><span>, you must set the</span> <code>progressDeadlineSeconds</code> <span>field accordingly.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="418aa1edc5938a8575329298c4efdd92" data-text-hash="6d1299cab54c5531878a800185b39edd" id="277" refid="277">
+<p><span>If you run the</span> <code>kubectl rollout status</code> <span>command after you trigger the update, it prints a message that the progress deadline has been exceeded, and terminates.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d0a6b97ef5746bdd0765f1b93489ee40" data-text-hash="6d409153a5be30e39a55dfa03fb385d4" id="278" refid="278">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout status deploy kiada
+Waiting for "kiada" rollout to finish: 1 out of 3 new replicas have been updated...
+error: deployment "kiada" exceeded its progress deadline</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="57c99c3f752aee50ddaf69d277939b0f" data-text-hash="0693c93316d3dc2b1c826173455914dd" id="279" refid="279">
+<p><span>Other than reporting that the rollout has stalled, Kubernetes takes no further action. The rollout process never stops completely. If the Pod becomes ready and remains so for the duration of</span> <code>minReadySeconds</code><span>, the rollout process continues. If the Pod never becomes ready again, the rollout process simply doesn&#8217;t continue. You can cancel the rollout as explained in the next section.</span></p>
+</div>
+<div class="readable-text" data-hash="5b1bb4bee946a8c4f642968b2be7cedd" data-text-hash="87982f79b992a55ffda15c433802faef" id="280" refid="280">
+<h3 id="sigil_toc_id_260">14.2.6&#160;Rolling back a Deployment</h3>
+</div>
+<div class="readable-text" data-hash="a2bbd8d04cc9727d450edbe87643512c" data-text-hash="cf6bb4f8b8300b705dd404b39a2965f7" id="281" refid="281">
+<p><span>If you update a Deployment and the update fails, you can use the</span> <code>kubectl apply</code> <span>command to reapply the previous version of the Deployment manifest or tell Kubernetes to roll back the last update.</span></p>
+</div>
+<div class="readable-text" data-hash="37a40940f445650cf68ed418a3be26f2" data-text-hash="ebd944ebbe2b6957acb6f2c396307f74" id="282" refid="282">
+<h4>Rolling back a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="d60c5eb0a13793ddb284207a76efae8e" data-text-hash="75c960738f101f842a748d5eb511f090" id="283" refid="283">
+<p><span>You can rollback the Deployment to the previous version by running the</span> <code>kubectl rollout undo</code> <span>command as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="3a0e6c8fd605eede4b06aace7e816864" data-text-hash="364221adc64d6365cb68e2b4e7d48c17" id="284" refid="284">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout undo deployment kiada
+deployment.apps/kiada rolled back</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9a2f53a064d88aad343caa950767228e" data-text-hash="142bc58d5d2ca1704c45f63026ce25b3" id="285" refid="285">
+<p><span>Running this command has a similar effect to applying the previous version of the object manifest file. The undo process follows the same steps as a normal update. It does so by respecting the update strategy specified in the Deployment object. Thus, if the</span> <code>RollingUpdate</code> <span>strategy is used, the Pods are rolled back gradually.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="90ba996504b189776b490cb27e1ac229" data-text-hash="1eab470a6f707b92e15040773251a746" id="286" refid="286">
+<h5>TIP</h5>
+</div>
+<div class="readable-text" data-hash="c951814934b62ea6688e8060e1cac397" data-text-hash="3709dd6a7559db646cfcd987c627b05c" id="287" refid="287">
+<p><span>&#8195;The</span> <code>kubectl rollout undo</code> <span>command can be used while the rollout process is running to cancel the rollout, or after the rollout is complete to undo it.</span></p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="288" refid="288">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="171aabb58ed202cee61fd9a4840091fa" data-text-hash="f8bcaa3f2af573417764abfe98f89dbf" id="289" refid="289">
+<p><span>&#8195;When a Deployment is paused with the</span> <code>kubectl pause</code> <span>command, the</span> <code>kubectl rollout undo</code> <span>command does nothing until you resume the Deployment with</span> <code>kubectl rollout resume</code><span>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="a5762d206bee19e7317afe477dc70d91" data-text-hash="478e5af1e7be1b4672c5ca4e68578381" id="290" refid="290">
+<h4>Displaying a Deployment&#8217;s rollout history</h4>
+</div>
+<div class="readable-text" data-hash="81d0e306bd6f6ac1abca50b37777b447" data-text-hash="b1cc008d34ad19b62f29bdbf0ee17199" id="291" refid="291">
+<p><span>Not only can you use the</span> <code>kubectl rollout undo</code> <span>command to revert to the previous version, but you can also revert to one of the previous versions. Of course, you may want to see what those versions looked like first. You can do that with the</span> <code>kubectl rollout history</code> <span>command. Unfortunately, as I write this, this command is almost useless. You&#8217;ll understand what I mean when you see its output:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="179cc17ca0aee05955f709487fe7eaab" data-text-hash="3f1c3f58d03a01f793848b2830b6eccf" id="292" refid="292">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout history deploy kiada
+deployment.apps/kiada
+REVISION  CHANGE-CAUSE
+1         &lt;none&gt;
+2         &lt;none&gt;
+11        &lt;none&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="862abccd27067205639e9185b013f403" data-text-hash="1559f8176c0a6a6123e1a359cd521caa" id="293" refid="293">
+<p><span>The only information we can glean from this command is that the Deployment has gone through two revisions. The column</span> <code>CHANGE-CAUSE</code> <span>is empty, so we can&#8217;t see what the reason for each change was.</span></p>
+</div>
+<div class="readable-text" data-hash="b600def348c1fc915a965cc26983a763" data-text-hash="becf6263c5db0eea47aca2095d8b7173" id="294" refid="294">
+<p><span>The values in this column are populated if you use the</span> <code>--record</code> <span>option when you run</span> <code>kubectl</code> <span>commands that modify the Deployment. However, this option is now deprecated and will be removed. Hopefully, another mechanism will then be introduced that will allow the</span> <code>rollout history</code> <span>command to display more information about each change.</span></p>
+</div>
+<div class="readable-text" data-hash="9badc96b01ec57327edfd1446e711942" data-text-hash="e5a10864ab5d5507f014110dd934356f" id="295" refid="295">
+<p><span>Currently, you can inspect each revision individually by running the</span> <code>kubectl rollout history</code> <span>command with the</span> <code>--revision</code> <span>option. For example, to inspect the second revision, run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="3572e829a071aa9c8f5ba94683897242" data-text-hash="3ebf8ed092cf3e282c2bf778e7aa4914" id="296" refid="296">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout history deploy kiada --revision 2
+deployment.apps/kiada with revision #2
+Pod Template:
+  Labels:       app=kiada
+                pod-template-hash=7bffb9bf96
+                rel=stable
+  Containers:
+   kiada:
+    Image:      luksa/kiada:0.6
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dc863cb7a4c9d78d6e4ba435463aae07" data-text-hash="1ce9300744b366ec4fd7dd4b9a3f5bdd" id="297" refid="297">
+<p><span>You may wonder where the revision history is stored. You won&#8217;t find it in the Deployment object. Instead, the history of a Deployment is represented by the ReplicaSets associated with the Deployment, as shown in the following figure. Each ReplicaSet represents one revision. This is the reason why the Deployment controller doesn&#8217;t delete the old ReplicaSet object after the update process is complete.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="fe4ed9e4e4244685c12d52974183da81" data-text-hash="b35e183a89190db0abaddc17f9406a16" id="298" refid="298">
+<h5><span>Figure 14.10 A Deployment&#8217;s revision history</span></h5>
+<img alt="" data-processed="true" height="232" id="Picture_117" loading="lazy" src="EPUB/images/14_img_0010.png" width="774">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="299" refid="299">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="db6d2550949e75899a593d2ac02aa7c1" data-text-hash="4e3a9a5b76a465321f20f97b40792536" id="300" refid="300">
+<p> <span>The size of the revision history, and thus the number of ReplicaSets that the Deployment controller keeps for a given Deployment, is determined by the</span> <code>revisionHistoryLimit</code> <span>field in the Deployment&#8217;s</span> <code>spec</code><span>. The default value is 10.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="5375f788c839453040cf96cb19de744d" data-text-hash="1c90aea1ee90d29434ead78b82591930" id="301" refid="301">
+<p><span>As an exercise, try to find the revision number in which version 0.6 of the Kiada service was deployed. You&#8217;ll need this revision number in the next section.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="302" refid="302">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="6682764e5a925fe111fe71079f84d68e" data-text-hash="a012723b0d7e81eb8ea0a7e6ac0dd302" id="303" refid="303">
+<p> <span>Instead of using</span> <code>kubectl rollout history</code> <span>to view the history of a Deployment, listing ReplicaSets with</span> <code>-o wide</code> <span>is a better option, because it shows the image tags used in the Pod. To find the revision number for each ReplicaSet, look at the ReplicaSet&#8217;s annotations.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="0ad37f2c63e9bf50a8a9712f5f10b2b5" data-text-hash="8a16eecb9272707a7d1244027f2486a8" id="304" refid="304">
+<h4>Rolling back to a specific Deployment revision</h4>
+</div>
+<div class="readable-text" data-hash="d6c3cad6f90eca66329378e0fe188928" data-text-hash="2ef038880520008482608813497f1547" id="305" refid="305">
+<p><span>You used the</span> <code>kubectl rollout undo</code> <span>command to revert from the faulty version 0.8 to version 0.7. But the yellow background for the &#8220;Tip of the day&#8221; and &#8220;Pop quiz&#8221; sections of the user interface doesn&#8217;t look as nice as the white background in version 0.6, so let&#8217;s roll back to this version.</span></p>
+</div>
+<div class="readable-text" data-hash="f9b999ac471f6627a4422d7ba967c3ee" data-text-hash="fd85065614465f4df0296b5dd5a51950" id="306" refid="306">
+<p><span>You</span> <span>can revert to a specific revision by specifying the revision number in the</span> <code>kubectl rollout undo</code> <span>command. For example, if you want to revert to the first revision, run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="493d5f884663951d54ccc1aa3d6cdeb7" data-text-hash="07c92da00fc0f2af1694f4ac1b0c6e87" id="307" refid="307">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl rollout undo deployment kiada --to-revision=1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="632c5a6fc5ff334d46cc99c56b60121f" data-text-hash="a18a64fc7649684a02801ac9a48439c5" id="308" refid="308">
+<p><span>If you found the revision number that contains version 0.6 of the Kiada service, please use the</span> <code>kubectl rollout undo</code> <span>command to revert to it.</span></p>
+</div>
+<div class="readable-text" data-hash="829ae294e95755f29a5ce9c3c7666d38" data-text-hash="4dff1a054555b1196cc15c106ee6c512" id="309" refid="309">
+<h4>Understanding the difference between rolling back and applying an older version of the manifest file</h4>
+</div>
+<div class="readable-text" data-hash="aac432d60d530a0d0a4d1133c36dc53d" data-text-hash="80220853d2ae2e62cc6895a63d7352a4" id="310" refid="310">
+<p><span>You might think that using</span> <code>kubectl rollout undo</code> <span>to revert to the previous version of the Deployment manifest is equivalent to applying the previous manifest file, but that&#8217;s not the case. The</span> <code>kubectl rollout undo</code> <span>command reverts only the Pod template and preserves any other changes you made to the Deployment manifest. This includes changes to the update strategy and the desired number of replicas. The</span> <code>kubectl apply</code> <span>command, on the other hand, overwrites these changes.</span></p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="1e123f8119c72bf96a7562b20cf4bffb" data-text-hash="290a540b8e5dbfaa300c6c75c6d96a6a" id="311" refid="311">
+<h5><span>Restarting Pods with kubectl rollout restart</span></h5>
+</div>
+<div class="readable-text" data-hash="a8e21dc8c62c7bab408c6a1f14dac4e6" data-text-hash="6314ed37ad827dfc2104584e6b358a0d" id="312" refid="312">
+<p>In addition to the <code>kubectl rollout</code> commands explained in this and previous sections, there&#8217;s one more command I should mention.</p>
+</div>
+<div class="readable-text" data-hash="a21599124bd41843573faaf64ca842fd" data-text-hash="ee44c013d595ba3838e066f487f52d46" id="313" refid="313">
+<p>At some point, you may want to restart all the Pods that belong to a Deployment. You can do that with the <code>kubectl rollout restart</code> command. This command deletes and replaces the Pods using the same strategy used for updates.</p>
+</div>
+<div class="readable-text" data-hash="25f10bd325c0791c9b10806d10dae38f" data-text-hash="e56a430884d5fef46c937ad354209133" id="314" refid="314">
+<p>If the Deployment is configured with the <code>RollingUpdate</code> strategy, the Pods are recreated gradually so that service availability is maintained throughout the process. If the <code>Recreate</code> strategy is used, all Pods are deleted and recreated simultaneously.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2d22279c937ef4a77e126adadaefd3cd" data-text-hash="1d8bd829fc7f464e5948ddb3beec4445" id="315" refid="315">
+<h2 id="sigil_toc_id_261">14.3&#160;Implementing other deployment strategies</h2>
+</div>
+<div class="readable-text" data-hash="f04ebbc44a4447ce1c244192697f5298" data-text-hash="c31b8f328113a7d09beff05f9b4a6b9a" id="316" refid="316">
+<p><span>In the previous sections, you learned how the</span> <code>Recreate</code> <span>and</span> <code>RollingUpdate</code> <span>strategies work. Although these are the only strategies supported by the Deployment controller, you can also implement other well-known strategies, but with a little more effort. You can do this manually or have a higher-level controller automate the process. At the time of writing, Kubernetes doesn&#8217;t provide such controllers, but you can find them in projects like Flagger (<a href="fluxcd.html">github.com/fluxcd/flagger</a>) and Argo Rollouts (<a href="argoproj.github.io.html">argoproj.github.io/argo-rollouts</a>).</span></p>
+</div>
+<div class="readable-text" data-hash="44e2e6c4a68c41f6bcf284f6806e417a" data-text-hash="0dddfb99ee63b60613e12cf232eba531" id="317" refid="317">
+<p><span>In this section, I&#8217;ll just give you an overview of how the most common deployment strategies are implemented. The following table explains these strategies, while the subsequent sections explain how they&#8217;re implemented in Kubernetes.</span></p>
+</div>
+<div class="browsable-container" data-hash="ce3274e3f03d5fb09cdafc74aef33adb" data-text-hash="ffada87a0e6ad7b69ea5d82d53ff6fda" id="318" refid="318">
+<h5><span>Table 14.</span><span xml:lang="SL">4</span> <span>Common deployment strategies</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p><span>Strategy</span></p> </td>
+<td> <p><span>Description</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>Recreate</span></p> </td>
+<td> <p><span>Stop all Pods running the previous version, then create all Pods with the new version.</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>Rolling update</span></p> </td>
+<td> <p><span>Gradually replace the old Pods with the new ones, either one by one or multiple at the same time. This strategy is also known as <i>Ramped</i> or <i>Incremental</i>.</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>Canary</span></p> </td>
+<td> <p><span>Create one or a very small number of new Pods, redirect a small amount of traffic to those Pods to make sure they behave as expected. Then replace all the remaining Pods.</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>A/B testing</span></p> </td>
+<td> <p><span>Create a small number of new Pods and redirect a subset of users to those Pods based on some condition. A single user is always redirected to the same version of the application. Typically, you use this strategy to collect data on how effective each version is at achieving certain goals.</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>Blue/Green</span></p> </td>
+<td> <p><span>Deploy the new version of the Pods in parallel with the old version. Wait until the new Pods are ready, and then switch all traffic to the new Pods. Then delete the old Pods.</span></p> </td>
+</tr>
+<tr>
+<td> <p><span>Shadowing</span></p> </td>
+<td> <p><span>Deploy the new version of the Pods alongside the old version. Forward each request to both versions, but return only the old version&#8217;s response to the user, while discarding the new version&#8217;s response. This way, you can see how the new version behaves without affecting users. This strategy is also known as <i>Traffic mirroring</i> or <i>Dark launch</i>.</span></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="dee52db400306062d9d81255bc000af6" data-text-hash="07202238d2ebacec80c0579b7b520353" id="319" refid="319">
+<p><span>As you know, the</span> <code>Recreate</code> <span>and</span> <code>RollingUpdate</code> <span>strategies are directly supported by Kubernetes, but you could also consider the Canary strategy as partially supported. Let me explain.</span></p>
+</div>
+<div class="readable-text" data-hash="7d920d54374e0b467825982fd89af951" data-text-hash="164e1dd22687c626eeae9d1339a7f14e" id="320" refid="320">
+<h3 id="sigil_toc_id_262">14.3.1&#160;The Canary deployment strategy</h3>
+</div>
+<div class="readable-text" data-hash="e831671c44f17f6211f612212f3aa270" data-text-hash="85659490729c624c6552327b53392eb6" id="321" refid="321">
+<p><span>If you set the</span> <code>minReadySeconds</code> <span>parameter to a high enough value, the update process resembles a Canary deployment in that the process is paused until the first new Pods prove their worthiness. The difference with a true Canary deployment is that this pause applies not only to the first Pod(s), but to every step of the update process.</span></p>
+</div>
+<div class="readable-text" data-hash="e24416a04d6d8b9f47a6fcfae44f4c6f" data-text-hash="ce27859f42ed38c37257368cc6c8a036" id="322" refid="322">
+<p><span>Alternatively, you can use the</span> <code>kubectl rollout pause</code> <span>command immediately after creating the first Pod(s) and manually check those canary Pods. When you&#8217;re sure that the new version is working as expected, you continue the update with the</span> <code>kubectl rollout resume</code> <span>command.</span></p>
+</div>
+<div class="readable-text" data-hash="c8d10380db8d93c3351d6d14b64d2810" data-text-hash="f60b798efca09d454a47e37da389f25d" id="323" refid="323">
+<p><span>Another way to accomplish the same thing is to create a separate Deployment for the canary Pods and set the desired number of replicas to a much lower number than in the Deployment for the stable version. You configure the Service to forward traffic to the Pods in both Deployments. Because the Service spreads the traffic evenly across the Pods and because the canary Deployment has much fewer Pods than the stable Deployment, only a small amount of traffic is sent to the canary Pods, while the majority is sent to the stable Pods. This approach is illustrated in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="977bef03a4df0fbe2bb64b4654c3adba" data-text-hash="4e0c4e899b384e6c4cf3025eb1268b0b" id="324" refid="324">
+<h5>Figure 14.11 Implementing the Canary deployment strategy using two Deployments</h5>
+<img alt="" data-processed="true" height="264" id="Picture_118" loading="lazy" src="EPUB/images/14_img_0011.png" width="791">
+</div>
+<div class="readable-text" data-hash="0f33f2a844f91f748711d5f848fa0452" data-text-hash="720fda4bb5434c83b7d59f33abe3ef82" id="325" refid="325">
+<p><span>When you&#8217;re ready to update the other Pods, you can perform a regular rolling update of the old Deployment and delete the canary Deployment.</span></p>
+</div>
+<div class="readable-text" data-hash="31f65f3ad28b50f9b399b329201bf802" data-text-hash="60c44b6244e918c8087d97b45b4ead94" id="326" refid="326">
+<h3 id="sigil_toc_id_263">14.3.2&#160;The A/B strategy</h3>
+</div>
+<div class="readable-text" data-hash="7c2b92407fe77e385abf4f34cf55f540" data-text-hash="a9e97fc570bb28b157de1512ec903d4e" id="327" refid="327">
+<p><span>If you want to implement the A/B deployment strategy to roll out a new version only to specific users based on a specific condition such as location, language, user agent, HTTP cookie, or header, you create two Deployments and two Services. You configure the Ingress object to route traffic to one Service or the other based on the selected condition, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="56afed115bb821f0cccffa5ecd1ef12d" data-text-hash="f68e14b3a397d728221467a1173378a3" id="328" refid="328">
+<h5>Figure 14.12 Implementing the A/B strategy using two Deployments, Services, and an Ingress</h5>
+<img alt="" data-processed="true" height="251" id="Picture_119" loading="lazy" src="EPUB/images/14_img_0012.png" width="777">
+</div>
+<div class="readable-text" data-hash="2e7e0add6e9d8fc28e7d756cd3d907da" data-text-hash="76f8283d88a753e1c9b4c257e29e0505" id="329" refid="329">
+<p><span>As of this writing, Kubernetes doesn&#8217;t provide a native way to implement this deployment strategy, but some Ingress implementations do. See the documentation for your chosen Ingress implementation for more information.</span></p>
+</div>
+<div class="readable-text" data-hash="332cc965d54f4ff464bbbdfd278944a9" data-text-hash="b31b23ad7d59085af9dbcc741fba17fb" id="330" refid="330">
+<h3 id="sigil_toc_id_264">14.3.3&#160;The Blue/Green strategy</h3>
+</div>
+<div class="readable-text" data-hash="434bad867fe00350ffa722014b562f30" data-text-hash="2ba360646f00926e02d2c3a283506b28" id="331" refid="331">
+<p><span>In the Blue/Green strategy, another Deployment, called the Green Deployment, is created alongside the first Deployment, called the Blue Deployment. The Service is configured to forward traffic only to the Blue Deployment until you decide to switch all traffic to the Green Deployment. The two groups of Pods thus use different labels, and the label selector in the Service matches one group at a time. You switch the traffic from one group to the other by updating the label selector in the Service, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="95f2e562991e595b99d79d56a885fcc9" data-text-hash="2087cf2bf87a667b6a771e20e41e0998" id="332" refid="332">
+<h5>Figure 14.13 Implementing a Blue/Green deployment with labels and selectors</h5>
+<img alt="" data-processed="true" height="458" id="Picture_120" loading="lazy" src="EPUB/images/14_img_0013.png" width="788">
+</div>
+<div class="readable-text" data-hash="de863eba629ce91e2b8ee22429a3d5eb" data-text-hash="8ad5e7fb2be99be91ccf7fc851539b55" id="333" refid="333">
+<p><span>As you know, Kubernetes provides everything you need to implement this strategy. No additional tools are needed.</span></p>
+</div>
+<div class="readable-text" data-hash="e3b9351ca8c288d73ed0148b84b8e98b" data-text-hash="1b6741906f4218e855a21564e608120d" id="334" refid="334">
+<h3 id="sigil_toc_id_265">14.3.4&#160;Traffic shadowing</h3>
+</div>
+<div class="readable-text" data-hash="da093a6c1501a136b0b0e46c096af2ee" data-text-hash="72bec44643ca169fa5bc4b0a377e093e" id="335" refid="335">
+<p><span>Sometimes you&#8217;re not quite sure if the new version of your application will work properly in the actual production environment, or if it can handle the load. In this case, you can deploy the new version alongside the existing version by creating another Deployment object and configuring the Pod labels so that the Pods of this Deployment don&#8217;t match the label selector in the Service.</span></p>
+</div>
+<div class="readable-text" data-hash="ce3200c2d04d86072cb78710bb4cd1be" data-text-hash="a89e9dae1e037754ff4cf53190260343" id="336" refid="336">
+<p><span>You configure the Ingress or proxy that sits in front of the Pods to send traffic to the existing Pods, but also mirror it to the new Pods. The proxy sends the response from the existing Pods to the client and discards the response from the new Pods, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="f5cb73c5d7d467082ce547aa0d57927f" data-text-hash="ce81fce400930dcae98cd30f7d59910a" id="337" refid="337">
+<h5>Figure 14.14 Implementing Traffic shadowing</h5>
+<img alt="" data-processed="true" height="288" id="Picture_122" loading="lazy" src="EPUB/images/14_img_0014.png" width="798">
+</div>
+<div class="readable-text" data-hash="8cace3a5c2f1cba1662905f1b6e97b37" data-text-hash="51256cc55ed7a3543c5c615c20927f35" id="338" refid="338">
+<p><span>As with A/B testing, Kubernetes doesn&#8217;t natively provide the necessary functionality to implement traffic shadowing, but some Ingress implementations do.</span></p>
+</div>
+<div class="readable-text" data-hash="46060a25db0ccf1b878339d0de03f96b" data-text-hash="bd5429f84abd6f534de3185d26ef2ca6" id="339" refid="339">
+<h2 id="sigil_toc_id_266">14.4&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="a027d3a1377dff6741a6c38cb8039730" data-text-hash="1303ba20680ec350f9f4487b253d3c87" id="340" refid="340">
+<p><span>In this chapter, you created a Deployment for the Kiada service, now do the same for the Quote and Quiz services. If you need help, you can find the</span> <code>deploy.quote.yaml</code> <span>and</span> <code>deploy.quiz.yaml</code> <span>files in the book&#8217;s code repository.</span></p>
+</div>
+<div class="readable-text" data-hash="b8d97b772e38168fe7094c93fccb4f50" data-text-hash="cda692b1d27b2136a489d69d32522f51" id="341" refid="341">
+<p><span>Here&#8217;s a summary of what you learned in this chapter:</span></p>
+</div>
+<ul>
+<li class="readable-text" data-hash="264b930a2bc6845494d8bb21d54c09ad" data-text-hash="b9605f9b99ea6fdc5689d303ede00c32" id="342" refid="342"><span>A Deployment is an abstraction layer over ReplicaSets. In addition to all the functionality that a ReplicaSet provides, Deployments also allow you to update Pods declaratively. When you update the Pod template, the old Pods are replaced with new Pods created using the updated template.</span></li>
+<li class="readable-text" data-hash="f519e19aec0b54cc28f5b45c46e95e29" data-text-hash="32bfbb1e194a65a62b9d0ad7425eb74f" id="343" refid="343"><span>During an update, the Deployment controller replaces Pods based on the strategy configured in the Deployment. In the</span> <code>Recreate</code> <span>strategy, all Pods are replaced at once, while in the</span> <code>RollingUpdate</code> <span>strategy, they&#8217;re replaced gradually.</span></li>
+<li class="readable-text" data-hash="b970441f43563056e586989132a02fd3" data-text-hash="242c73fbda60c1487bb963c0ccb3c497" id="344" refid="344"><span>Pods created by a ReplicaSet are owned by that ReplicaSet. The ReplicaSet is usually owned by a Deployment. If you delete the owner, the dependents are deleted by the garbage collector, but you can tell</span> <code>kubectl</code> <span>to orphan them instead.</span></li>
+<li class="readable-text" data-hash="7c412c768b259bb5788bb1980f3e44ff" data-text-hash="4aa76ebb9d3dde1db0d9823a99c95995" id="345" refid="345"><span>Other deployment strategies aren&#8217;t directly supported by Kubernetes, but can be implemented by appropriately configuring Deployments, Services, and the Ingress.</span></li>
+</ul>
+<div class="readable-text" data-hash="f27f502aaa8b15f0ec2e34fe707f0827" data-text-hash="014b18174d5c7e23b67f529dc2397166" id="346" refid="346">
+<p><span>You also learned that Deployments are typically used to run stateless applications. In the next chapter, you&#8217;ll learn about StatefulSets, which are tailored to run stateful applications.</span></p>
+</div>
+<div class="readable-text" data-hash="4b17a4ad278e820c39dea5d2aeb19fc5" data-text-hash="8df6fbcc43d31d99e5112eb009ed8a2d" id="347" refid="347">
+<p><span>&#160;</span></p>
+</div></div>
+
+        </body>
+        
+        

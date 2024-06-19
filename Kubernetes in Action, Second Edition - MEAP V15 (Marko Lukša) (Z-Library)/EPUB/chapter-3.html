@@ -1,0 +1,1474 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="f2bf5f7803d26cbd9f4611e19f70c4a6" data-text-hash="e0b9b29e4f4b619de93ff8c90f7babf6" id="1" refid="1">
+<h1>3 Deploying your first application</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="7929c36e41aa5b1927d079df04a434c8" data-text-hash="7929c36e41aa5b1927d079df04a434c8" id="2" refid="2">Running a local Kubernetes cluster on your laptop</li>
+<li class="readable-text" data-hash="3b8bbf1e530883017ccfd616954fbf92" data-text-hash="3b8bbf1e530883017ccfd616954fbf92" id="3" refid="3">Setting up a cluster on Google Kubernetes Engine</li>
+<li class="readable-text" data-hash="26b4a1150d3ebcb2c6de9f5a11ffd256" data-text-hash="26b4a1150d3ebcb2c6de9f5a11ffd256" id="4" refid="4">Setting up a cluster on Amazon Elastic Kubernetes Service</li>
+<li class="readable-text" data-hash="48fba0b6d9a2cc490896ffb59cf92def" data-text-hash="e141a3352cf024bb24b43a04df48fde3" id="5" refid="5">Setting up and using the <code class="codechar">kubectl</code> command-line tool</li>
+<li class="readable-text" data-hash="ad33ee138719a5e430c2923c2f7f519b" data-text-hash="ad33ee138719a5e430c2923c2f7f519b" id="6" refid="6">Deploying an application in Kubernetes and making it available across the globe</li>
+<li class="readable-text" data-hash="6994a7af01a2fc25cd254d9303a2f194" data-text-hash="6994a7af01a2fc25cd254d9303a2f194" id="7" refid="7">Horizontally scaling the application</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="ee7290934f72fb586d340bbb45207f0a" data-text-hash="954bc1d55beab221a98f206ac1c9af0e" id="8" refid="8">
+<p>The goal of this chapter is to show you how to run a local single-node development Kubernetes cluster or set up a proper, managed multi-node cluster in the cloud. Once your cluster is running, you&#8217;ll use it to run the container you created in the previous chapter.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="9" refid="9">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="163121971a19c84685bb9203293c00e5" data-text-hash="6577efb89fb4ec48ad005c90c2ffc77a" id="10" refid="10">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html"><span>https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter03</span></a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="985fda38a6862c5319dc0097e0664350" data-text-hash="70915de4097fdacf46f027263f877a8b" id="11" refid="11">
+<h2 id="sigil_toc_id_34">3.1&#160;Deploying a Kubernetes cluster</h2>
+</div>
+<div class="readable-text" data-hash="87af70cd291e92fb88940e4e3237794a" data-text-hash="b5814ec8e022c73d0c91691dd37a0e55" id="12" refid="12">
+<p>Setting up a full-fledged, multi-node Kubernetes cluster isn&#8217;t a simple task, especially if you&#8217;re not familiar with Linux and network administration. A proper Kubernetes installation spans multiple physical or virtual machines and requires proper network setup to allow all containers in the cluster to communicate with each other.</p>
+</div>
+<div class="readable-text" data-hash="a3c42738bc70d7300635686a74bf9e53" data-text-hash="311837d7555cb1731b5e2e1eaa443be4" id="13" refid="13">
+<p>You can install Kubernetes on your laptop computer, on your organization&#8217;s infrastructure, or on virtual machines provided by cloud providers (Google Compute Engine, Amazon EC2, Microsoft Azure, and so on). Alternatively, most cloud providers now offer managed Kubernetes services, saving you from the hassle of installation and management. Here&#8217;s a short overview of what the largest cloud providers offer:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="24ea4eef2985f54c3dd1b3bc02382018" data-text-hash="24ea4eef2985f54c3dd1b3bc02382018" id="14" refid="14">Google offers GKE - Google Kubernetes Engine,</li>
+<li class="readable-text" data-hash="c70afe40f56ff7a26f4b225dafc2129f" data-text-hash="c70afe40f56ff7a26f4b225dafc2129f" id="15" refid="15">Amazon has EKS - Amazon Elastic Kubernetes Service,</li>
+<li class="readable-text" data-hash="1bbde79c99f800a6cad517b9c585aa83" data-text-hash="1bbde79c99f800a6cad517b9c585aa83" id="16" refid="16">Microsoft has AKS &#8211; Azure Kubernetes Service,</li>
+<li class="readable-text" data-hash="7982065a5ffb88c2fdd718eb08daf8db" data-text-hash="7982065a5ffb88c2fdd718eb08daf8db" id="17" refid="17">IBM has IBM Cloud Kubernetes Service,</li>
+<li class="readable-text" data-hash="537452b68316940513eea0623d2760a6" data-text-hash="537452b68316940513eea0623d2760a6" id="18" refid="18">Alibaba provides the Alibaba Cloud Container Service.</li>
+</ul>
+<div class="readable-text" data-hash="9f7f0a646fa930de2aad54e122f0811b" data-text-hash="f2a94eb6253fc05b54bbf80fe52137a4" id="19" refid="19">
+<p>Installing and managing Kubernetes is much more difficult than just using it, especially until you&#8217;re intimately familiar with its architecture and operation. For this reason, we&#8217;ll start with the easiest ways to obtain a working Kubernetes cluster. You&#8217;ll learn several ways to run a single-node Kubernetes cluster on your local computer and how to use a hosted cluster running on Google Kubernetes Engine (GKE).</p>
+</div>
+<div class="readable-text" data-hash="ceecf83f8007bbb05f034112760c4efb" data-text-hash="2a8f212658e38d5713e884ec2ad55920" id="20" refid="20">
+<p>A third option, which involves installing a cluster using the <code>kubeadm</code> tool, is explained in Appendix B. The tutorial there will show you how to set up a three-node Kubernetes cluster using virtual machines. But you may want to try that only after you&#8217;ve become familiar with using Kubernetes. Many other options also exist, but they are beyond the scope of this book. Refer to the <a href=".html">kubernetes.io</a> website to learn more.</p>
+</div>
+<div class="readable-text" data-hash="1807da439e293f9d8eac12b27b58846e" data-text-hash="3cea2e4fbe52c637cdb710077cb0d75d" id="21" refid="21">
+<p>If you&#8217;ve been granted access to an existing cluster deployed by someone else, you can skip this section and go on to section 3.2 where you&#8217;ll learn how to interact with Kubernetes clusters.</p>
+</div>
+<div class="readable-text" data-hash="702efabc50cfe58aa4b966c9c9b87600" data-text-hash="e768ef1c5db8579abbba3748eadddc35" id="22" refid="22">
+<h3 id="sigil_toc_id_35">3.1.1&#160;Using the built-in Kubernetes cluster in Docker Desktop</h3>
+</div>
+<div class="readable-text" data-hash="c1d8b6e0a001c548354958ef96fd8e8b" data-text-hash="307b206bee360a7351fd0230a5af2256" id="23" refid="23">
+<p>If you use macOS or Windows, you&#8217;ve most likely installed Docker Desktop to run the exercises in the previous chapter. It contains a single-node Kubernetes cluster that you can enable via its Settings dialog box. This may be the easiest way for you to start your Kubernetes journey, but keep in mind that the version of Kubernetes may not be as recent as when using the alternative options described in the next sections.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="24" refid="24">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f80c98d3e9b3d419354b7b81980fea4a" data-text-hash="c4dd68b0d0cb3a89407639f72bbf003e" id="25" refid="25">
+<p> Although technically not a cluster, the single-node Kubernetes system provided by Docker Desktop should be enough to explore most of the topics discussed in this book. When an exercise requires a multi-node cluster, I will point this out.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="132a806717c11c609a2fea8fc7079da6" data-text-hash="d28e488e08e8396ddbb9320acf6a8c8d" id="26" refid="26">
+<h4>Enabling Kubernetes in Docker Desktop</h4>
+</div>
+<div class="readable-text" data-hash="7daba04b332303c3c64c61e8885196ad" data-text-hash="f672cdb171842273b9ebd32c68f15d32" id="27" refid="27">
+<p>Assuming Docker Desktop is already installed on your computer, you can start the Kubernetes cluster by clicking the whale icon in the system tray and opening the Settings dialog box. Click the <i>Kubernetes</i> tab and make sure the <i>Enable Kubernetes</i> checkbox is selected. The components that make up the Control Plane run as Docker containers, but they aren&#8217;t displayed in the list of running containers when you invoke the <code>docker ps</code> command. To display them, select the <i>Show system containers</i> checkbox.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="28" refid="28">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b51870ef39a97a3fbaf2617dc0a09354" data-text-hash="15ff327bf7072d624c95580386ddf62e" id="29" refid="29">
+<p> The initial installation of the cluster takes several minutes, as all container images for the Kubernetes components must be downloaded.</p>
+</div>
+</div>
+<div class="browsable-container figure-container" data-hash="26d0f71df819ae23b3c085a0b5a67ec8" data-text-hash="6cf012ebc5e8ff2394e68be2446ad462" id="30" refid="30">
+<h5>Figure 3.1 The Settings dialog box in Docker Desktop for Windows</h5>
+<img alt="Graphical user interface, text, application, email Description automatically generated" data-processed="true" height="416" id="Picture_109" loading="lazy" src="EPUB/images/03image002.png" width="966">
+</div>
+<div class="readable-text" data-hash="bf8b6b421fc9b385dbd350d64c6157f8" data-text-hash="e0970d3d7d2bbd649ef66fe649f646ce" id="31" refid="31">
+<p>Remember the <i>Reset Kubernetes Cluster</i> button if you ever want to reset the cluster to remove all the objects you&#8217;ve deployed in it.</p>
+</div>
+<div class="readable-text" data-hash="acc03f0607bd418b8fa208ee867e708c" data-text-hash="5d4bf32f5ff3ad9caec19a7c1cbc0805" id="32" refid="32">
+<h4>Visualizing the system</h4>
+</div>
+<div class="readable-text" data-hash="9ea2003c970b408d9b2c21eeb59cfd03" data-text-hash="0a7ffe012efcd3057d482711e71ed93d" id="33" refid="33">
+<p>To understand where the various components that make up the Kubernetes cluster run in Docker Desktop, look at the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="40e6136c70bca2847365c8f11e26928e" data-text-hash="634c3457c7a4855cb43d2ead264d0ac6" id="34" refid="34">
+<h5>Figure 3.2 Kubernetes running in Docker Desktop</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="422" id="Picture_110" loading="lazy" src="EPUB/images/03image003.png" width="878">
+</div>
+<div class="readable-text" data-hash="53c7daf9369640206d1e2036c2279880" data-text-hash="43e544aaab287fcca2152e080cbe59d4" id="35" refid="35">
+<p>Docker Desktop sets up a Linux virtual machine that hosts the Docker Daemon and all the containers. This VM also runs the Kubelet - the Kubernetes agent that manages the node. The components of the Control Plane run in containers, as do all the applications you deploy.</p>
+</div>
+<div class="readable-text" data-hash="f52342c7997e0d552d749230ae0fd1bf" data-text-hash="09355133a4bc8159f5cc929d1a228b61" id="36" refid="36">
+<p>To list the running containers, you don&#8217;t need to log on to the VM because the docker CLI tool available in your host OS displays them.</p>
+</div>
+<div class="readable-text" data-hash="c9d6edac4abe1a6e37a23f5abd05256b" data-text-hash="42172af550f20667633b553bcbabcf61" id="37" refid="37">
+<h4>Exploring the Virtual Machine from the inside</h4>
+</div>
+<div class="readable-text" data-hash="58b22f0966987aa7621e2312e6710518" data-text-hash="b3b3d068c9bb7cbb746be9e687021aaf" id="38" refid="38">
+<p>At the time of writing, Docker Desktop provides no command to log into the VM if you want to explore it from the inside. However, you can run a special container configured to use the VM&#8217;s namespaces to run a remote shell, which is virtually identical to using SSH to access a remote server. To run the container, execute the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2adf6e43982c6e0070818c28b1712ec9" data-text-hash="eddca78347dc3e10224ab0cebb9605ef" id="39" refid="39">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --net=host --ipc=host --uts=host --pid=host --privileged \
+  --security-opt=seccomp=unconfined -it --rm -v /:/host alpine chroot /host</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="28037cbbce17243805a0b40fe14a4c9d" data-text-hash="f3f9f4586caff4010d26afbeeb3ae039" id="40" refid="40">
+<p>This long command requires explanation:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="306980d625343dd4d5a505f581f34950" data-text-hash="8af64a064b2c3d32820415ae9a64c245" id="41" refid="41">The container is created from the <code class="codechar">alpine</code> image.</li>
+<li class="readable-text" data-hash="c8505e16deb9a4e460899c741ba52c21" data-text-hash="2d92eac84b6765077feaa5e80da04f5d" id="42" refid="42">The <code>--net</code>, <code>--ipc</code>, <code>--uts</code> and <code>--pid</code> flags make the container use the host&#8217;s namespaces instead of being sandboxed, and the <code>--privileged</code> and <code>--security-opt</code> flags give the container unrestricted access to all sys-calls.</li>
+<li class="readable-text" data-hash="bb90fcb478022587dbd0e62a53bc4aa4" data-text-hash="0029fe662f8d9f31157cc5d86e437929" id="43" refid="43">The <code>-it</code> flag runs the container interactive mode and the <code>--rm</code> flags ensures the container is deleted when it terminates.</li>
+<li class="readable-text" data-hash="a1e8f483127e55e7ddb1da28a8b96671" data-text-hash="acce535d0134f48f6764423aa96c5604" id="44" refid="44">The <code>-v</code> flag mounts the host&#8217;s root directory to the <code>/host</code> directory in the container. The <code>chroot /host</code> command then makes this directory the root directory in the container.</li>
+</ul>
+<div class="readable-text" data-hash="eaa340bcf402a8f78795f1f2d1155ace" data-text-hash="de881e2f70970b67d96f64d8084d5dfe" id="45" refid="45">
+<p>After you run the command, you are in a shell that&#8217;s effectively the same as if you had used SSH to enter the VM. Use this shell to explore the VM - try listing processes by executing the <code>ps aux</code> command or explore the network interfaces by running <code>ip addr</code>.</p>
+</div>
+<div class="readable-text" data-hash="73a441080e21280402f8853df37caa4e" data-text-hash="12c95440797e8f2bc9ef8129fd190b78" id="46" refid="46">
+<h3 id="sigil_toc_id_36">3.1.2&#160;Running a local cluster using Minikube</h3>
+</div>
+<div class="readable-text" data-hash="8a96abea5d8e730ee62bf22bc36929f0" data-text-hash="9b94eb5e3ef7f1fb3b53b99e12223f07" id="47" refid="47">
+<p>Another way to create a Kubernetes cluster is to use <i>Minikube</i>, a tool maintained by the Kubernetes community. The version of Kubernetes that Minikube deploys is usually more recent than the version deployed by Docker Desktop. The cluster consists of a single node and is suitable for both testing Kubernetes and developing applications locally. It normally runs Kubernetes in a Linux VM, but if your computer is Linux-based, it can also deploy Kubernetes directly in your host OS via Docker.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="48" refid="48">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5ec415d678918da3954798272b850b78" data-text-hash="238c64dc1207df3ccdff7a676194c848" id="49" refid="49">
+<p> If you configure Minikube to use a VM, you don&#8217;t need Docker, but you do need a hypervisor like VirtualBox. In the other case you need Docker, but not the hypervisor.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ea8248cb257bd64225980d9a4a1e41b0" data-text-hash="6da10f1681e4f0c24a54ce5858cf6a7d" id="50" refid="50">
+<h4>Installing Minikube</h4>
+</div>
+<div class="readable-text" data-hash="dd50ef35a54a8a1151cbed99f0e68d47" data-text-hash="4d806bf589f219045cc90b7d82bed343" id="51" refid="51">
+<p>Minikube supports macOS, Linux, and Windows. It has a single binary executable file, which you&#8217;ll find in the Minikube repository on GitHub (<a href="kubernetes.html">http://github.com/kubernetes/minikube</a>). It&#8217;s best to follow the current installation instructions published there, but roughly speaking, you install it as follows.</p>
+</div>
+<div class="readable-text" data-hash="851c56297045c2d4a57789851654b4b2" data-text-hash="62b62e00b889e43a83343dfc0051d852" id="52" refid="52">
+<p>On macOS you can install it using the Brew Package Manager, on Windows there&#8217;s an installer that you can download, and on Linux you can either download a .deb or .rpm package or simply download the binary file and make it executable with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b07191f476a59cc6c4d2d9236a407d2" data-text-hash="82d4ab587b06f7d4bc0ca963ae8a52f7" id="53" refid="53">
+<div class="code-area-container">
+<pre class="code-area">$ curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 &amp;&amp; \
+  sudo install minikube-linux-amd64 /usr/local/bin/minikube</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a1ddbea7ba7fb24b80adaf598a15cfc0" data-text-hash="aaf4f4b9bb21471996139258d47111c3" id="54" refid="54">
+<p>For details on your specific OS, please refer to the installation guide online.</p>
+</div>
+<div class="readable-text" data-hash="662a6abd751a2399c8b57b3235cfa007" data-text-hash="2a19bf2ae06fcbe71fe2484664328cd5" id="55" refid="55">
+<h4>Starting a Kubernetes cluster with Minikube</h4>
+</div>
+<div class="readable-text" data-hash="7e41b08a40723b960f1e4428b0d05236" data-text-hash="62b0876f901fc957bd8df7996ea204a9" id="56" refid="56">
+<p>After Minikube is installed, start the Kubernetes cluster as shown next:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="28475ea55439a51df523af9aff008e27" data-text-hash="6bda8230d9209b1a44bf5fed2dca3455" id="57" refid="57">
+<div class="code-area-container">
+<pre class="code-area">$ minikube start
+minikube v1.11.0 on Fedora 31
+Using the virtualbox driver based on user configuration
+Downloading VM boot image ...
+&gt; minikube-v1.11.0.iso.sha256: 65 B / 65 B [-------------] 100.00% ? p/s 0s
+&gt; minikube-v1.11.0.iso: 174.99 MiB / 174.99 MiB [] 100.00% 50.16 MiB p/s 4s
+Starting control plane node minikube in cluster minikube
+Downloading Kubernetes v1.18.3 preload ...
+&gt; preloaded-images-k8s-v3-v1.18.3-docker-overlay2-amd64.tar.lz4: 526.01 MiB
+Creating virtualbox VM (CPUs=2, Memory=6000MB, Disk=20000MB) ...
+Preparing Kubernetes v1.18.3 on Docker 19.03.8 ...
+Verifying Kubernetes components...
+Enabled addons: default-storageclass, storage-provisioner
+Done! kubectl is now configured to use "minikube"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4d9ab3af4901f5a7c760a100a343f292" data-text-hash="c209e0aa44786bcefede5d3128b7bf6c" id="58" refid="58">
+<p>The process may take several minutes, because the VM image and the container images of the Kubernetes components must be downloaded.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="59" refid="59">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="2c3e37a96efc2f26c68f65fe14a2d526" data-text-hash="0484ebd71507e00a98a84bf3bbaa5635" id="60" refid="60">
+<p> If you use Linux, you can reduce the resources required by Minikube by creating the cluster without a VM. Use this command: <code>minikube start --vm-driver none</code></p>
+</div>
+</div>
+<div class="readable-text" data-hash="03b7bde7780a6beabe57eeffa05b0586" data-text-hash="fd19e7018fb693ecfcff4ce36769b87a" id="61" refid="61">
+<h4>Checking Minikube&#8217;s status</h4>
+</div>
+<div class="readable-text" data-hash="539664c681b0e1c51a3b4059018e86e9" data-text-hash="7838df8e5a6885b4bf00aa16354e20ee" id="62" refid="62">
+<p>When the <code>minikube start</code> command is complete, you can check the status of the cluster by running the <code>minikube status</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="dc735334ff5d7a21b6d4e91faf01a4b1" data-text-hash="b566eb2b68571ec700ce804fab672c04" id="63" refid="63">
+<div class="code-area-container">
+<pre class="code-area">$ minikube status
+host: Running
+kubelet: Running
+apiserver: Running
+kubeconfig: Configured</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6c3164b525e7dafbe790435c5bd44937" data-text-hash="1be49ca96e603e8c698734cd2f9d4727" id="64" refid="64">
+<p>The output of the command shows that the Kubernetes host (the VM that hosts Kubernetes) is running, and so are the Kubelet &#8211; the agent responsible for managing the node &#8211; and the Kubernetes API server. The last line shows that the kubectl command-line tool (CLI) is configured to use the Kubernetes cluster that Minikube has provided. Minikube doesn&#8217;t install the CLI tool, but it does create its configuration file. Installation of the CLI tool is explained in section 3.2.</p>
+</div>
+<div class="readable-text" data-hash="acc03f0607bd418b8fa208ee867e708c" data-text-hash="5d4bf32f5ff3ad9caec19a7c1cbc0805" id="65" refid="65">
+<h4>Visualizing the system</h4>
+</div>
+<div class="readable-text" data-hash="28328520f8833215d4b883138b983b68" data-text-hash="1a792119eeb2fd20a9bd5fcbac7d5cf9" id="66" refid="66">
+<p>The architecture of the system, which is shown in the next figure, is practically identical to the one in Docker Desktop.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="25a297c37f5a4fad89e03800fb2b9051" data-text-hash="2ee92cc868b904d7d1f5ba5c7f020acf" id="67" refid="67">
+<h5>Figure 3.3 Running a single-node Kubernetes cluster using Minikube</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="409" id="Picture_111" loading="lazy" src="EPUB/images/03image004.png" width="847">
+</div>
+<div class="readable-text" data-hash="83d22d9eb28f7facf7e50c778bd024d4" data-text-hash="fcb1378783176236f70f8d78d595ef22" id="68" refid="68">
+<p>The Control Plane components run in containers in the VM or directly in your host OS if you used the <code>--vm-driver none</code> option to create the cluster. The Kubelet runs directly in the VM&#8217;s or your host&#8217;s operating system. It runs the applications you deploy in the cluster via the Docker Daemon.</p>
+</div>
+<div class="readable-text" data-hash="35e9b0b664fa139f255abf260d973c82" data-text-hash="4db8a00a7437119f32b14ad1eff56a13" id="69" refid="69">
+<p>You can run <code>minikube</code> <code>ssh</code> to log into the Minikube VM and explore it from inside. For example, you can see what&#8217;s running in the VM by running <code>ps aux</code> to list running processes or <code>docker ps</code> to list running containers.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="70" refid="70">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="ec3042598f3c6bd3ed48db6f6c83b73e" data-text-hash="e73fca943c90870ec5750a3b1a1dc65a" id="71" refid="71">
+<p> If you want to list containers using your local docker CLI instance, as in the case of Docker Desktop, run the following command: <code>eval $(minikube docker-env)</code></p>
+</div>
+</div>
+<div class="readable-text" data-hash="67916a4caa19948aa322e43f9b1eb06c" data-text-hash="163e25b28d920ffc5059cbf8f65a36e9" id="72" refid="72">
+<h3 id="sigil_toc_id_37">3.1.3&#160;Running a local cluster using kind (Kubernetes in Docker)</h3>
+</div>
+<div class="readable-text" data-hash="2171e0f9dd52b61733c6dfd89a693b1c" data-text-hash="b59d6e58e1fe96ebbeeaae78af701643" id="73" refid="73">
+<p>An alternative to Minikube, although not as mature, is <i>kind</i> (Kubernetes-in-Docker). Instead of running Kubernetes in a virtual machine or directly on the host, kind runs each Kubernetes cluster node inside a container. Unlike Minikube, this allows it to create multi-node clusters by starting several containers. The actual application containers that you deploy to Kubernetes then run within these node containers. The system is shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="41b95ed80f1aa6a7dc14044676337039" data-text-hash="bcfcfe2efd45b279d1d0607e47b14e27" id="74" refid="74">
+<h5>Figure 3.4 Running a multi-node Kubernetes cluster using kind</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="540" id="Picture_112" loading="lazy" src="EPUB/images/03image005.png" width="960">
+</div>
+<div class="readable-text" data-hash="52d5a7c17dbb8d8fcf4dfba2ccca53db" data-text-hash="450d06607cb9bca704e1dbbab7d2f4f0" id="75" refid="75">
+<p>In the previous chapter I mentioned that a process that runs in a container actually runs in the host OS. This means that when you run Kubernetes using kind, all Kubernetes components run in your host OS. The applications you deploy to the Kubernetes cluster also run in your host OS.</p>
+</div>
+<div class="readable-text" data-hash="60ac3333cb4bb96c3c9f4056f406b071" data-text-hash="90cc7a08ddbb9533e92cb57f5fbe4bbe" id="76" refid="76">
+<p>This makes kind the perfect tool for development and testing, as everything runs locally and you can debug running processes as easily as when you run them outside of a container. I prefer to use this approach when I develop apps on Kubernetes, as it allows me to do magical things like run network traffic analysis tools such as Wireshark or even my web browser inside the containers that run my applications. I use a tool called <code>nsenter</code> that allows me to run these tools in the network or other namespaces of the container.</p>
+</div>
+<div class="readable-text" data-hash="893388fd9aa44926addcb6844209edcc" data-text-hash="a5af9a7a18d5b92978af55e3342d111f" id="77" refid="77">
+<p>If you&#8217;re new to Kubernetes, the safest bet is to start with Minikube, but if you&#8217;re feeling adventurous, here&#8217;s how to get started with kind.</p>
+</div>
+<div class="readable-text" data-hash="b9b6be9b26b425bf6342448b8b4bc696" data-text-hash="5ebd95a70b18b40b8d3718b87cab70fa" id="78" refid="78">
+<h4>Installing kind</h4>
+</div>
+<div class="readable-text" data-hash="a48dde5c7057ad652184aecd619c0609" data-text-hash="d2d827f2354708ec4ae8b6d1645186ed" id="79" refid="79">
+<p>Just like Minikube, kind consists of a single binary executable file. To install it, refer to the installation instructions at <a href="quick-start.html">https://kind.sigs.k8s.io/docs/user/quick-start/</a>. On macOS and Linux, the commands to install it are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b8aa4a732b02db2b8e01e706e77c7d61" data-text-hash="2f1d5526126317023539732e99a63a53" id="80" refid="80">
+<div class="code-area-container">
+<pre class="code-area">$ curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-$(uname)-amd64
+$ chmod +x ./kind 
+$ mv ./kind /some-dir-in-your-PATH/kind</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="bc3a1a991091c716d437340633f8c275" data-text-hash="7a9d087af55bd8895de2c528b171e2eb" id="81" refid="81">
+<p>Check the documentation to see what the latest version is and use it instead of v0.7.0 in the above example. Also, replace <code>/some-dir-in-your-PATH/</code> with an actual directory in your path.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="82" refid="82">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a6f0aa4a66eeb568e83858caf99ddea6" data-text-hash="d683765bac425ce26607742e33a26572" id="83" refid="83">
+<p> Docker must be installed on your system to use kind.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2296f26e1f12e920b2883b7705cd9ee2" data-text-hash="3c47e7a97cdf1170fa4b5e05a2862669" id="84" refid="84">
+<h4>Starting a Kubernetes cluster with kind</h4>
+</div>
+<div class="readable-text" data-hash="190369c992dc380f8cf735c6424cdb2a" data-text-hash="4eae0e4acd50f1a472a256337362d13b" id="85" refid="85">
+<p>Starting a new cluster is as easy as it is with Minikube. Execute the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6b19bf8e924c2d23d71b30c1fb09dbc8" data-text-hash="aed7264bb0445cc195d213a30765da7e" id="86" refid="86">
+<div class="code-area-container">
+<pre class="code-area">$ kind create cluster</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c5262cd7a945a0c231fe8ffa5c8c96e2" data-text-hash="cac27508213079f3478cfd1180c76174" id="87" refid="87">
+<p>Like Minikube, kind configures kubectl to use the cluster that it creates.</p>
+</div>
+<div class="readable-text" data-hash="dde6e12af7f4396bd014cd28f36ea429" data-text-hash="93a53357d473c4692c0037582b4c5705" id="88" refid="88">
+<h4>Starting a multi-node cluster with kind</h4>
+</div>
+<div class="readable-text" data-hash="5b343c0c06483e163f396f18889fae12" data-text-hash="684e20f61489a457dffb460b0376b007" id="89" refid="89">
+<p>Kind runs a single-node cluster by default. If you want to run a cluster with multiple worker nodes, you must first create a configuration file. The following listing shows the contents of this file (<code>Chapter03/kind-multi-node.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8ff517740495b0c29de6e1f983bfe3a4" data-text-hash="1945b399ae8e75030ee2eb90be87c8f6" id="90" refid="90">
+<h5>Listing 3.1 Config file for running a three-node cluster with the kind tool</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Cluster
+apiVersion: kind.sigs.k8s.io/v1alpha3
+nodes:
+- role: control-plane
+- role: worker
+- role: worker</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3630def7fc7bdc3e2cd251fd042d344f" data-text-hash="02fb2b733c14f54a344d16527b784cdc" id="91" refid="91">
+<p>With the file in place, create the cluster using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e63ad3c61df8843e466ed7b59afb88c9" data-text-hash="412d3972de954332b2aad6f0e152aaa5" id="92" refid="92">
+<div class="code-area-container">
+<pre class="code-area">$ kind create cluster --config kind-multi-node.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0a1b1f4d5937ca21137eda518166e9e5" data-text-hash="292cba03b5b5653c576fb9b1d4121f1c" id="93" refid="93">
+<h4>Listing worker nodes</h4>
+</div>
+<div class="readable-text" data-hash="482c9de58f014602acb5d0dd88e4b66f" data-text-hash="149c5499f12c8495f24c791260afb4b7" id="94" refid="94">
+<p>At the time of this writing, kind doesn&#8217;t provide a command to check the status of the cluster, but you can list cluster nodes using <code>kind get nodes</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8df25611935f91a3fa1f9320b3019f02" data-text-hash="6390d17c3d179ac5c938d5d3003352f9" id="95" refid="95">
+<div class="code-area-container">
+<pre class="code-area">$ kind get nodes
+kind-worker2
+kind-worker
+kind-control-plane</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a8ae4a47dc7c11de1ecd5e0f072d5ad6" data-text-hash="85e7f1f30319e41a13e636473c84dcab" id="96" refid="96">
+<p>Since each node runs as a container, you can also see the nodes by listing the running containers using <code>docker ps</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cdb125ba0f5654c0eb7654f83172ac10" data-text-hash="83ee6a192e9189d20991d9b9a2c31956" id="97" refid="97">
+<div class="code-area-container">
+<pre class="code-area">$ docker ps
+CONTAINER ID    IMAGE                   ...    NAMES
+45d0f712eac0    kindest/node:v1.18.2    ...    kind-worker2
+d1e88e98e3ae    kindest/node:v1.18.2    ...    kind-worker
+4b7751144ca4    kindest/node:v1.18.2    ...    kind-control-plane</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b3f3699fd065aa2c9de33b109a693190" data-text-hash="b1bb420abff0790b7b8f9963d97c8805" id="98" refid="98">
+<h4>Logging into cluster nodes provisioned by kind</h4>
+</div>
+<div class="readable-text" data-hash="2b7ea7c74144d4730dc37dc12986b32d" data-text-hash="60b8c9e70b4648653a5d8c6bc2b6abc0" id="99" refid="99">
+<p>Unlike Minikube, where you use <code>minikube ssh</code> to log into the node if you want to explore the processes running inside it, with kind you use <code>docker exec</code>. For example, to enter the node called <code>kind-control-plane</code>, run:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="665d42d1e4bbad6db26117dc5e4d2ec8" data-text-hash="e31ac1bd1158215b305e57e9de4aacec" id="100" refid="100">
+<div class="code-area-container">
+<pre class="code-area">$ docker exec -it kind-control-plane bash</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8f4568fe914e2bd00e7efaee747e0b2a" data-text-hash="40de344e907efaf85d7813aba241d855" id="101" refid="101">
+<p>Instead of using Docker to run containers, nodes created by kind use the CRI-O container runtime, which I mentioned in the previous chapter as a lightweight alternative to Docker. The <code>crictl</code> CLI tool is used to interact with CRI-O. Its use is very similar to that of the <code>docker</code> tool. After logging into the node, list the containers running in it by running <code>crictl ps</code> instead of <code>docker ps</code>. Here&#8217;s an example of the command and its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3fd0f40d6eb4e0b5019af88a0357c860" data-text-hash="fc6cd293a58ea18352003cdc998d70ac" id="102" refid="102">
+<div class="code-area-container">
+<pre class="code-area">root@kind-control-plane:/# crictl ps
+CONTAINER ID    IMAGE           CREATED      STATE     NAME
+c7f44d171fb72   eb516548c180f   15 min ago   Running   coredns        ...
+cce9c0261854c   eb516548c180f   15 min ago   Running   coredns        ...
+e6522aae66fcc   d428039608992   16 min ago   Running   kube-proxy     ...
+6b2dc4bbfee0c   ef97cccdfdb50   16 min ago   Running   kindnet-cni    ...
+c3e66dfe44deb   be321f2ded3f3   16 min ago   Running   kube-apiserver ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ee8f604a59aa1bc91b743dee4f6ecf65" data-text-hash="b5c8e2f989811a3c54e6af1d62408afa" id="103" refid="103">
+<h3 id="sigil_toc_id_38">3.1.4&#160;Creating a managed cluster with Google Kubernetes Engine</h3>
+</div>
+<div class="readable-text" data-hash="69bc460e22076b6443617a7da65d5519" data-text-hash="b0ae323023b669979d13b7ad55e5e417" id="104" refid="104">
+<p>If you want to use a full-fledged multi-node Kubernetes cluster instead of a local one, you can use a managed cluster, such as the one provided by Google Kubernetes Engine (GKE). This way, you don&#8217;t have to manually set up all the cluster nodes and networking, which is usually too hard for someone taking their first steps with Kubernetes. Using a managed solution such as GKE ensures that you don&#8217;t end up with an incorrectly configured cluster.</p>
+</div>
+<div class="readable-text" data-hash="c667fba617759a8fb1ccec73e9335369" data-text-hash="25bc5b83491f890c8c1c95e9602dfc0d" id="105" refid="105">
+<h4>Setting up Google Cloud and installing the gcloud client binary</h4>
+</div>
+<div class="readable-text" data-hash="2e7a6a31044c0ec2cf9c7b3827e387e3" data-text-hash="6d717691c4eaa09732314d7bd836d4e9" id="106" refid="106">
+<p>Before you can set up a new Kubernetes cluster, you must set up your GKE environment. The process may change in the future, so I&#8217;ll only give you a few general instructions here. For complete instructions, refer to <a href="docs.html">https://cloud.google.com/container-engine/docs/before-you-begin</a>.</p>
+</div>
+<div class="readable-text" data-hash="ecce90501cfd603bbcf69fe927192738" data-text-hash="8ca65000a31c70633a8e8e3e245a5cda" id="107" refid="107">
+<p>Roughly, the whole procedure includes</p>
+</div>
+<ol>
+<li class="readable-text" data-hash="2bb29684d09c51042725b75ab446f190" data-text-hash="2bb29684d09c51042725b75ab446f190" id="108" refid="108">Signing up for a Google account if you don&#8217;t have one already.</li>
+<li class="readable-text" data-hash="f12e364a58361300e676420a5687469e" data-text-hash="f12e364a58361300e676420a5687469e" id="109" refid="109">Creating a project in the Google Cloud Platform Console.</li>
+<li class="readable-text" data-hash="95326b0582aad248b4aeabfe2fe21507" data-text-hash="95326b0582aad248b4aeabfe2fe21507" id="110" refid="110">Enabling billing. This does require your credit card info, but Google provides a 12-month free trial with a free $300 credit. And they don&#8217;t start charging automatically after the free trial is over.</li>
+<li class="readable-text" data-hash="b10a10696651c512bafa20045b7b8dd9" data-text-hash="56ecd08f5d39960273ba9a061393ef85" id="111" refid="111">Downloading and installing the Google Cloud SDK, which includes the <code>gcloud</code> tool.</li>
+<li class="readable-text" data-hash="1147f716ff20b4d5adbe475bd3d44c0c" data-text-hash="70cfe5b776f5c7c104a2e6a65cb7591f" id="112" refid="112">Creating the cluster using the <code>gcloud</code> command-line tool.</li>
+</ol>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="113" refid="113">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="7f5a924a83be03af99d4fe5003a61a8a" data-text-hash="1609d1b4e90c2acd9a558ad3ebdf18be" id="114" refid="114">
+<p> Certain operations (the one in step 2, for example) may take a few minutes to complete, so relax and grab a coffee in the meantime.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0116c4f67a5f2a2ca5121f05c29a047e" data-text-hash="3bf920be3a3f6ddf10d3bb50e68529d6" id="115" refid="115">
+<h4>Creating a GKE Kubernetes cluster with three nodes</h4>
+</div>
+<div class="readable-text" data-hash="817607f451677b33238168a0203edb56" data-text-hash="14614431faf8054d3437421451e200e0" id="116" refid="116">
+<p>Before you create your cluster, you must decide in which geographical region and zone it should be created. Refer to <a href="docs.html"><span>https://cloud.google.com/compute/docs/regions-zones</span></a> to see the list of available locations. In the following examples, I use the europe-west3 region based in Frankfurt, Germany. It has three different zones - I&#8217;ll use the zone europe-west3-c. The default zone for all gcloud operations can be set with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3a2430f7a234fb9c7576da19c0ca9b11" data-text-hash="654bd7e7d1b5a22eeb74ff9f425952b9" id="117" refid="117">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud config set compute/zone europe-west3-c</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="217c69522bd7b6a7dd26a7ade6b566a6" data-text-hash="ca2a3c3df772d3f5d310698faacfcae5" id="118" refid="118">
+<p>Create the Kubernetes cluster like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c2fe22be4ddd6a0037ea676765af211a" data-text-hash="c15b887003da350f3c9eaf5294d72a31" id="119" refid="119">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud container clusters create kiada --num-nodes 3
+Creating cluster kiada in europe-west3-c... 
+...
+kubeconfig entry generated for kiada.
+NAME   LOCAT.   MASTER_VER  MASTER_IP   MACH_TYPE     ... NODES STATUS
+kiada  eu-w3-c  1.13.11...  5.24.21.22  n1-standard-1 ... 3     RUNNING</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="120" refid="120">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="835d133b927250d992292ca734a8eeaf" data-text-hash="b8217b501a8956acf2c036e1e02eeed1" id="121" refid="121">
+<p> I&#8217;m creating all three worker nodes in the same zone, but you can also spread them across all zones in the region by setting the <code>compute/zone</code> config value to an entire region instead of a single zone. If you do so, note that <code>--num-nodes</code> indicates the number of nodes <i>per zone</i>. If the region contains three zones and you only want three nodes, you must set <code>--num-nodes</code> to <code>1</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e4ef3aa967f13b3b47448528bbbc983f" data-text-hash="cefa5350276cf5680325b3ed09034dc8" id="122" refid="122">
+<p>You should now have a running Kubernetes cluster with three worker nodes. Each node is a virtual machine provided by the Google Compute Engine (GCE) infrastructure-as-a-service platform. You can list GCE virtual machines using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="23a96ec6e7c076c1f57de96794aede67" data-text-hash="f509486d5021e72379849dd0a3d94cb1" id="123" refid="123">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud compute instances list
+NAME      ZONE        MACHINE_TYPE   INTERNAL_IP  EXTERNAL_IP     STATUS
+...-ctlk  eu-west3-c  n1-standard-1  10.156.0.16  34.89.238.55    RUNNING
+...-gj1f  eu-west3-c  n1-standard-1  10.156.0.14  35.242.223.97   RUNNING
+...-r01z  eu-west3-c  n1-standard-1  10.156.0.15  35.198.191.189  RUNNING</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="124" refid="124">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="4e8230b2ebd80f68ad691f3b8e61ea78" data-text-hash="45ff835f72e8af7ce2b399a973b8e7f7" id="125" refid="125">
+<p> Each VM incurs costs. To reduce the cost of your cluster, you can reduce the number of nodes to one, or even to zero while not using it. See next section for details.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b708602ed8cc2a2db1a4531db86cbc12" data-text-hash="c4bf71f152fe1e42c9d86b08e7202132" id="126" refid="126">
+<p>The system is shown in the next figure. Note that only your worker nodes run in GCE virtual machines. The control plane runs elsewhere - you can&#8217;t access the machines hosting it.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="5985fcf8435390703622e50698b1fb3b" data-text-hash="254d2cd0c8f9e76c72bfd9ba3d9282af" id="127" refid="127">
+<h5>Figure 3.5 Your Kubernetes cluster in Google Kubernetes Engine</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="418" id="Picture_113" loading="lazy" src="EPUB/images/03image006.png" width="950">
+</div>
+<div class="readable-text" data-hash="76e5f32b93e4260263e1a5319ac22ca7" data-text-hash="46c728c21bb234ea55c8a312a95573ad" id="128" refid="128">
+<h4>Scaling the number of nodes</h4>
+</div>
+<div class="readable-text" data-hash="fdc9d1ac2844c72942c45fa9241d9a67" data-text-hash="ce37c1424b85a6afdab433507405f287" id="129" refid="129">
+<p>Google allows you to easily increase or decrease the number of nodes in your cluster. For most exercises in this book you can scale it down to just one node if you want to save money. You can even scale it down to zero so that your cluster doesn&#8217;t incur any costs.</p>
+</div>
+<div class="readable-text" data-hash="0887a5182cc50636af989a910b54678b" data-text-hash="9b6a828d1173c4068b12817c8a281aa2" id="130" refid="130">
+<p>To scale the cluster to zero, use the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="92c3f373b353207adf04f953e1e5ac52" data-text-hash="be5839f7123924ac4ae5ab71f3e06747" id="131" refid="131">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud container clusters resize kiada --size 0</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b3db64ec4370a5cd9353d6ca94986694" data-text-hash="6599256656a4bb2db5d90d175726c9c7" id="132" refid="132">
+<p>The nice thing about scaling to zero is that none of the objects you create in your Kubernetes cluster, including the applications you deploy, are deleted. Granted, if you scale down to zero, the applications will have no nodes to run on, so they won&#8217;t run. But as soon as you scale the cluster back up, they will be redeployed. And even with no worker nodes you can still interact with the Kubernetes API (you can create, update, and delete objects).</p>
+</div>
+<div class="readable-text" data-hash="8b67e3569932c72526dcdf8bda531f08" data-text-hash="ded5e2b97cb8183b383553ef3e95379d" id="133" refid="133">
+<h4>Inspecting a GKE worker node</h4>
+</div>
+<div class="readable-text" data-hash="25871dd424dd6427e341fe5b768a8b51" data-text-hash="8ddfb205a238093ef6eabbb009c5ec1c" id="134" refid="134">
+<p>If you&#8217;re interested in what&#8217;s running on your nodes, you can log into them with the following command (use one of the node names from the output of the previous command):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a91239117ce967eeca6a551e4efec76d" data-text-hash="240459086ab1c8dfe7543165884fcee9" id="135" refid="135">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud compute ssh gke-kiada-default-pool-9bba9b18-4glf</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="63661aa5e47c2f1716935572fe226f43" data-text-hash="abd86b17d59db8419763f60b02785f68" id="136" refid="136">
+<p>While logged into the node, you can try to list all running containers with <code>docker ps</code>. You haven&#8217;t run any applications yet, so you&#8217;ll only see Kubernetes system containers. What they are isn&#8217;t important right now, but you&#8217;ll learn about them in later chapters.</p>
+</div>
+<div class="readable-text" data-hash="ef96518623c9ac1fb21628d47596ba8b" data-text-hash="6f3128a873a5b679db262aaaec5842f1" id="137" refid="137">
+<h3 id="sigil_toc_id_39">3.1.5&#160;Creating a cluster using Amazon Elastic Kubernetes Service</h3>
+</div>
+<div class="readable-text" data-hash="0c2a5919722e8a4ab59e1e7f74fbd390" data-text-hash="885a850910be3adfd02d699365ee5746" id="138" refid="138">
+<p>If you prefer to use Amazon instead of Google to deploy your Kubernetes cluster in the cloud, you can try the Amazon Elastic Kubernetes Service (EKS). Let&#8217;s go over the basics.</p>
+</div>
+<div class="readable-text" data-hash="fc4eba44c60170b945202cad4829324c" data-text-hash="9e68a0702dc876621bcea73c3e5e123b" id="139" refid="139">
+<p>First, you have to install the <code>eksctl</code> command-line tool by following the instructions at <a href="userguide.html">https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html</a>.</p>
+</div>
+<div class="readable-text" data-hash="30321a42233cc96e8a04491364fd0fef" data-text-hash="0c8ff2ffec87c3ec9ac9ffee199c2a9f" id="140" refid="140">
+<h4>Creating an EKS Kubernetes cluster</h4>
+</div>
+<div class="readable-text" data-hash="4ed06f3e45799630f4186acd78402549" data-text-hash="728f23d91db0716c488b8635bace025b" id="141" refid="141">
+<p>Creating an EKS Kubernetes cluster using <code>eksctl</code> does not differ significantly from how you create a cluster in GKE. All you must do is run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="99b232153ca2d2320b99821ccc1587b9" data-text-hash="88fc52d30b7a0f10e14ead0e5ddfd0f4" id="142" refid="142">
+<div class="code-area-container">
+<pre class="code-area">$ eksctl create cluster --name kiada --region eu-central-1 --nodes 3 --ssh-access</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ab4a32c6d0b565162e0d5d772143933f" data-text-hash="4e30f3fc140ab790f63d1b37f599734f" id="143" refid="143">
+<p>This command creates a three-node cluster in the eu-central-1 region. The regions are listed at <a href="regional-product-services.html">https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/</a>.</p>
+</div>
+<div class="readable-text" data-hash="acac03e38a728fb893e3795e4aa089dd" data-text-hash="ceebb3114ec031c53f6f6d28b9bc9b89" id="144" refid="144">
+<h4>Inspecting an EKS worker node</h4>
+</div>
+<div class="readable-text" data-hash="c7d2b3e5d34e256a07b737d478181173" data-text-hash="548e93d77d954b5f01a217745c8fc886" id="145" refid="145">
+<p>If you&#8217;re interested in what&#8217;s running on those nodes, you can use SSH to connect to them. The <code>--ssh-access</code> flag used in the command that creates the cluster ensures that your SSH public key is imported to the node.</p>
+</div>
+<div class="readable-text" data-hash="d4910c90454c56a923c86aefdef1d99e" data-text-hash="72bcab51d7bafc791bc1c482051ae84c" id="146" refid="146">
+<p>As with GKE and Minikube, once you&#8217;ve logged into the node, you can try to list all running containers with <code>docker ps</code>. You can expect to see similar containers as in the clusters we covered earlier.</p>
+</div>
+<div class="readable-text" data-hash="310edfb3d7394e1e1f5811853fb5cef7" data-text-hash="c1d165fba065f58ae7c308917f99757d" id="147" refid="147">
+<h3 id="sigil_toc_id_40">3.1.6&#160;Deploying a multi-node cluster from scratch</h3>
+</div>
+<div class="readable-text" data-hash="f0228a2140e672458c92518daf967353" data-text-hash="8557707be3dde6c498955d104405f258" id="148" refid="148">
+<p>Until you get a deeper understanding of Kubernetes, I strongly recommend that you don&#8217;t try to install a multi-node cluster from scratch. If you are an experienced systems administrator, you may be able to do it without much pain and suffering, but most people may want to try one of the methods described in the previous sections first. Proper management of Kubernetes clusters is incredibly difficult. The installation alone is a task not to be underestimated.</p>
+</div>
+<div class="readable-text" data-hash="6f53efa370b070e4c07edf27c94f3fd6" data-text-hash="a5c976141b1af08c16cecb84ee94e158" id="149" refid="149">
+<p>If you still feel adventurous, you can start with the instructions in Appendix B, which explain how to create VMs with VirtualBox and install Kubernetes using the kubeadm tool. You can also use those instructions to install Kubernetes on your bare-metal machines or in VMs running in the cloud.</p>
+</div>
+<div class="readable-text" data-hash="31b738a255d21b96d27f7c32a95a89f9" data-text-hash="0dd9f1b02dce4e3fac2e3fb522436e7c" id="150" refid="150">
+<p>Once you&#8217;ve successfully deployed one or two clusters using kubeadm, you can then try to deploy it completely manually, by following Kelsey Hightower&#8217;s <i>Kubernetes the Hard Way</i> tutorial at <a href="kelseyhightower.html">github.com/kelseyhightower/Kubernetes-the-hard-way</a>. Though you may run into several problems, figuring out how to solve them can be a great learning experience.</p>
+</div>
+<div class="readable-text" data-hash="c4b298dce5d336aacc28a7af47fb99a0" data-text-hash="885651b1b06fdc95932d22653fde4749" id="151" refid="151">
+<h2 id="sigil_toc_id_41">3.2&#160;Interacting with Kubernetes</h2>
+</div>
+<div class="readable-text" data-hash="40d8be6467b88b5ebd69e69170cefd23" data-text-hash="922cde48fa3d90fc95533194382493fb" id="152" refid="152">
+<p>You&#8217;ve now learned about several possible methods to deploy a Kubernetes cluster. Now&#8217;s the time to learn how to use the cluster. To interact with Kubernetes, you use a command-line tool called <code>kubectl</code>, pronounced <i>kube-control</i>, <i>kube-C-T-L</i> or <i>kube-cuddle</i>.</p>
+</div>
+<div class="readable-text" data-hash="ff951df4a0fd9f0a6f20e9c465277850" data-text-hash="a9cc80b214e74400dd7710ff8a67b355" id="153" refid="153">
+<p>As the next figure shows, the tool communicates with the Kubernetes API server, which is part of the Kubernetes Control Plane. The control plane then triggers the other components to do whatever needs to be done based on the changes you made via the API.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="2d4e2965e7a07b7c69282005c8a06e80" data-text-hash="ac9ed72faf70050ad7cbd1b2b68c29c8" id="154" refid="154">
+<h5>Figure 3.6 How you interact with a Kubernetes cluster</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="343" id="Picture_114" loading="lazy" src="EPUB/images/03image007.png" width="908">
+</div>
+<div class="readable-text" data-hash="73625c72aba19af3c324c85d54dee226" data-text-hash="b0fd10d2402f945205127e789a94a9cc" id="155" refid="155">
+<h3 id="sigil_toc_id_42">3.2.1&#160;Setting up kubectl - the Kubernetes command-line client</h3>
+</div>
+<div class="readable-text" data-hash="e29cc08534387b3ae743602d10604423" data-text-hash="7dc9cc4e14e30600151612abb8a7f051" id="156" refid="156">
+<p>Kubectl is a single executable file that you must download to your computer and place into your path. It loads its configuration from a configuration file called <i>kubeconfig</i>. To use kubectl, you must both install it and prepare the kubeconfig file so kubectl knows what cluster to talk to.</p>
+</div>
+<div class="readable-text" data-hash="3443961703941496bc94a4f0d925ad83" data-text-hash="06b011b51566461a02ac8606e0e47fac" id="157" refid="157">
+<h4>Downloading and Installing kubectl</h4>
+</div>
+<div class="readable-text" data-hash="3b7236e8cf3c9e8aea3e833a447057fd" data-text-hash="383bafd17a5c540304e1c0f0cdb71924" id="158" refid="158">
+<p>The latest stable release for Linux can be downloaded and installed with the following commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a48fdb52cea9f6c454a075b2b281744e" data-text-hash="93eec121c0fcd8fb36987bf8777bdbb2" id="159" refid="159">
+<div class="code-area-container">
+<pre class="code-area">$ curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+$ chmod +x kubectl 
+$ sudo mv kubectl /usr/local/bin/</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b77cfd5fb568e3d76984b542dc1daf9b" data-text-hash="0f1f21d16fd3681731ee854bd3550917" id="160" refid="160">
+<p>To install <code>kubectl</code> on macOS, you can either run the same command, but replace <code>linux</code> in the URL with <code>darwin</code><span>, or install the tool via Homebrew by running</span> <code>brew install kubectl</code><span>.</span></p>
+</div>
+<div class="readable-text" data-hash="29a35a051080ba216dc4188028d4b542" data-text-hash="9ad649f665d2acda04aca227df6651ff" id="161" refid="161">
+<p>On Windows, download <code>kubectl.exe</code> from <a href="amd64.html"><span>https://storage.googleapis.com/kubernetes-release/release/v1.1</span>8<span>.</span>2<span>/bin/windows/amd64/kubectl.exe</span></a>. To download the latest version, first go to <a href="release.html"><span>https://storage.googleapis.com/kubernetes-release/release/stable.txt</span></a> to see what the latest stable version is and then replace the version number in the first URL with this version. To check if you&#8217;ve installed it correctly, run <code>kubectl --help</code>. Note that kubectl may or may not yet be configured to talk to your Kubernetes cluster, which means most commands may not work yet.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="162" refid="162">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="9b20e9cc1265c43097ecf694bad21f6b" data-text-hash="0bd7b2f5dfd695f8a17113340d64e855" id="163" refid="163">
+<p> You can always append <code>--help</code> to any <code>kubectl</code> command to get more information.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="02ce1647b581cedf1ab623f85dd4a7ec" data-text-hash="548dda5e8d49b28345db8a63aa3e707b" id="164" refid="164">
+<h4>Setting up a short alias for kubectl</h4>
+</div>
+<div class="readable-text" data-hash="46ea964714be598dbdcd275e98f8c73f" data-text-hash="f3145810c9885462c94183c26f2dc295" id="165" refid="165">
+<p>You&#8217;ll use <code>kubectl</code> often. Having to type the full command every time is needlessly time-consuming, but you can speed things up by setting up an alias and tab completion for it.</p>
+</div>
+<div class="readable-text" data-hash="38a7ccc8e78c38184a316981c20cc1e8" data-text-hash="7b96ae3eb655a26cd36e517b86fb22d6" id="166" refid="166">
+<p>Most users of Kubernetes use <code>k</code> as the alias for kubectl. If you haven&#8217;t used aliases yet, here&#8217;s how to define it in Linux and macOS. Add the following line to your <code>~/.bashrc</code> or equivalent file:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="dfb909c6209d41fac157e2df7e10dccc" data-text-hash="8d75c8df5c4699e57b5a3801b82cb282" id="167" refid="167">
+<div class="code-area-container">
+<pre class="code-area">alias k=kubectl</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e4ac4ab6cc45872dea8ec08acb5b31d9" data-text-hash="fd68629c5a94f7972ea5dfe8fc74ac15" id="168" refid="168">
+<p>On Windows, if you use the Command Prompt, define the alias by executing <code>doskey k=kubectl $*</code>. If you use PowerShell, execute <code>set-alias -name k -value kubectl</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="169" refid="169">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3285604a1046f81a810f315155c90241" data-text-hash="10fd33966a048354f313e3cf800e7fc6" id="170" refid="170">
+<p> You may not need an alias if you used <code>gcloud</code> to set up the cluster. It installs the <code>k</code> binary in addition to <code>kubectl</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0acc44b728df59e1de83240b83a623a8" data-text-hash="71ccbb0e7727190f7b4676c753d1fd9e" id="171" refid="171">
+<h4>Configuring tab completion for kubectl</h4>
+</div>
+<div class="readable-text" data-hash="f4dc38a90fbcc7ebfb534da6e971a972" data-text-hash="210cbdf100579a288dffd9e701e48c05" id="172" refid="172">
+<p>Even with a short alias like <code>k</code>, you&#8217;ll still have to type a lot. Fortunately, the <code>kubectl</code> command can also output shell completion code for both the bash and the zsh shell. It enables tab completion of not only command names but also the object names. For example, later you&#8217;ll learn how to view details of a particular cluster node by executing the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1335a796bb15cd31028b2e73cf5fb5af" data-text-hash="f34421d4e4ef37b9b5912e574ff6168a" id="173" refid="173">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe node gke-kiada-default-pool-9bba9b18-4glf</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="674df95adc5a179cb6017f29b24eaf3f" data-text-hash="01f88f53a9631e5a49469e8120e206c7" id="174" refid="174">
+<p>That&#8217;s a lot of typing that you&#8217;ll repeat all the time. With tab completion, things are much easier. You just press TAB after typing the first few characters of each token:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="54b51a6b32c9851abb9624e1b8069533" data-text-hash="af18a437cad70945e04935b86e0cfb6e" id="175" refid="175">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl desc&lt;TAB&gt; no&lt;TAB&gt; gke-ku&lt;TAB&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="481de338b2ef884ec9e50ebec720a28f" data-text-hash="bcd4bf14f49c58fa15265ecbbf80f05b" id="176" refid="176">
+<p>To enable tab completion in bash, you must first install a package called <code>bash-completion</code> and then run the following command (you can also add it to <code>~/.bashrc</code> or equivalent):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="686929a1f447afeb086d4ea145c0e730" data-text-hash="20844b826b73fb3026d043af33856a4a" id="177" refid="177">
+<div class="code-area-container">
+<pre class="code-area">$ source &lt;(kubectl completion bash)</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="178" refid="178">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e468071db1ac742f415ae6d7c624176d" data-text-hash="9562b7580cb0e5a7b2cc5c90e1880618" id="179" refid="179">
+<p> This enables completion in bash. You can also run this command with a different shell. At the time of writing, the available options are <code>bash</code>, <code>zsh</code>, <code>fish</code>, and <code>powershell</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ea1a7051ff9a0f2a10edf0fb1d9bdb73" data-text-hash="9cde361622c3a349c67e29454c99424c" id="180" refid="180">
+<p>However, this will only complete your commands when you use the full <code>kubectl</code> command name. It won&#8217;t work when you use the <code>k</code> alias. To enable completion for the alias, you must run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3678135c8ec15c5fe6a090c5ceacebd7" data-text-hash="e664207c332be21c93a219124ebb7025" id="181" refid="181">
+<div class="code-area-container">
+<pre class="code-area">$ complete -o default -F __start_kubectl k</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c4a552fdfc00c8d9c69b21a1b904ae3d" data-text-hash="04cc4abca42e2226c5bb4694e174e2b3" id="182" refid="182">
+<h3 id="sigil_toc_id_43">3.2.2&#160;Configuring kubectl to use a specific Kubernetes cluster</h3>
+</div>
+<div class="readable-text" data-hash="380d9cd506fa1ed5db49bbfc7438731e" data-text-hash="fe6ca324f77c9f81fb8311a43fcaf0a9" id="183" refid="183">
+<p>The kubeconfig configuration file is located at <code>~/.kube/config</code>. If you deployed your cluster using Docker Desktop, Minikube or GKE, the file was created for you. If you&#8217;ve been given access to an existing cluster, you should have received the file. Other tools, such as kind, may have written the file to a different location. Instead of moving the file to the default location, you can also point kubectl to it by setting the <code>KUBECONFIG</code> environment variable as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="07ef737a8460f5f6175ab1f58ed4c3e0" data-text-hash="9dee9f4701fd4cae92b0bbe586232a7a" id="184" refid="184">
+<div class="code-area-container">
+<pre class="code-area">$ export KUBECONFIG=/path/to/custom/kubeconfig</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="96934ca472894b1c1a44ce3196161fad" data-text-hash="ed5a86af9774aea55cd243259b6b3069" id="185" refid="185">
+<p>To learn more about how to manage kubectl&#8217;s configuration and create a config file from scratch, refer to appendix A.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="186" refid="186">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="050b83cb74b16bf76cc9bb30f84fc2f7" data-text-hash="d5fcf73465711c7b39b91baed653472e" id="187" refid="187">
+<p> If you want to use several Kubernetes clusters (for example, both Minikube and GKE), see appendix A for information on switching between different <code>kubectl</code> contexts.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5a4524491ea4dbba55bc8234206c07f1" data-text-hash="179d8453bb6430a04ee958c0974a1270" id="188" refid="188">
+<h3 id="sigil_toc_id_44">3.2.3&#160;Using kubectl</h3>
+</div>
+<div class="readable-text" data-hash="8b40dcd5143f266cabf7c27f1ce9aeba" data-text-hash="0aa1f3783433c1bc97c83fba1f446539" id="189" refid="189">
+<p>Assuming you&#8217;ve installed and configured kubectl, you can now use it to talk to your cluster.</p>
+</div>
+<div class="readable-text" data-hash="c5135b4be257665005fd1256c5255d58" data-text-hash="44e0e880305fb46c38abc75cae64187e" id="190" refid="190">
+<h4>Verifying if the cluster is up and kubectl can talk to it</h4>
+</div>
+<div class="readable-text" data-hash="be6aa6c66444438f2577fa4388ab4094" data-text-hash="95820f22559d10ec063599c1d4420764" id="191" refid="191">
+<p>To verify that your cluster is working, use the <code>kubectl</code> <code>cluster-info</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9202527b82d9cfa62c798e1c963042ac" data-text-hash="486302c62213be1fbc03a4a9d7017ba9" id="192" refid="192">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl cluster-info
+Kubernetes master is running at https://192.168.99.101:8443
+KubeDNS is running at https://192.168.99.101:8443/api/v1/namespaces/...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7a3b1dc8b591c0b07c3f8f90797cc7ab" data-text-hash="28496842ba6308987080a32f07649be5" id="193" refid="193">
+<p>This indicates that the API server is active and responding to requests. The output lists the URLs of the various Kubernetes cluster services running in your cluster. The above example shows that besides the API server, the KubeDNS service, which provides domain-name services within the cluster, is another service that runs in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="532eff0d0ecb3108b4d3a03ce102036b" data-text-hash="08f5bcaeb679c1a307dda2f7e41f589e" id="194" refid="194">
+<h4>Listing cluster nodes</h4>
+</div>
+<div class="readable-text" data-hash="a87891fbb11bcbd5cd3e5eb2d6203797" data-text-hash="e475c11959c2547dc28c0d7a1f7156af" id="195" refid="195">
+<p>Now use the <code>kubectl get nodes</code> command to list all nodes in your cluster. Here&#8217;s the output that is generated when you run the command in a cluster provisioned by kind:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b66869efaf58e40a855ea04178310ca8" data-text-hash="4cb95047ffbacc99a0b7655a8c56c117" id="196" refid="196">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get nodes
+NAME            STATUS  ROLES   AGE   VERSION
+control-plane   Ready   &lt;none&gt;  12m   v1.18.2
+kind-worker     Ready   &lt;none&gt;  12m   v1.18.2
+kind-worker2    Ready   &lt;none&gt;  12m   v1.18.2</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7942b33a004d395de8ddeba92a3496de" data-text-hash="12c88eec78bcf3118e521005c819d613" id="197" refid="197">
+<p>Everything in Kubernetes is represented by an object and can be retrieved and manipulated via the RESTful API. The <code>kubectl</code> <code>get</code> command retrieves a list of objects of the specified type from the API. You&#8217;ll use this command all the time, but it only displays summary information about the listed objects.</p>
+</div>
+<div class="readable-text" data-hash="e0ba83495265b9dab5bda95d95bbcb98" data-text-hash="a0f33fa05828bbc73ee71d8976dbdc4c" id="198" refid="198">
+<h4>Retrieving additional details of an object</h4>
+</div>
+<div class="readable-text" data-hash="e4c9ecbd6d69659cf3614e205c7db619" data-text-hash="9bf49ad1ad14ea26b7b3f5049d22bca3" id="199" refid="199">
+<p>To see more detailed information about an object, you use the <code>kubectl</code> <code>describe</code> command, which shows much more:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3c0500f96701d7ba103f578d6958ae0a" data-text-hash="6cfb54051b67afc6393064981ae65dbb" id="200" refid="200">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe node gke-kiada-85f6-node-0rrx</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="59f8634688d9e1edb41392379d854213" data-text-hash="0ddbf4a11039132ac07c2dfe68ba28bb" id="201" refid="201">
+<p>I omit the actual output of the <code>describe</code> command because it&#8217;s quite wide and would be completely unreadable here in the book. If you run the command yourself, you&#8217;ll see that it displays the status of the node, information about its CPU and memory usage, system information, containers running on the node, and much more.</p>
+</div>
+<div class="readable-text" data-hash="5f0df3fd101c8e0575b380b5c635733b" data-text-hash="a0a460f7bb2df29cece6e256cd51d241" id="202" refid="202">
+<p>If you run the <code>kubectl</code> <code>describe</code> command without specifying the resource name, information of all nodes will be printed.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="203" refid="203">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="3ebe38b9a3f20d7d1d332664075404fc" data-text-hash="3a20705b6e3588c4ff46d3854cb91866" id="204" refid="204">
+<p> Executing the <code>describe</code> command without specifying the object name is useful when only one object of a certain type exists. You don&#8217;t have to type or copy/paste the object name.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5cf96aad07b1025f229f4f3c909ee11d" data-text-hash="20df5949538828582797b746988c1136" id="205" refid="205">
+<p>You&#8217;ll learn more about the numerous other kubectl commands throughout the book.</p>
+</div>
+<div class="readable-text" data-hash="425741e2f591da08d04ec6f29a682262" data-text-hash="36fdd316d014cd12bc71cf1182929c00" id="206" refid="206">
+<h3 id="sigil_toc_id_45">3.2.4&#160;Interacting with Kubernetes through web dashboards</h3>
+</div>
+<div class="readable-text" data-hash="596ad3077bd083241b6cfe4fcd9ba8ae" data-text-hash="75448dccf685cb4ed8c4db366f7f5613" id="207" refid="207">
+<p>If you prefer using graphical web user interfaces, you&#8217;ll be happy to hear that Kubernetes also comes with a nice web dashboard. Note, however, that the functionality of the dashboard may lag significantly behind kubectl, which is the primary tool for interacting with Kubernetes.</p>
+</div>
+<div class="readable-text" data-hash="add1f344d3163e16a3f631c291b88eaf" data-text-hash="a1b60402eaae684b57c3b55d9c71c351" id="208" refid="208">
+<p>Nevertheless, the dashboard shows different resources in context and can be a good start to get a feel for what the main resource types in Kubernetes are and how they relate to each other. The dashboard also offers the possibility to modify the deployed objects and displays the equivalent kubectl command for each action - a feature most beginners will appreciate.</p>
+</div>
+<div class="readable-text" data-hash="c65ff482312dca2ce93e7de05a8f2b97" data-text-hash="053a6435b46567fb5179d47ecc68cfb9" id="209" refid="209">
+<p>Figure 3.7 shows the dashboard with two workloads deployed in the cluster.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="6b58147b0b46257729b7a4a3cbaa3435" data-text-hash="fbda1b505b403295cb52cfab52429c10" id="210" refid="210">
+<h5>Figure 3.7 Screenshot of the Kubernetes web-based dashboard</h5>
+<img alt="Graphical user interface, application Description automatically generated" data-processed="true" height="525" id="Picture_115" loading="lazy" src="EPUB/images/03image008.png" width="708">
+</div>
+<div class="readable-text" data-hash="b1c02261122bf7b3d0898ad5a0c736e7" data-text-hash="34e9fabb8404818833bb07246bb7b0cd" id="211" refid="211">
+<p>Although you won&#8217;t use the dashboard in this book, you can always open it to quickly see a graphical view of the objects deployed in your cluster after you create them via kubectl.</p>
+</div>
+<div class="readable-text" data-hash="997a73e83b33beb9fcbbde5eedfbf9d5" data-text-hash="56adb532d708ff933175ef790e9cac40" id="212" refid="212">
+<h4>Accessing the dashboard in Docker Desktop</h4>
+</div>
+<div class="readable-text" data-hash="f52e827c65f4d2561b06810e417d77ba" data-text-hash="d799b77cafe93fd43685654ddd55f5de" id="213" refid="213">
+<p>Unfortunately, Docker Desktop does not install the Kubernetes dashboard by default. Accessing it is also not trivial, but here&#8217;s how. First, you need to install it using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4f9fe07bb94116190cc3a30f843d7193" data-text-hash="f2545c9f32e0ea67e82a59a2bfdb05da" id="214" refid="214">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-rc5/aio/deploy/recommended.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="86d734b196e830809599b9887206f4c0" data-text-hash="ec77015c6c23c2f32e649c0099b4be76" id="215" refid="215">
+<p>Refer to <a href="kubernetes.html">github.com/kubernetes/dashboard</a> to find the latest version number. After installing the dashboard, the next command you must run is:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9cd05b432a8ba677c19166ccb296e1a9" data-text-hash="40b3edca8fe7da66d89185e26aa7db38" id="216" refid="216">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl proxy</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9c9b9c733af4a1a0b73ecfde1a572830" data-text-hash="1a43d1f34b8d5be1651b192b9ed8705f" id="217" refid="217">
+<p>This command runs a local proxy to the API server, allowing you to access the services through it. Let the proxy process run and use the browser to open the dashboard at the following URL:</p>
+</div>
+<div class="readable-text" data-hash="56ba1c1126dc4f60795d2b81d77483b7" data-text-hash="b97351cc8365314a372da3b1d2d27bda" id="218" refid="218">
+<p><a href="proxy.html">http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/</a></p>
+</div>
+<div class="readable-text" data-hash="38adeba39edf269eeb30f64e13e3ed5d" data-text-hash="7f7da4ad804732cabf4dc4dd3a3bdc1e" id="219" refid="219">
+<p>You&#8217;ll be presented with an authentication page. You must then run the following command to retrieve an authentication token.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="49bff0aa4358b907a1090a626fead457" data-text-hash="113182520fe16afb45508c064dc2413f" id="220" refid="220">
+<div class="code-area-container">
+<pre class="code-area">PS C:\&gt; kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | sls admin-user | ForEach-Object { $_ -Split '\s+' } | Select -First 1)</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="221" refid="221">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="864866aba3758ded042dc869ea78ce9d" data-text-hash="58ceb9c0dc1dfcf18d1dfe4aa3cf3dde" id="222" refid="222">
+<p> This command must be run in Windows PowerShell.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b2a518f977f84b398bf3411ffa111ecf" data-text-hash="2dba1d09fc833f639a5df2d9ddabca6a" id="223" refid="223">
+<p>Find the token listed under <code>kubernetes-dashboard-token-xyz</code> and paste it into the token field on the authentication page shown in your browser. After you do this, you should be able to use the dashboard. When you&#8217;re finished using it, terminate the <code>kubectl proxy</code> process using <code>Control-C</code>.</p>
+</div>
+<div class="readable-text" data-hash="74d76c01625bc4c145fdd5bc7ef79f7a" data-text-hash="ab94ba8a7977369e0366d95b2a25dab1" id="224" refid="224">
+<h4>Accessing the dashboard when using Minikube</h4>
+</div>
+<div class="readable-text" data-hash="ba86f12295fa0f59fa78cf5742249469" data-text-hash="d4b48387714c0c9945de24f8f87795ae" id="225" refid="225">
+<p>If you&#8217;re using Minikube, accessing the dashboard is much easier. Run the following command and the dashboard will open in your default browser:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8b74a0435db14586502d568ff1a162bf" data-text-hash="6e0b4df2bfec80809b7adc193400825a" id="226" refid="226">
+<div class="code-area-container">
+<pre class="code-area">$ minikube dashboard</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="38c678e28a7474e4b83c26da249b020c" data-text-hash="fd7351875b70c019e60130132160214e" id="227" refid="227">
+<h4>Accessing the dashboard when running Kubernetes elsewhere</h4>
+</div>
+<div class="readable-text" data-hash="d1e55f3fa9eee7763c8b5bc760637bda" data-text-hash="4a1f1c157783124335eb2056f07bbb01" id="228" refid="228">
+<p>The Google Kubernetes Engine no longer provides access to the open source Kubernetes Dashboard, but it offers an alternative web-based console. The same applies to other cloud providers. For information on how to access the dashboard, please refer to the documentation of the respective provider.</p>
+</div>
+<div class="readable-text" data-hash="e353fffaf5062487f0d2dd2f7fc342dd" data-text-hash="bdf9ba65ac8f6c8c31c1db954132c26e" id="229" refid="229">
+<p>If your cluster runs on your own infrastructure, you can deploy the dashboard by following the guide at <a href="access-application-cluster.html">kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard</a>.</p>
+</div>
+<div class="readable-text" data-hash="b8aa6eb789431244a4eae4dea12902b2" data-text-hash="ad31b927a87a349b4d70c8b183fa750d" id="230" refid="230">
+<h2 id="sigil_toc_id_46">3.3&#160;Running your first application on Kubernetes</h2>
+</div>
+<div class="readable-text" data-hash="7ca522e16b6c9d030bfc409a30849666" data-text-hash="a9007919422391889005b57a81ee7ff6" id="231" refid="231">
+<p>Now is the time to finally deploy something to your cluster. Usually, to deploy an application, you&#8217;d prepare a JSON or YAML file describing all the components that your application consists of and apply that file to your cluster. This would be the declarative approach.</p>
+</div>
+<div class="readable-text" data-hash="9409998764d04140ca11a1db062885d7" data-text-hash="91609d6528f087498e2000630c0a9f7c" id="232" refid="232">
+<p>Since this may be your first time deploying an application to Kubernetes, let&#8217;s choose an easier way to do this. We&#8217;ll use simple, one-line imperative commands to deploy your application.</p>
+</div>
+<div class="readable-text" data-hash="0556bc11ed13f9cff3c2c7142401aa41" data-text-hash="657a7d800967eb1f7b18616a14f51d2b" id="233" refid="233">
+<h3 id="sigil_toc_id_47">3.3.1&#160;Deploying your application</h3>
+</div>
+<div class="readable-text" data-hash="b89493a17bb6b477b1ebbfc5c482f238" data-text-hash="2fdc94f45eb5a73e6af02eb9d4fe84f2" id="234" refid="234">
+<p>The imperative way to deploy an application is to use the <code>kubectl</code> <code>create deployment</code> command. As the command itself suggests, it creates a <i>Deployment</i> object, which represents an application deployed in the cluster. By using the imperative command, you avoid the need to know the structure of Deployment objects as when you write YAML or JSON manifests.</p>
+</div>
+<div class="readable-text" data-hash="9c39f3dec5bc4fe3ef67c77bd1079275" data-text-hash="f6b459d249cdb7b99c93e257acefb56e" id="235" refid="235">
+<h4>Creating a Deployment</h4>
+</div>
+<div class="readable-text" data-hash="93d83383bfe85ce16b33a0f5442f537c" data-text-hash="79633e664af98a62cce16d6e054ac034" id="236" refid="236">
+<p>In the previous chapter, you created a Node.js application called Kiada that you packaged into a container image and pushed to Docker Hub to make it easily distributable to any computer.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="237" refid="237">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f441a10bf460abd2a784b7a5a54423d7" data-text-hash="c64a8482e02e9d06012bfdbe269d4a1f" id="238" refid="238">
+<p> If you skipped chapter two because you are already familiar with Docker and containers, you might want to go back and read section 2.2.1 that describes the application that you&#8217;ll deploy here and in the rest of this book.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="30ced1654c11f7f5b55aff7c2a8bce8c" data-text-hash="cdf142ee0a51f445b3e5b143a799698e" id="239" refid="239">
+<p>Let&#8217;s deploy the Kiada application to your Kubernetes cluster. Here&#8217;s the command that does this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c37ae03351005eddfd2f4e74867395f2" data-text-hash="e90586cbb34cf13943dedecb3e77987f" id="240" refid="240">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create deployment kiada --image=luksa/kiada:0.1
+deployment.apps/kiada created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a46f36958707d46841261c88d1b56236" data-text-hash="d4af4aba388b0e66bb4e1c885373f500" id="241" refid="241">
+<p>In the command, you specify three things:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="8b01a7ae19ba3e077dca6b5b8148c1a7" data-text-hash="852f4a92464e683c5f9e7299dd730e70" id="242" refid="242">You want to create a <code class="codechar">deployment</code> object.</li>
+<li class="readable-text" data-hash="1020ea025a4694c1f015e6afc443af43" data-text-hash="df5f8683a8ed81e4f0c23d1ce347a6ed" id="243" refid="243">You want the object to be called <code>kiada</code>.</li>
+<li class="readable-text" data-hash="79d915f9b18689f4d9dbaaba70fb6f5c" data-text-hash="8a60d3d9cc4aa218f162189569cbc2b6" id="244" refid="244">You want the deployment to use the container image <code>luksa/kiada:0.1</code>.</li>
+</ul>
+<div class="readable-text" data-hash="d191a008272ab3641b40c81c60de3d5a" data-text-hash="22e255057c72f6486cff3d43239f68a5" id="245" refid="245">
+<p>By default, the image is pulled from Docker Hub, but you can also specify the image registry in the image name (for example, <code>quay.io/luksa/kiada:0.1</code>).</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="246" refid="246">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="66386887a35536dec7eaec7ff715ed49" data-text-hash="17c5b82ce860efe85d2e9603bb2b7de5" id="247" refid="247">
+<p> Make sure that the image is stored in a public registry and can be pulled without access authorization. You&#8217;ll learn how to provide credentials for pulling private images in chapter 8.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="bce3fbd05e6ba2035d5a78e3ea992629" data-text-hash="e350e28a468ceda3c9fe6ddf7d28c76a" id="248" refid="248">
+<p>The Deployment object is now stored in the Kubernetes API. The existence of this object tells Kubernetes that the <code>luksa/kiada:0.1</code> container must run in your cluster. You&#8217;ve stated your <i>desired</i> state. Kubernetes must now ensure that the <i>actual</i> state reflects your wishes.</p>
+</div>
+<div class="readable-text" data-hash="4278ab5bfd59f842936ec461e8951cb8" data-text-hash="005cf3fc816b727e855679e0da598cbe" id="249" refid="249">
+<h4>Listing deployments</h4>
+</div>
+<div class="readable-text" data-hash="13f743bfd2b0c4f5b8735136fd0514e8" data-text-hash="08271fdeef951759d421e0b2694e97f5" id="250" refid="250">
+<p>The interaction with Kubernetes consists mainly of the creation and manipulation of objects via its API. Kubernetes stores these objects and then performs operations to bring them to life. For example, when you create a Deployment object, Kubernetes runs an application. Kubernetes then keeps you informed about the current state of the application by writing the status to the same Deployment object. You can view the status by reading back the object. One way to do this is to list all Deployment objects as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3f15d153585cadebe0376d6a06b12f4e" data-text-hash="ca5329cea432701315ab0df55af91d0d" id="251" refid="251">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get deployments
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kiada   0/1     1            0           6s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="442a51fe5ef863a8357c7c6a19acf4bb" data-text-hash="3feb6229ed21239b6a578a142ff827e5" id="252" refid="252">
+<p>The <code>kubectl get deployments</code> command lists all Deployment objects that currently exist in the cluster. You have only one Deployment in your cluster. It runs one instance of your application as shown in the <code>UP-TO-DATE</code> column, but the <code>AVAILABLE</code> column indicates that the application is not yet available. That&#8217;s because the container isn&#8217;t ready, as shown in the <code>READY</code> column. You can see that zero of a total of one container are ready.</p>
+</div>
+<div class="readable-text" data-hash="aac071dfd26d67b89d94885fb47d59d7" data-text-hash="b9c42d62b42b39a2df37a80c22be70cc" id="253" refid="253">
+<p>You may wonder if you can ask Kubernetes to list all the running containers by running <code>kubectl</code> <code>get</code> <code>containers</code>. Let&#8217;s try this.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="10ee4389428770be2007cc3bc589b8d7" data-text-hash="6ff7d62972c19e1bd581c0debbbdfb1c" id="254" refid="254">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get containers
+error: the server doesn't have a resource type "containers"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e6c7e7d30a933d48f99aa88fe3647180" data-text-hash="4fd6a439d43a9c23d7324179fb34abb6" id="255" refid="255">
+<p>The command fails because Kubernetes doesn&#8217;t have a &#8220;Container&#8221; object type. This may seem odd, since Kubernetes is all about running containers, but there&#8217;s a twist. A container is not the smallest unit of deployment in Kubernetes. So, what is?</p>
+</div>
+<div class="readable-text" data-hash="7f690a18f9d079479ca8da2fd4bff180" data-text-hash="11cf100eff4d9fbc78fa45a02e163fc1" id="256" refid="256">
+<h4>Introducing Pods</h4>
+</div>
+<div class="readable-text" data-hash="32dd3c7eee415b0416e7c60b0161a468" data-text-hash="771d0a6c72641da028318b84fac4e4e8" id="257" refid="257">
+<p>In Kubernetes, instead of deploying individual containers, you deploy groups of co-located containers &#8211; so-called <i>pods</i>. You know, as in <i>pod of whales</i>, or a <i>pea pod</i>.</p>
+</div>
+<div class="readable-text" data-hash="687d8b743cf52b879921c10f4eb2301f" data-text-hash="a000349beca409f35333f74da7fd6a93" id="258" refid="258">
+<p>A pod is a group of one or more closely related containers (not unlike peas in a pod) that run together on the same worker node and need to share certain Linux namespaces, so that they can interact more closely than with other pods.</p>
+</div>
+<div class="readable-text" data-hash="accdd374c2982e39c595948f546c424d" data-text-hash="49d5da404068d912968296c07e43ac7a" id="259" refid="259">
+<p>In the previous chapter I showed an example where two processes use the same namespaces. By sharing the network namespace, both processes use the same network interfaces, share the same IP address and port space. By sharing the UTS namespace, both see the same system hostname. This is exactly what happens when you run containers in the same pod. They use the same network and UTS namespaces, as well as others, depending on the pod&#8217;s spec.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="50fc82cf9e4dde67d20c31dcd0aae8fd" data-text-hash="7a07e486ba043b72c27f03521e8aad3f" id="260" refid="260">
+<h5>Figure 3.8 The relationship between containers, pods, and worker nodes</h5>
+<img alt="Graphical user interface, diagram Description automatically generated" data-processed="true" height="367" id="Picture_116" loading="lazy" src="EPUB/images/03image009.png" width="964">
+</div>
+<div class="readable-text" data-hash="4a48b9e32666811793923380daba930b" data-text-hash="d0a6be845fa55a38e5631713989bf5f7" id="261" refid="261">
+<p>As illustrated in figure 3.8, you can think of each pod as a separate logical computer that contains one application. The application can consist of a single process running in a container, or a main application process and additional supporting processes, each running in a separate container. Pods are distributed across all the worker nodes of the cluster.</p>
+</div>
+<div class="readable-text" data-hash="0f5eb19feb5205fa7e5f11da5e649216" data-text-hash="6273b73f21328e189591d4a1dd6566c2" id="262" refid="262">
+<p>Each pod has its own IP, hostname, processes, network interfaces and other resources. Containers that are part of the same pod think that they&#8217;re the only ones running on the computer. They don&#8217;t see the processes of any other pod, even if located on the same node.</p>
+</div>
+<div class="readable-text" data-hash="adc49f7fc1975c3539bf7a5fab5ff01b" data-text-hash="02e9c1ddc94424dc65579dedefeb5285" id="263" refid="263">
+<h4>Listing pods</h4>
+</div>
+<div class="readable-text" data-hash="97e0ee75fd6c8bb159cc9d5bf0d2f7f5" data-text-hash="4ed24b8349102b5cc61290a8d00967ad" id="264" refid="264">
+<p>Since containers aren&#8217;t a top-level Kubernetes object, you can&#8217;t list them. But you can list pods. As the following output of the <code>kubectl get pods</code> command shows, by creating the Deployment object, you&#8217;ve deployed one pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ba88101141e616545e0641788d267938" data-text-hash="01075e962f41ecf309b0e1fec385679e" id="265" refid="265">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods
+NAME                     READY     STATUS    RESTARTS   AGE
+kiada-9d785b578-p449x    0/1       Pending   0          1m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgS3ViZXJuZXRlcyBjcmVhdGVkIHRoaXMgcG9kIGZyb20gdGhlIERlcGxveW1lbnQgb2JqZWN0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="86d8d7949bb2cddf2db75d7abb5e781a" data-text-hash="f8ab8e47ad190a0e2a1deeca0b0061a9" id="266" refid="266">
+<p>This is the pod that houses the container running your application. To be precise, since the status is still <code>Pending</code>, the application, or rather the container, isn&#8217;t running yet. This is also expressed in the <code>READY</code> column, which indicates that the pod has a single container that&#8217;s not ready.</p>
+</div>
+<div class="readable-text" data-hash="bb2878d26c594c4ad0a4ee4711b54dbf" data-text-hash="08ac189eab5e43462616907926b688a2" id="267" refid="267">
+<p>The reason the pod is pending is because the worker node to which the pod has been assigned must first download the container image before it can run it. When the download is complete, the pod&#8217;s container is created and the pod enters the <code>Running</code> state.</p>
+</div>
+<div class="readable-text" data-hash="224e70866c5d220ff43d755fdc16f91c" data-text-hash="f8b908098a6d6ee3c97c497f3f42aa3c" id="268" refid="268">
+<p>If Kubernetes can&#8217;t pull the image from the registry, the <code>kubectl get pods</code> command will indicate this in the <code>STATUS</code> column. If you&#8217;re using your own image, ensure it&#8217;s marked as public on Docker Hub. Try pulling the image manually with the <code>docker</code> <code>pull</code> command on another computer.</p>
+</div>
+<div class="readable-text" data-hash="ebfaaf5f83b962992652af5c7114e7d0" data-text-hash="4ef82c0168a845d2b08be856a5bf3dfc" id="269" refid="269">
+<p>If another issue is causing your pod not to run, or if you simply want to see more information about the pod, you can also use the <code>kubectl</code> <code>describe</code> <code>pod</code> command, as you did earlier to see the details of a worker node. If there are any issues with the pod, they should be displayed by this command. Look at the events shown at the bottom of its output. For a running pod, they should be close the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="987f5cf97839899ded68ea1b32b00531" data-text-hash="dffd6b2fc63cf8d220766685def3bb77" id="270" refid="270">
+<div class="code-area-container">
+<pre class="code-area">Type    Reason     Age   From                    Message
+----    ------     ----  ----                    -------
+Normal  Scheduled  25s   default-scheduler       Successfully assigned 
+                                                 default/kiada-9d785b578-p449x 
+                                                 to kind-worker2
+Normal  Pulling    23s   kubelet, kind-worker2   Pulling image "luksa/kiada:0.1"
+Normal  Pulled     21s   kubelet, kind-worker2   Successfully pulled image 
+Normal  Created    21s   kubelet, kind-worker2   Created container kiada
+Normal  Started    21s   kubelet, kind-worker2   Started container kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="481eb43e1c80bd1cf7f9d0c1cbaf2349" data-text-hash="2f088c64eefda313da97ccd3b307a22a" id="271" refid="271">
+<h4>Understanding what happens behind the scenes</h4>
+</div>
+<div class="readable-text" data-hash="118c69e15cf861df51613072f5acd482" data-text-hash="99e87b938a88f6a20e6478353daf54ce" id="272" refid="272">
+<p>To help you visualize what happened when you created the Deployment, see figure 3.9.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="874831452006e42be29efa0446c24166" data-text-hash="c4c1888f42bc62d4ba200bd693a67e45" id="273" refid="273">
+<h5>Figure 3.9 How creating a Deployment object results in a running application container</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="412" id="Picture_117" loading="lazy" src="EPUB/images/03image010.png" width="949">
+</div>
+<div class="readable-text" data-hash="9780f5807fd93c194530e85f45e463f9" data-text-hash="9ebce6cae3796078c8da0e1703d75315" id="274" refid="274">
+<p>When you ran the <code>kubectl create</code> command, it created a new Deployment object in the cluster by sending an HTTP request to the Kubernetes API server. Kubernetes then created a new Pod object, which was then assigned or <i>scheduled</i> to one of the worker nodes. The Kubernetes agent on the worker node (the Kubelet) became aware of the newly created Pod object, saw that it was scheduled to its node, and instructed Docker to pull the specified image from the registry, create a container from the image, and execute it.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="8ac01fd8cb682dbc3b6353c9f6062d22" data-text-hash="7dc98b7da6080862ed69b6f75e8a7aac" id="275" refid="275">
+<h5>DEFInItiON</h5>
+</div>
+<div class="readable-text" data-hash="071fdf5fca2ff50dc7f5560d6a75d274" data-text-hash="561a3ead29afda40e67a7c5c32d9aabb" id="276" refid="276">
+<p> The term scheduling refers to the assignment of the pod to a node. The pod runs immediately, not at some point in the future. Just like how the CPU scheduler in an operating system selects what CPU to run a process on, the scheduler in Kubernetes decides what worker node should execute each container. Unlike an OS process, once a pod is assigned to a node, it runs only on that node. Even if it fails, this instance of the pod is never moved to other nodes, as is the case with CPU processes, but a new pod instance may be created to replace it.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="317d08175721f498db62a0c2db46eb2e" data-text-hash="5cc2625c2d45ce147d8b8321d204b5b3" id="277" refid="277">
+<p>Depending on what you use to run your Kubernetes cluster, the number of worker nodes in your cluster may vary. The figure shows only the worker node that the pod was scheduled to. In a multi-node cluster, none of the other worker nodes are involved in the process.</p>
+</div>
+<div class="readable-text" data-hash="5ddeefca71ee0302cbb60132586e2f77" data-text-hash="f60e87c0fe5dfccf49a971b764c04048" id="278" refid="278">
+<h3 id="sigil_toc_id_48">3.3.2&#160;Exposing your application to the world</h3>
+</div>
+<div class="readable-text" data-hash="c0b2caaf2ed2c3db3b98a11272103a7c" data-text-hash="2666dee47e172c3f89f4ec732a2d950b" id="279" refid="279">
+<p>Your application is now running, so the next question to answer is how to access it. I mentioned that each pod gets its own IP address, but this address is internal to the cluster and not accessible from the outside. To make the pod accessible externally, you&#8217;ll <i>expose</i> it by creating a Service object.</p>
+</div>
+<div class="readable-text" data-hash="edd8d3a960ad7c8b323793418627b303" data-text-hash="8edfe07c46bfdd9b28147aa6590158b1" id="280" refid="280">
+<p>Several types of Service objects exist. You decide what type you need. Some expose pods only within the cluster, while others expose them externally. A service with the type LoadBalancer provisions an external load balancer, which makes the service accessible via a public IP. This is the type of service you&#8217;ll create now.</p>
+</div>
+<div class="readable-text" data-hash="a7124f194c07d34e5e89542d908bf376" data-text-hash="0fcd8b1abcf6a0a9a49d5dd95976cb52" id="281" refid="281">
+<h4>Creating a Service</h4>
+</div>
+<div class="readable-text" data-hash="caef20cd85de4756d30a1c6117a47f0d" data-text-hash="c1af9bb0194d112345a58af9780b495d" id="282" refid="282">
+<p>The easiest way to create the service is to use the following imperative command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="beea2c001216e22f5e90c26e149954f8" data-text-hash="39a0d30b1b002296e154f6e5f8a8ce55" id="283" refid="283">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl expose deployment kiada --type=LoadBalancer --port 8080
+service/kiada exposed</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="201e017261edd1f00b6b9cfbe3b1e59d" data-text-hash="29ad588ee6a47422ad73520bee77eaee" id="284" refid="284">
+<p>The <code>create deployment</code> command that you ran previously created a Deployment object, whereas the <code>expose deployment</code> command creates a Service object. This is what running the above command tells Kubernetes:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="fcc0c66dc553311c4c4e0a5584b2e494" data-text-hash="fcc0c66dc553311c4c4e0a5584b2e494" id="285" refid="285">You want to expose all pods that belong to the kiada Deployment as a new service.</li>
+<li class="readable-text" data-hash="c382d83633e2e27572e81192cb4ee380" data-text-hash="c382d83633e2e27572e81192cb4ee380" id="286" refid="286">You want the pods to be accessible from outside the cluster via a load balancer.</li>
+<li class="readable-text" data-hash="b1885b4baeedeb5c58e8b499e99bb4a2" data-text-hash="b1885b4baeedeb5c58e8b499e99bb4a2" id="287" refid="287">The application listens on port 8080, so you want to access it via that port.</li>
+</ul>
+<div class="readable-text" data-hash="c747544829984f88d9edb7362f2a1136" data-text-hash="252627d034b887f2b4de898beaf5b84b" id="288" refid="288">
+<p>You didn&#8217;t specify a name for the Service object, so it inherits the name of the Deployment.</p>
+</div>
+<div class="readable-text" data-hash="cac00de749b2763d49c9987db0391c6a" data-text-hash="e2de3b670151bf7ec8c943125e55b246" id="289" refid="289">
+<h4>Listing services</h4>
+</div>
+<div class="readable-text" data-hash="7a468cf0a841ef65f32e7a68184d7adf" data-text-hash="f65a516eeb8493fbfc26868472528447" id="290" refid="290">
+<p>Services are API objects, just like Pods, Deployments, Nodes and virtually everything else in Kubernetes, so you can list them by executing <code>kubectl</code> <code>get</code> <code>services</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4b5dfac70480c5638a5b47777295064b" data-text-hash="ddc80673440bca940b19c724d551f4ef" id="291" refid="291">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get svc
+NAME         TYPE          CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE
+kubernetes   ClusterIP     10.19.240.1    &lt;none&gt;        443/TCP         34m
+kiada        LoadBalancer  10.19.243.17   &lt;pending&gt;     8080:30838/TCP  4s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="292" refid="292">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="09d6e20ef3cd612a3ace24b84e18b222" data-text-hash="a51c2aa9f3cf7adad7bae7f8e2913a7b" id="293" refid="293">
+<p> Notice the use of the abbreviation <code>svc</code> instead of <code>services</code>. Most resource types have a short name that you can use instead of the full object type (for example, <code>po</code> is short for <code>pods</code>, <code>no</code> for <code>nodes</code> and <code>deploy</code> for <code>deployments</code>).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e8311d6697963f8c8160895aff5ee1d3" data-text-hash="10532c8c1a8de6cc820cb3486e24e9d1" id="294" refid="294">
+<p>The list shows two services with their types, IPs and the ports they expose. Ignore the <code>kubernetes</code> service for now and take a close look at the <code>kiada</code> service. It doesn&#8217;t yet have an external IP address. Whether it gets one depends on how you&#8217;ve deployed the cluster.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="a93f6ffd9b7a0f22c9907a13aff0bca7" data-text-hash="9d64ea3bb9b613f4f0f9d7e35657e4fa" id="295" refid="295">
+<h5>Listing the available object types with kubectl api-resources</h5>
+</div>
+<div class="readable-text" data-hash="d2553a916a3d2d5c7d6d5ee66462baea" data-text-hash="6228615f7621ea60b2b40ec7fcc8328d" id="296" refid="296">
+<p>You&#8217;ve used the <code>kubectl</code> <code>get</code> command to list various things in your cluster: Nodes, Deployments, Pods and now Services. These are all Kubernetes object types. You can display a list of all supported types by running <code>kubectl api-resources</code>. The list also shows the short name for each type and some other information you need to define objects in JSON/YAML files, which you&#8217;ll learn in the following chapters.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e7c25d0a0374e0ba8102ad3447e2fe7c" data-text-hash="45851e67e1fe76c58b3038ca8158aa51" id="297" refid="297">
+<h4>Understanding load balancer services</h4>
+</div>
+<div class="readable-text" data-hash="69a96d84b30d70526b470a66ba56239a" data-text-hash="f7a0984fb6f9360f790728875f9e5797" id="298" refid="298">
+<p>While Kubernetes allows you to create so-called LoadBalancer services, it doesn&#8217;t provide the load balancer itself. If your cluster is deployed in the cloud, Kubernetes can ask the cloud infrastructure to provision a load balancer and configure it to forward traffic into your cluster. The infrastructure tells Kubernetes the IP address of the load balancer and this becomes the external address of your service.</p>
+</div>
+<div class="readable-text" data-hash="19a85c36725b05d21bfa3a16d521a3f9" data-text-hash="fdd02c7bd3f0e5007562d1a42c8b3e54" id="299" refid="299">
+<p>The process of creating the Service object, provisioning the load balancer and how it forwards connections into the cluster is shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="062af7a0e7e2a9fe58d471d5fb4121fc" data-text-hash="a4d00b894b71f641a7396f9cf173c792" id="300" refid="300">
+<h5>Figure 3.10 What happens when you create a Service object of type LoadBalancer</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="312" id="Picture_118" loading="lazy" src="EPUB/images/03image011.png" width="970">
+</div>
+<div class="readable-text" data-hash="824a7c0097fd2980d698e7b98f79c5ea" data-text-hash="ea4406657825224877fe449ff5cd931f" id="301" refid="301">
+<p>Provisioning of the load balancer takes some time, so let&#8217;s wait a few more seconds and check again whether the IP address is already assigned. This time, instead of listing all services, you&#8217;ll display only the <code>kiada</code> service as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8951c620372850a83591ac743168ac15" data-text-hash="0fbc56467a57a969211ce316dce764a9" id="302" refid="302">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get svc kiada
+NAME        TYPE          CLUSTER-IP    EXTERNAL-IP    PORT(S)         AGE
+kiada       LoadBalancer  10.19.243.17  35.246.179.22  8080:30838/TCP  82s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="60f1a859d360ce5da84bf041dd753eee" data-text-hash="b281e7d2a6ac708e6c516b05c8ada261" id="303" refid="303">
+<p>The external IP is now displayed. This means that the load balancer is ready to forward requests to your application for clients around the world.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="304" refid="304">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ac09545f071e4f8a97a3321f6a2f3f5a" data-text-hash="0ea646fe0d45bc96b9bc71dc127688c6" id="305" refid="305">
+<p> If you deployed your cluster with Docker Desktop, the load balancer&#8217;s IP address is shown as <code>localhost</code>, referring to your Windows or macOS machine, not the VM where Kubernetes and the application runs. If you use Minikube to create the cluster, no load balancer is created, but you can access the service in another way. More on this later.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="941e9627ed55c376f8550987e422977a" data-text-hash="3c7ad7f2ad3e8c48e79af2cdc5224369" id="306" refid="306">
+<h4>Accessing your application through the load balancer</h4>
+</div>
+<div class="readable-text" data-hash="9cb57f67e285e270736949d5c7337126" data-text-hash="9d3595274782e1004177d863d8d93b7d" id="307" refid="307">
+<p>You can now send requests to your application through the external IP and port of the service:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cf61b8bc06ca6126030878cee3a9f85d" data-text-hash="7be4746d3bc0f91ab23f2b1e2116816f" id="308" refid="308">
+<div class="code-area-container">
+<pre class="code-area">$ curl 35.246.179.22:8080
+Kiada version 0.1. Request processed by "kiada-9d785b578-p449x". Client IP: ::ffff:1.2.3.4</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="309" refid="309">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a569e759efeafc5c0838b3f8b794d62e" data-text-hash="17c7e5bc53236701eada0f3ff5839b5c" id="310" refid="310">
+<p> If you use Docker Desktop, the service is available at <code>localhost:8080</code> from within your host operating system. Use curl or your browser to access it.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="276a44f24310a4ee1676b55953175f3f" data-text-hash="46f068cad08feebf74abe510cd40969c" id="311" refid="311">
+<p>Congratulations! If you use Google Kubernetes Engine, you&#8217;ve successfully published your application to users across the globe. Anyone who knows its IP and port can now access it. If you don&#8217;t count the steps needed to deploy the cluster itself, only two simple commands were needed to deploy your application:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="0f90be5aa90499286d30b4444b2c9373" data-text-hash="6003f749a3c81e2a6dea07cddb61b12e" id="312" refid="312"><code class="codechar">kubectl create deployment</code> and</li>
+<li class="readable-text" data-hash="c5b66a42b7b88496b55c65b5682e38bb" data-text-hash="d4d308e237e6999952f21b1854b9b52d" id="313" refid="313"><code>kubectl expose deployment</code>.</li>
+</ul>
+<div class="readable-text" data-hash="ddb1ed00f1974ae070d878ec78f60578" data-text-hash="04ea3ce454a18e65e0850d68f90c3dd0" id="314" refid="314">
+<h4>Accessing your application when a load balancer isn&#8217;t available</h4>
+</div>
+<div class="readable-text" data-hash="5dd2e733613053c334232c83ef179a3d" data-text-hash="097d729a788e951d98a0b004221978cd" id="315" refid="315">
+<p>Not all Kubernetes clusters have mechanisms to provide a load balancer. The cluster provided by Minikube is one of them. If you create a service of type LoadBalancer, the service itself works, but there is no load balancer. Kubectl always shows the external IP as <code>&lt;pending&gt;</code> and you must use a different method to access the service.</p>
+</div>
+<div class="readable-text" data-hash="b66be645cdbc77c6e17cb4555b0e1630" data-text-hash="21952b594f9d419d57b1023441ef8d05" id="316" refid="316">
+<p>Several methods of accessing services exist. You can even bypass the service and access individual pods directly, but this is mostly used for troubleshooting. You&#8217;ll learn how to do this in chapter 5. For now, let&#8217;s explore the next easier way to access your service if no load balancer is available.</p>
+</div>
+<div class="readable-text" data-hash="32cc6018ee96f0f0fcf4e4b9648d6ab3" data-text-hash="8158ef6515facaecd5b9d2b72babbde8" id="317" refid="317">
+<p>Minikube can tell you where to access the service if you use the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5bcccddcc948bd18dd49e404ab674c07" data-text-hash="426addfccdb2c11fc8041a376e8fc732" id="318" refid="318">
+<div class="code-area-container">
+<pre class="code-area">$ minikube service kiada --url
+http://192.168.99.102:30838</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="795a72e9ecdeca1ceedcabd0dcad033c" data-text-hash="9dbf67353e29cf0f58483a55de9d9c8d" id="319" refid="319">
+<p>The command prints out the URL of the service. You can now point <code>curl</code> or your browser to that URL to access your application:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6f383751a5d3509a8c19e209809b82df" data-text-hash="3b8684094bc50e419162b757922a51c9" id="320" refid="320">
+<div class="code-area-container">
+<pre class="code-area">$ curl http://192.168.99.102:30838
+Kiada version 0.1. Request processed by "kiada-9d785b578-p449x". Client IP: ::ffff:172.17.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="321" refid="321">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="283419ddd267b6c60b817c7261b9456b" data-text-hash="0ecd2324941d357039fcda0e93bd895d" id="322" refid="322">
+<p> If you omit the <code>--url</code> option when running the <code>minikube service</code> command, your browser opens and loads the service URL.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="86bc1c9defa2a9fdc22f277d262f8e03" data-text-hash="2f2e46f80d04ce5ab5e4c8601e36db50" id="323" refid="323">
+<p>You may wonder where this IP address and port come from. This is the IP of the Minikube virtual machine. You can confirm this by executing the <code>minikube ip</code> command. The Minikube VM is also your single worker node. The port <code>30838</code> is the so-called <i>node port</i>. It&#8217;s the port on the worker node that forwards connections to your service. You may have noticed the port in the service&#8217;s port list when you ran the <code>kubectl get svc</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="73516bf8749448fb5b59593918839347" data-text-hash="c83a224cfff9743afaad72e35015275a" id="324" refid="324">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get svc kiada
+NAME        TYPE          CLUSTER-IP    EXTERNAL-IP    PORT(S)         AGE
+kiada       LoadBalancer  10.19.243.17  &lt;pending&gt;      8080:30838/TCP  82s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="46c9382cc0957159ded7de60256dccb8" data-text-hash="8f9ec115aff64f4958bb2fa6aa3a9652" id="325" refid="325">
+<p>Your service is accessible via this port number on all your worker nodes, regardless of whether you&#8217;re using Minikube or any other Kubernetes cluster.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="326" refid="326">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="1fcec9062c0a8a230a654e16cb3963cc" data-text-hash="b32b4c84f7e3ec6ff542cefae4a3d404" id="327" refid="327">
+<p> If you use Docker Desktop, the VM running Kubernetes can&#8217;t be reached from your host OS through the VM&#8217;s IP. You can access the service through the node port only within the VM by logging into it using the special container as described in section 3.1.1.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="91cd0418ba0bb0925a5d2ab4b8fe1145" data-text-hash="0a97dacfbac3653f0e820970449fb5af" id="328" refid="328">
+<p>If you know the IP of at least one of your worker nodes, you should be able to access your service through this <code>IP:port</code> combination, provided that firewall rules do not prevent you from accessing the port.</p>
+</div>
+<div class="readable-text" data-hash="527c07cc5f238e5ab6df00af535a0e03" data-text-hash="c4b24d2fa0247121dde248d01383a6d5" id="329" refid="329">
+<p>The next figure shows how external clients access the application via the node ports.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="17e99d2fd9389f2931707a1444ff5f68" data-text-hash="78de020691886a29ecff1e21239e04b5" id="330" refid="330">
+<h5>Figure 3.11 Connection routing through a service&#8217;s node port</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="217" id="Picture_119" loading="lazy" src="EPUB/images/03image012.png" width="954">
+</div>
+<div class="readable-text" data-hash="20311927c4b3012f14e4d37329dd5caf" data-text-hash="7e94427b5e7c13c32f12d0bd5c42495c" id="331" refid="331">
+<p>To connect this to what I mentioned earlier about the load balancer forwarding connections to the nodes and the nodes then forwarding them to the containers: the node ports are exactly where the load balancer sends incoming requests to. Kubernetes then ensures that they are forwarded to the application running in the container. You&#8217;ll learn how it does this in chapter 10, as we delve deeper into services. Don&#8217;t lose too much time thinking about it until then. Instead, let&#8217;s play a little more with our cluster to see what else Kubernetes can do.</p>
+</div>
+<div class="readable-text" data-hash="f24922e2372c205937bb7d7716ffe9da" data-text-hash="416a2b8cc1da6db50908f04868e49429" id="332" refid="332">
+<h3 id="sigil_toc_id_49">3.3.3&#160;Horizontally scaling the application</h3>
+</div>
+<div class="readable-text" data-hash="2253850d42a5517c18e7133457acb087" data-text-hash="bee19159188e218305cd4b1ed99668b8" id="333" refid="333">
+<p>You now have a running application that is represented by a Deployment and exposed to the world by a Service object. Now let&#8217;s create some additional magic.</p>
+</div>
+<div class="readable-text" data-hash="d6917e91a4cbda1dff1d6b01b32855c8" data-text-hash="242458480010bfef9fea159cbdf055dc" id="334" refid="334">
+<p>One of the major benefits of running applications in containers is the ease with which you can scale your application deployments. You&#8217;re currently running a single instance of your application. Imagine you suddenly see many more users using your application. The single instance can no longer handle the load. You need to run additional instances to distribute the load and provide service to your users. This is known as <i>scaling out</i>. With Kubernetes, it&#8217;s trivial to do.</p>
+</div>
+<div class="readable-text" data-hash="d20b666998377f915fa1f0e0d41499c2" data-text-hash="e5682228656c465832d8e0768d34a691" id="335" refid="335">
+<h4>Increasing the number of running application instances</h4>
+</div>
+<div class="readable-text" data-hash="0afe9a08e56e1e23f7d4348f13c8c6f5" data-text-hash="3a0f01fdcf3bc4741bd50a902ba4fac8" id="336" refid="336">
+<p>To deploy your application, you&#8217;ve created a Deployment object. By default, it runs a single instance of your application. To run additional instances, you only need to scale the Deployment object with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="86105c864e80c25b95d13338b5d94aaa" data-text-hash="bb7a8c998bc3c9bda4d1cd993145c614" id="337" refid="337">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale deployment kiada --replicas=3
+deployment.apps/kiada scaled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7feb85195b1e433cae1a8504f53b4bfd" data-text-hash="671957d7e0e4d41f320d123e5ac254cf" id="338" refid="338">
+<p>You&#8217;ve now told Kubernetes that you want to run three exact copies or <i>replicas</i> of your pod. Note that you haven&#8217;t instructed Kubernetes what to do. You haven&#8217;t told it to add two more pods. You just set the new desired number of replicas and let Kubernetes determine what action it must take to reach the new desired state.</p>
+</div>
+<div class="readable-text" data-hash="2c49b3b51392d9d2a104c360ff44b52e" data-text-hash="4ebc573b22cf2754d9e028c011ab110c" id="339" refid="339">
+<p>This is one of the most fundamental principles in Kubernetes. Instead of telling Kubernetes what to do, you simply set a new desired state of the system and let Kubernetes achieve it. To do this, it examines the current state, compares it with the desired state, identifies the differences and determines what it must do to reconcile them.</p>
+</div>
+<div class="readable-text" data-hash="caaf219c4b466e6a9d707b6b98085ecf" data-text-hash="f856c185e83f0af3e8be885ceeb81607" id="340" refid="340">
+<h4>Seeing the results of the scale-out</h4>
+</div>
+<div class="readable-text" data-hash="b802084d95abb4f827984986b232de7c" data-text-hash="6b98a8abf531ec8352db4d39fc6f0459" id="341" refid="341">
+<p>Although it&#8217;s true that the <code>kubectl scale deployment</code> command seems imperative, since it apparently tells Kubernetes to scale your application, what the command actually does is modify the specified Deployment object. As you&#8217;ll see in a later chapter, you could have simply edited the object instead of giving the imperative command. Let&#8217;s view the Deployment object again to see how the scale command has affected it:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="eec8a0f18cc5151bfa59b7547c8f8dff" data-text-hash="76519908df6195107a34ddcc30ac7c23" id="342" refid="342">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get deploy
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+kiada   3/3     3            3           18m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6e08bcb22db857ba56fc1676c55ebf71" data-text-hash="2de597c184819f3a9df88e87fa456f1c" id="343" refid="343">
+<p>Three instances are now up to date and available and three of three containers are ready. This isn&#8217;t clear from the command output, but the three containers are not part of the same pod instance. There are three pods with one container each. You can confirm this by listing pods:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bd0d35814f2bb0d536f39a9ae63c16fb" data-text-hash="38ebb4937a5c0b8ff74889b836bab257" id="344" refid="344">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+kiada-9d785b578-58vhc   1/1     Running   0          17s
+kiada-9d785b578-jmnj8   1/1     Running   0          17s
+kiada-9d785b578-p449x   1/1     Running   0          18m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9d5c88d4909e2d544890318597c0110e" data-text-hash="cfb9ab5bf8bc80ef7bafb445ab733dcf" id="345" refid="345">
+<p>As you can see, three pods now exist. As indicated in the <code>READY</code> column, each has a single container, and all the containers are ready. All the pods are <code>Running</code>.</p>
+</div>
+<div class="readable-text" data-hash="c2b6128d5519915347a5bf2d5aa2c2fb" data-text-hash="eea60ee6f6ba8bb933f978a1ff3b903b" id="346" refid="346">
+<h4>Displaying the pods&#8217; host node when listing pods</h4>
+</div>
+<div class="readable-text" data-hash="c2dd6898a43f6b269acdd782f574a506" data-text-hash="8bb897358197268b32369e11bcf5f655" id="347" refid="347">
+<p>If you use a single-node cluster, all your pods run on the same node. But in a multi-node cluster, the three pods should be distributed throughout the cluster. To see which nodes the pods were scheduled to, you can use the <code>-o</code> <code>wide</code> option to display a more detailed pod list:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6fc26157e4a5029559ee8a9d41c22623" data-text-hash="e6aa2eed6582fe3255f6979316c42f25" id="348" refid="348">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -o wide
+NAME                   ...  IP          NODE 
+kiada-9d785b578-58vhc  ...  10.244.1.5  kind-worker    #A
+kiada-9d785b578-jmnj8  ...  10.244.2.4  kind-worker2    #B
+kiada-9d785b578-p449x  ...  10.244.2.3  kind-worker2    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUG9kIHNjaGVkdWxlZCB0byBvbmUgbm9kZQojQiBUd28gcG9kcyBzY2hlZHVsZWQgdG8gYW5vdGhlciBub2Rl"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="349" refid="349">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="44d63b5647e69d0f856fc25753abdb10" data-text-hash="663e2c47df75d009b729cf684b00f79b" id="350" refid="350">
+<p> You can also use the <code>-o wide</code> output option to see additional information when listing other object types.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9b53f1bbd753d8a8c80eddb7120f965c" data-text-hash="f960ade391dc3521bc81ea20eddc8f3e" id="351" refid="351">
+<p>The wide output shows that one pod was scheduled to one node, whereas the other two were both scheduled to a different node. The Scheduler usually distributes pods evenly, but it depends on how it&#8217;s configured. You&#8217;ll learn more about scheduling in chapter 21.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="4dfff321ab91ea6b1b37e7bdd820f3b3" data-text-hash="04ed5fe7b99ea56d8c208aa00104f50e" id="352" refid="352">
+<h5>Does the host node matter?</h5>
+</div>
+<div class="readable-text" data-hash="2b45baaa45151e6e9d77f6580e3aba59" data-text-hash="113d33890731fabcb0e85fbf9dc5c30d" id="353" refid="353">
+<p>Regardless of the node they run on, all instances of your application have an identical OS environment, because they run in containers created from the same container image. You may remember from the previous chapter that the only thing that might be different is the OS kernel, but this only happens when different nodes use different kernel versions or load different kernel modules.</p>
+</div>
+<div class="readable-text" data-hash="66369261985f5a39f7398be018acf381" data-text-hash="79deb7bf39c4be9f62aeb4f5125aa1b8" id="354" refid="354">
+<p>In addition, each pod gets its own IP and can communicate in the same way with any other pod - it doesn&#8217;t matter if the other pod is on the same worker node, another node located in the same server rack or even a completely different data center.</p>
+</div>
+<div class="readable-text" data-hash="1dfd623f11627e50d9bfe983203ad9f2" data-text-hash="818e27648391fea5c81dd47f38ea0c4f" id="355" refid="355">
+<p>So far, you&#8217;ve set no resource requirements for the pods, but if you had, each pod would have been allocated the requested amount of compute resources. It shouldn&#8217;t matter to the pod which node provides these resources, as long as the pod&#8217;s requirements are met.</p>
+</div>
+<div class="readable-text" data-hash="aca27953ae722a8594978a5f88915478" data-text-hash="bdd12a6096fa1275e51c22e3c04c4821" id="356" refid="356">
+<p>Therefore, you shouldn&#8217;t care where a pod is scheduled to. It&#8217;s also why the default <code>kubectl</code> <code>get</code> <code>pods</code> command doesn&#8217;t display information about the worker nodes for the listed pods. In the world of Kubernetes, it&#8217;s just not that important.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="539831188ba29206c0b1fb2eb596828a" data-text-hash="2c5d64760defa0efdc5ceaa5cdbea41f" id="357" refid="357">
+<p>As you can see, scaling an application is incredibly easy. Once your application is in production and there is a need to scale it, you can add additional instances with a single command without having to manually install, configure and run additional copies.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="358" refid="358">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d20a58a0cd3c7f5812e84725cd8a6bb8" data-text-hash="35f8efd8f1b564492f73694372489613" id="359" refid="359">
+<p> The app itself must support horizontal scaling. Kubernetes doesn&#8217;t magically make your app scalable; it merely makes it trivial to replicate it.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="dcc9475c677f2af1f1146eba7f5b5d5f" data-text-hash="25e7d15c230947e28d8cc8013bb58d3b" id="360" refid="360">
+<h4>Observing requests hitting all three pods when using the service</h4>
+</div>
+<div class="readable-text" data-hash="81954958783358a3810cc83bff308d5e" data-text-hash="d27c218edbf7a930f4437a9f140b56fd" id="361" refid="361">
+<p>Now that multiple instances of your app are running, let&#8217;s see what happens when you hit the service URL again. Will the response come from the same instance every time? Here&#8217;s the answer:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e07e6c44613d7cfd426d48c495d51d0f" data-text-hash="c24faf0de76cb77a850b1c70373d2613" id="362" refid="362">
+<div class="code-area-container">
+<pre class="code-area">$ curl 35.246.179.22:8080
+Kiada version 0.1. Request processed by "kiada-9d785b578-58vhc". Client IP: ::ffff:1.2.3.4    #A
+$ curl 35.246.179.22:8080
+Kiada version 0.1. Request processed by "kiada-9d785b578-p449x". Client IP: ::ffff:1.2.3.4    #B
+$ curl 35.246.179.22:8080
+Kiada version 0.1. Request processed by "kiada-9d785b578-jmnj8". Client IP: ::ffff:1.2.3.4    #C
+$ curl 35.246.179.22:8080
+Kiada version 0.1. Request processed by "kiada-9d785b578-p449x". Client IP: ::ffff:1.2.3.4    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVxdWVzdCByZWFjaGVzIHRoZSBmaXJzdCBwb2QKI0IgUmVxdWVzdCByZWFjaGVzIHRoZSB0aGlyZCBwb2QKI0MgUmVxdWVzdCByZWFjaGVzIHRoZSBzZWNvbmQgcG9kCiNEIFJlcXVlc3QgcmVhY2hlcyB0aGUgdGhpcmQgcG9kIGFnYWlu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3e80a6d3c428b3e12d0f6a79e4c544a9" data-text-hash="8688ef914934bdd2ae3311424b7f5df4" id="363" refid="363">
+<p>If you look closely at the responses, you&#8217;ll see that they correspond to the names of the pods. Each request arrives at a different pod in random order. This is what services in Kubernetes do when more than one pod instance is behind them. They act as load balancers in front of the pods. Let&#8217;s visualize the system using the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="44ac1a5a2a87c906c9e2b509ff38f785" data-text-hash="5cacb5c95c1ceb0dc77146b7472da778" id="364" refid="364">
+<h5>Figure 3.12 Load balancing across multiple pods backing the same service</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="428" id="Picture_120" loading="lazy" src="EPUB/images/03image013.png" width="975">
+</div>
+<div class="readable-text" data-hash="f48e70f25754d70ee0f83f083bfd11bb" data-text-hash="9b83a84e0ff2f7eb5d5640f13891eeec" id="365" refid="365">
+<p>As the figure shows, you shouldn&#8217;t confuse this load balancing mechanism, which is provided by the Kubernetes service itself, with the additional load balancer provided by the infrastructure when running in GKE or another cluster running in the cloud. Even if you use Minikube and have no external load balancer, your requests are still distributed across the three pods by the service itself. If you use GKE, there are actually <i>two</i> load balancers in play. The figure shows that the load balancer provided by the infrastructure distributes requests across the nodes, and the service then distributes requests across the pods.</p>
+</div>
+<div class="readable-text" data-hash="c44bb1bc7b931d45c53847b5ef74b746" data-text-hash="6eca3cffeb3b2dc9516f9c43d6512ba8" id="366" refid="366">
+<p>I know this may be very confusing right now, but it should all become clear in chapter 10.</p>
+</div>
+<div class="readable-text" data-hash="0d840b261b4e055256f4a6e2f81fd282" data-text-hash="7589ba1e1aa052d40889c16f16a9df8f" id="367" refid="367">
+<h3 id="sigil_toc_id_50">3.3.4&#160;Understanding the deployed application</h3>
+</div>
+<div class="readable-text" data-hash="9fc59b1d8c3bb4070540763ce2817c77" data-text-hash="426271ef0b33c179602dd160afba7624" id="368" refid="368">
+<p>To conclude this chapter, let&#8217;s review what your system consists of. There are two ways to look at your system &#8211; the logical and the physical view. You&#8217;ve just seen the physical view in figure 3.12. There are three running containers that are deployed on three worker nodes (a single node when using Minikube). If you run Kubernetes in the cloud, the cloud infrastructure has also created a load balancer for you. Docker Desktop also creates a type of local load balancer. Minikube doesn&#8217;t create a load balancer, but you can access your service directly through the node port.</p>
+</div>
+<div class="readable-text" data-hash="a83988c08b90f5cb00dd2d027a2b81eb" data-text-hash="d1c78353cba109eb10a2715bfed5bea9" id="369" refid="369">
+<p>While differences in the physical view of the system in different clusters exist, the logical view is always the same, whether you use a small development cluster or a large production cluster with thousands of nodes. If you&#8217;re not the one who manages the cluster, you don&#8217;t even need to worry about the physical view of the cluster. If everything works as expected, the logical view is all you need to worry about. Let&#8217;s take a closer look at this view.</p>
+</div>
+<div class="readable-text" data-hash="b4e4379229eb2d9c56ccafa203c3d31f" data-text-hash="d1c7939e62b31bca4d0bf0f2b7266e1d" id="370" refid="370">
+<h4>Understanding the API objects representing your application</h4>
+</div>
+<div class="readable-text" data-hash="155b366083a420b3d5642b1a586cc507" data-text-hash="0647a9122bbdedbe3467c08beed6cf39" id="371" refid="371">
+<p>The logical view consists of the objects you&#8217;ve created in the Kubernetes API &#8211; either directly or indirectly. The following figure shows how the objects relate to each other.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="69ddc7600126b623c872e81b81229adf" data-text-hash="97ab50cd8390333787ee3d73f87265e4" id="372" refid="372">
+<h5>Figure 3.13 Your deployed application consists of a Deployment, several Pods, and a Service.</h5>
+<img alt="Diagram Description automatically generated" data-processed="true" height="392" id="Picture_121" loading="lazy" src="EPUB/images/03image014.png" width="972">
+</div>
+<div class="readable-text" data-hash="77f56b92c74ac7b5f3e5d3170bfc327a" data-text-hash="c665a5530c457985318a6471678f4be1" id="373" refid="373">
+<p>The objects are as follows:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="2fb24920b422025b5366aadd85a256db" data-text-hash="2fb24920b422025b5366aadd85a256db" id="374" refid="374">the Deployment object you created,</li>
+<li class="readable-text" data-hash="f063c65b33dcfe659a11bb2d552d0d89" data-text-hash="f063c65b33dcfe659a11bb2d552d0d89" id="375" refid="375">the Pod objects that were automatically created based on the Deployment, and</li>
+<li class="readable-text" data-hash="4f6d01c1ca90f076fbbe87fe6c4e4a5f" data-text-hash="4f6d01c1ca90f076fbbe87fe6c4e4a5f" id="376" refid="376">the Service object you created manually.</li>
+</ul>
+<div class="readable-text" data-hash="ebbab64ba6ffa2f4daee2c68edff730e" data-text-hash="e43772ced91ebbe1fea0bfe07d398672" id="377" refid="377">
+<p>There are other objects between the three just mentioned, but you don&#8217;t need to know them yet. You&#8217;ll learn about them in the following chapters.</p>
+</div>
+<div class="readable-text" data-hash="f12aa90a0e2e7a53b2e94346f943c350" data-text-hash="34f6968a5e37211af4ee3b9ca917593b" id="378" refid="378">
+<p>Remember when I explained in chapter 1 that Kubernetes abstracts the infrastructure? The logical view of your application is a great example of this. There are no nodes, no complex network topology, no physical load balancers. Just a simple view that only contains your applications and the supporting objects. Let&#8217;s look at how these objects fit together and what role they play in your small setup.</p>
+</div>
+<div class="readable-text" data-hash="ee0fadb1bb89719cdf3d01f7d19c5e9f" data-text-hash="546eb80e3cecf7288afac04786b7beea" id="379" refid="379">
+<p>The Deployment object represents an application deployment. It specifies which container image contains your application and how many replicas of the application Kubernetes should run. Each replica is represented by a Pod object. The Service object represents a single communication entry point to these replicas.</p>
+</div>
+<div class="readable-text" data-hash="27ae482ae24c784ed28cc97a73ecdec6" data-text-hash="6c6fc33ff175db790dceaf6a26734002" id="380" refid="380">
+<h4>Understanding the pods</h4>
+</div>
+<div class="readable-text" data-hash="479537c90d7d4a8ea4ec04d027dcfb98" data-text-hash="6c18f5ebc8e4ee22fed4b90aa6dca5fc" id="381" refid="381">
+<p>The essential and most important part of your system are the pods. Each pod definition contains one or more containers that make up the pod. When Kubernetes brings a pod to life, it runs all the containers specified in its definition. As long as a Pod object exists, Kubernetes will do its best to ensure that its containers keep running. It only shuts them down when the Pod object is deleted.</p>
+</div>
+<div class="readable-text" data-hash="5da36f3ac6463f5744112aaa856d6ddc" data-text-hash="98f94d90a9c54596cc2db28e8b15863b" id="382" refid="382">
+<h4>Understanding the role of the Deployment</h4>
+</div>
+<div class="readable-text" data-hash="3f1f37e559cbbb1a722a40a6cd477890" data-text-hash="67f9ddb20aaebd90a118f2517819842c" id="383" refid="383">
+<p>When you first created the Deployment object, only a single Pod object was created. But when you increased the desired number of replicas on the Deployment, Kubernetes created additional replicas. Kubernetes ensures that the actual number of pods always matches the desired number.</p>
+</div>
+<div class="readable-text" data-hash="05a617a857945ef838b8ea66dd8d86ee" data-text-hash="5af8b96718cefd9daa86df501baca19f" id="384" refid="384">
+<p>If one or more pods disappear or their status is unknown, Kubernetes replaces them to bring the actual number of pods back to the desired number of replicas. A pod disappears when someone or something deletes it, whereas a pod&#8217;s status is unknown when the node it is running on no longer reports its status due to a network or node failure.</p>
+</div>
+<div class="readable-text" data-hash="f8f5750eade79bf0cb4e07ff6a3a220b" data-text-hash="970922e09e10f13589a0d375d3e1e05d" id="385" refid="385">
+<p>Strictly speaking, a Deployment results in nothing more than the creation of a certain number of Pod objects. You may wonder if you can create Pods directly instead of having the Deployment create them for you. You can certainly do this, but if you wanted to run multiple replicas, you&#8217;d have to manually create each pod individually and make sure you give each one a unique name. You&#8217;d then also have to keep a constant eye on your pods to replace them if they suddenly disappear or the node on which they run fails. And that&#8217;s exactly why you almost never create pods directly but use a Deployment instead.</p>
+</div>
+<div class="readable-text" data-hash="1998db45eff968c9707e7bc323ea1b28" data-text-hash="29e845580f448352447d75ead75b8f46" id="386" refid="386">
+<h4>Understanding why you need a service</h4>
+</div>
+<div class="readable-text" data-hash="b30a3bd412cd50eab44073b45e3d0ea1" data-text-hash="83287099d16ceaaec0741e85a33ba3d8" id="387" refid="387">
+<p>The third component of your system is the Service object. By creating it, you tell Kubernetes that you need a single communication entry point to your pods. The service gives you a single IP address to talk to your pods, regardless of how many replicas are currently deployed. If the service is backed by multiple pods, it acts as a load balancer. But even if there is only one pod, you still want to expose it through a service. To understand why, you need to learn an important detail about pods.</p>
+</div>
+<div class="readable-text" data-hash="666e11a283d65d53bc0ae7b634f75263" data-text-hash="01cc44d950bb0250f85d5d3306ce5121" id="388" refid="388">
+<p>Pods are ephemeral. A pod may disappear at any time. This can happen when its host node fails, when someone inadvertently deletes the pod, or when the pod is evicted from an otherwise healthy node to make room for other, more important pods. As explained in the previous section, when pods are created through a Deployment, a missing pod is immediately replaced with a new one. This new pod is not the same as the one it replaces. It&#8217;s a completely new pod, with a new IP address.</p>
+</div>
+<div class="readable-text" data-hash="ef5f4a94d9c9aa700cebc3f0c9b4601d" data-text-hash="05964c7e1bd80d6c0aeb3448444bb454" id="389" refid="389">
+<p>If you weren&#8217;t using a service and had configured your clients to connect directly to the IP of the original pod, you would now need to reconfigure all these clients to connect to the IP of the new pod. This is not necessary when using a service. Unlike pods, services aren&#8217;t ephemeral. When you create a service, it is assigned a static IP address that never changes during lifetime of the service.</p>
+</div>
+<div class="readable-text" data-hash="9ae44e5eb8cb0356318f78ac75f2d830" data-text-hash="23b79d169ed30a8f728532604534061c" id="390" refid="390">
+<p>Instead of connecting directly to the pod, clients should connect to the IP of the service. This ensures that their connections are always routed to a healthy pod, even if the set of pods behind the service is constantly changing. It also ensures that the load is distributed evenly across all pods should you decide to scale the deployment horizontally.</p>
+</div>
+<div class="readable-text" data-hash="2d48a2960808e79f2f413d09ad970e30" data-text-hash="15161bba9bcb7c4e45548c7b42d8a673" id="391" refid="391">
+<h2 id="sigil_toc_id_51">3.4&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="90439be6942bf788c2ef2caf8aa4667d" data-text-hash="bb4c0e55832fecd74e3675b1b9e8a3db" id="392" refid="392">
+<p>In this hands-on chapter, you&#8217;ve learned:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="a3e236eec41cd8f81cc1df3d15a43129" data-text-hash="a3e236eec41cd8f81cc1df3d15a43129" id="393" refid="393">Virtually all cloud providers offer a managed Kubernetes option. They take on the burden of maintaining your Kubernetes cluster, while you just use its API to deploy your applications.</li>
+<li class="readable-text" data-hash="9065491b4775069436c08c22f62c4b4f" data-text-hash="9065491b4775069436c08c22f62c4b4f" id="394" refid="394">You can also install Kubernetes in the cloud yourself, but this has often proven not to be the best idea until you master all aspects of managing Kubernetes.</li>
+<li class="readable-text" data-hash="c0367f7ea1d95d859f80be71b7a6ec79" data-text-hash="c0367f7ea1d95d859f80be71b7a6ec79" id="395" refid="395">You can install Kubernetes locally, even on your laptop, using tools such as Docker Desktop or Minikube, which run Kubernetes in a Linux VM, or kind, which runs the master and worker nodes as Docker containers and the application containers inside those containers.</li>
+<li class="readable-text" data-hash="b19bad790bbac45c5184c3dbb0e3e406" data-text-hash="b19bad790bbac45c5184c3dbb0e3e406" id="396" refid="396">Kubectl, the command-line tool, is the usual way you interact with Kubernetes. A web-based dashboard also exists but is not as stable and up to date as the CLI tool.</li>
+<li class="readable-text" data-hash="080cd0b4f2c94dc06368dc81c9fca7fd" data-text-hash="080cd0b4f2c94dc06368dc81c9fca7fd" id="397" refid="397">To work faster with kubectl, it is useful to define a short alias for it and enable shell completion.</li>
+<li class="readable-text" data-hash="992065bfe9323c5f961eacff6be34e05" data-text-hash="f7007f0517ea19bf143cf483011aebc5" id="398" refid="398">An application can be deployed using <code>kubectl create deployment</code>. It can then be exposed to clients by running <code>kubectl expose deployment</code>. Horizontally scaling the application is trivial: <code>kubectl scale deployment</code> instructs Kubernetes to add new replicas or removes existing ones to reach the number of replicas you specify.</li>
+<li class="readable-text" data-hash="5ece4d5c6710d8ae5c4b68106382f167" data-text-hash="5ece4d5c6710d8ae5c4b68106382f167" id="399" refid="399">The basic unit of deployment is not a container, but a pod, which can contain one or more related containers.</li>
+<li class="readable-text" data-hash="a42ee0e194a291efd9c56966aeb5b861" data-text-hash="f9a07a88b79585b771b16218e0d19080" id="400" refid="400">Deployments, Services, Pods and Nodes are Kubernetes objects/resources. You can list them with <code>kubectl get</code> and inspect them with <code>kubectl describe</code>.</li>
+<li class="readable-text" data-hash="3ffe9fcbc3eef5068a86cbf18984f487" data-text-hash="3ffe9fcbc3eef5068a86cbf18984f487" id="401" refid="401">The Deployment object deploys the desired number of Pods, while the Service object makes them accessible under a single, stable IP address.</li>
+<li class="readable-text" data-hash="5dd626a874ad48269688a40857ba25f8" data-text-hash="684696cd8cf8cba39e849f62babab8d1" id="402" refid="402">Each service provides internal load balancing in the cluster, but if you set the type of service to <code>LoadBalancer</code>, Kubernetes will ask the cloud infrastructure it runs in for an additional load balancer to make your application available at a publicly accessible address.</li>
+</ul>
+<div class="readable-text" data-hash="4f9b9a0d9bad97eecb1b061c6d0b1a01" data-text-hash="7afd66406caded715b1f3550101284a5" id="403" refid="403">
+<p>You&#8217;ve now completed your first guided tour around the bay. Now it&#8217;s time to start learning the ropes, so that you&#8217;ll be able to sail independently. The next part of the book focuses on the different Kubernetes objects and how/when to use them. You&#8217;ll start with the most important one &#8211; the Pod.</p>
+</div></div>
+
+        </body>
+        
+        

@@ -1,0 +1,1958 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="fceabdf8b01c5defa6a53fd8f1f527df" data-text-hash="9c5661bed220e6245b07b8b9676e18d3" id="1" refid="1">
+<h1>9 Configuration via ConfigMaps, Secrets, and the Downward API</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="7971946172bff4a996975effa91326a4" data-text-hash="7971946172bff4a996975effa91326a4" id="2" refid="2">Setting the command and arguments for the container's main process</li>
+<li class="readable-text" data-hash="5efa09256fd0945b804a2882073dc638" data-text-hash="5efa09256fd0945b804a2882073dc638" id="3" refid="3">Setting environment variables</li>
+<li class="readable-text" data-hash="f5b4f9fe421a82fbae09c5e5bb069a93" data-text-hash="f5b4f9fe421a82fbae09c5e5bb069a93" id="4" refid="4">Storing configuration in config maps</li>
+<li class="readable-text" data-hash="31b1970cef029ac043ade14fc3026502" data-text-hash="31b1970cef029ac043ade14fc3026502" id="5" refid="5">Storing sensitive information in secrets</li>
+<li class="readable-text" data-hash="a34b0253069306c5a2489f099effbbfd" data-text-hash="a34b0253069306c5a2489f099effbbfd" id="6" refid="6">Using the Downward API to expose pod metadata to the application</li>
+<li class="readable-text" data-hash="37e9971f4a712631208e12fcb7d46287" data-text-hash="37e9971f4a712631208e12fcb7d46287" id="7" refid="7">Using configMap, secret, downwardAPI and projected volumes</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="5bb218dad1ff2bc44c671d5246dfd608" data-text-hash="953120bab7899e2fe045ca46af1150db" id="8" refid="8">
+<p>You&#8217;ve now learned how to use Kubernetes to run an application process and attach file volumes to it. In this chapter, you&#8217;ll learn how to configure the application - either in the pod manifest itself, or by referencing other API objects within it. You&#8217;ll also learn how to inject information about the pod itself into the application running inside it.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="9" refid="9">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4c21d97de5267f60f8eb31703e440fd9" data-text-hash="4ac9f6a26748652ebe576a3a22463009" id="10" refid="10">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter09</a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="2d2e581e9030109c6929b30219af0511" data-text-hash="df5e34311844c4ffb80e905792fac018" id="11" refid="11">
+<h2 id="sigil_toc_id_147">9.1&#160;Setting the command, arguments, and environment variables</h2>
+</div>
+<div class="readable-text" data-hash="d1b9819118d42f28dc051f0ce4dff6ce" data-text-hash="57b957206eb4e76f88894ec4c415275d" id="12" refid="12">
+<p>Like regular applications, containerized applications can be configured using command-line arguments, environment variables, and files.</p>
+</div>
+<div class="readable-text" data-hash="b4baf7ab24e8c7cad88b0b40c3214442" data-text-hash="d73c7c95676467e34ef2331a8a1c69f6" id="13" refid="13">
+<p>You learned that the command that is executed when a container starts is typically defined in the container image. The command is configured in the container&#8217;s Dockerfile using the <code>ENTRYPOINT</code> directive, while the arguments are typically specified using the <code>CMD</code> directive. Environment variables can also be specified using the the <code>ENV</code> directive in the Dockerfile. If the application is configured using configuration files, these can be added to the container image using the <code>COPY</code> directive. You&#8217;ve seen several examples of this in the previous chapters.</p>
+</div>
+<div class="readable-text" data-hash="b6d4e1c1ad3c6eba8e0d2be9c299f8e1" data-text-hash="972245c06cf5d89dffa85c48da597f2a" id="14" refid="14">
+<p>Let&#8217;s take the kiada application and make it configurable via command-line arguments and environment variables. The previous versions of the application all listen on port 8080. This will now be configurable via the <code>--listen-port</code> command line argument. Also, the application will read the initial status message from the environment variable <code>INITIAL_STATUS_MESSAGE</code>. Instead of just returning the hostname, the application now also returns the pod name and IP address, as well as the name of the cluster node on which it is running. The application obtains this information through environment variables. You can find the updated code in the book&#8217;s code repository. The container image for this new version is available at docker.io/luksa/kiada:0.4.</p>
+</div>
+<div class="readable-text" data-hash="2102cbba33c4e4f21388e3933e23de76" data-text-hash="584fe51e0b5d6abd639313b02e6c9c5b" id="15" refid="15">
+<p>The updated Dockerfile, which you can also find in the code repository, is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c96dec88e02780b6c34b6f423828a2c1" data-text-hash="3bd6aebd14aeeb675cdf8f740e314252" id="16" refid="16">
+<h5>Listing 9.1 A sample Dockerfile using several application configuration methods</h5>
+<div class="code-area-container">
+<pre class="code-area">FROM node:12
+COPY app.js /app.js
+COPY html/ /html
+ 
+ENV INITIAL_STATUS_MESSAGE="This is the default status message"    #A
+ 
+ENTRYPOINT ["node", "app.js"]                                      #B
+CMD ["--listen-port", "8080"]                                      #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgU2V0IGFuIGVudmlyb25tZW50IHZhcmlhYmxlCiNCIFNldCB0aGUgY29tbWFuZCB0byBydW4gd2hlbiB0aGUgY29udGFpbmVyIGlzIHN0YXJ0ZWQKI0MgU2V0IHRoZSBkZWZhdWx0IGNvbW1hbmQtbGluZSBhcmd1bWVudHM="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="daff385f3f735f7c43529254c1fab77e" data-text-hash="3a9d447e5bd809c2443f4eb6fec71116" id="17" refid="17">
+<p>Hardcoding the configuration into the container image is the same as hardcoding it into the application source code. This is not ideal because you must rebuild the image every time you change the configuration. Also, you should never include sensitive configuration data such as security credentials or encryption keys in the container image because anyone who has access to it can easily extract them.</p>
+</div>
+<div class="readable-text" data-hash="79e7530dd54592614b046c9de73a9181" data-text-hash="0d46ca64f145f87d7e1530a428938691" id="18" refid="18">
+<p>Instead, it&#8217;s much safer to store these files in a volume that you mount in the container. As you learned in the previous chapter, one way to do this is to store the files in a persistent volume. Another way is to use an <code>emptyDir</code> volume and an init container that fetches the files from secure storage and writes them to the volume. You should know how to do this if you&#8217;ve read the previous chapters, but there&#8217;s a better way. In this chapter, you&#8217;ll learn how to use special volume types to achieve the same result without using init containers. But first, let&#8217;s learn how to change the command, arguments, and environment variables without recreating the container image.</p>
+</div>
+<div class="readable-text" data-hash="743c79eb4bf10c892c5f9c19011f0a96" data-text-hash="e2ec15630dab6139884d03fbea290e38" id="19" refid="19">
+<h3 id="sigil_toc_id_148">9.1.1&#160;Setting the command and arguments</h3>
+</div>
+<div class="readable-text" data-hash="30f0585d52762991da228c3d65c8a360" data-text-hash="2c614fd0498777aa83445957a57893e6" id="20" refid="20">
+<p>When creating a container image, the command and its arguments are specified using the <code>ENTRYPOINT</code> and <code>CMD</code> directives in the Dockerfile. Since both directives accept array values, you can specify both the command and its arguments with one of these directives or split them between the two. When the container is executed, the two arrays are concatenated to produce the full command.</p>
+</div>
+<div class="readable-text" data-hash="296b79f4bd4512f617c3290447158fa2" data-text-hash="e3dca9f674b6d50d128e3afa9caea249" id="21" refid="21">
+<p>Kubernetes provides two fields that are analogous to Docker&#8217;s <code>ENTRYPOINT</code> and <code>CMD</code> directives. The two fields are called <code>command</code> and <code>args</code>, respectively. You specify these fields in the container definition in your pod manifest. As with Docker, the two fields accept array values, and the resulting command executed in the container is derived by concatenating the two arrays.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ae406ff71d1f0c0e974e7453ad9533ef" data-text-hash="3a914b85a5576f7ea9bf40b31e9ef217" id="22" refid="22">
+<h5>Figure 9.1 Overriding the command and arguments in the pod manifest</h5>
+<img alt="" data-processed="true" height="483" id="Picture_1" loading="lazy" src="EPUB/images/09image002.png" width="858">
+</div>
+<div class="readable-text" data-hash="e0496d62688952bfe94edffb974e3a5d" data-text-hash="4c0d068b0c9dbaead3021821bab3e9cd" id="23" refid="23">
+<p>Normally, you use the <code>ENTRYPOINT</code> directive to specify the bare command, and the <code>CMD</code> directive to specify the arguments. This allows you to override the arguments in the pod manifest without having to specify the command again. If you want to override the command, you can still do so. And you can do it without overriding the arguments.</p>
+</div>
+<div class="readable-text" data-hash="a9dfd34264ec15e9fc1c74823a4845b1" data-text-hash="b7f8724f0817aa2a25f732e4bca8ff9a" id="24" refid="24">
+<p>The following table shows the equivalent pod manifest field for each of the two Dockerfile directives.</p>
+</div>
+<div class="browsable-container" data-hash="af69a5ae33ccfd2d331db9467f3a1a17" data-text-hash="0fc576cb3ef30d6637968bbe69257fab" id="25" refid="25">
+<h5>Table 9.1 Specifying the command and arguments in the Dockerfile vs the pod manifest</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Dockerfile</p> </td>
+<td> <p>Pod manifest</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ENTRYPOINT
+</pre> </td>
+<td> <p></p><pre>command
+</pre> </td>
+<td> <p>The executable file that runs in the container. This may contain arguments in addition to the executable.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>CMD
+</pre> </td>
+<td> <p></p><pre>args
+</pre> </td>
+<td> <p>Additional arguments passed to the command specified with the <code>ENTRYPOINT</code> directive or the <code>command</code> field.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="70319c7598d794b9bbe3a075cc41f868" data-text-hash="664259096b7a1d1b4492864db7d72701" id="26" refid="26">
+<p>Let&#8217;s look at two examples of setting the <code>command</code> and <code>args</code> fields.</p>
+</div>
+<div class="readable-text" data-hash="610377e5e02cd2c41a4755fc257dca53" data-text-hash="35851222f9eecee145b3ef7504b89bcd" id="27" refid="27">
+<h4>Setting the command</h4>
+</div>
+<div class="readable-text" data-hash="d5e1d4528cb5a120d6604fa7e29d99dd" data-text-hash="41de2ddfc36e5b4e893448c4e4bb51a0" id="28" refid="28">
+<p>Imagine you want to run the Kiada application with CPU and heap profiling enabled. With Node.JS, you can enable profiling by passing the <code>--cpu-prof</code> and <code>--heap-prof</code> arguments to the <code>node</code> command. Instead of modifying the Dockerfile and rebuilding the image, you can do this by modifying the pod manifest, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3eee53dfd5289be998f51f24324f7787" data-text-hash="5146930502202aab33528685e047f3bc" id="29" refid="29">
+<h5>Listing 9.2 A container definition with the command specified</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.4
+    command: ["node", "--cpu-prof", "--heap-prof", "app.js"]    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgV2hlbiB0aGUgY29udGFpbmVyIGlzIHN0YXJ0ZWQsIHRoaXMgY29tbWFuZCBpcyBleGVjdXRlZCBpbnN0ZWFkIG9mIHRoZSBvbmUgZGVmaW5lZCBpbiB0aGUgY29udGFpbmVyIGltYWdl"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="758511f1f25ebdcef1a4da2bdfb81bd7" data-text-hash="a383ccfb83896bb93715f8fcf805adb8" id="30" refid="30">
+<p>When you deploy the pod in the listing, the <code>node --cpu-prof --heap-prof app.js</code> command is run instead of the default command specified in the Dockerfile, which is <code>node app.js</code>.</p>
+</div>
+<div class="readable-text" data-hash="a2ae1ef6efc4eefa28d7ea7b2b287234" data-text-hash="51fd0d7b12e94c971a1dc18c26a7e952" id="31" refid="31">
+<p>As you can see in the listing, the <code>command</code> field, just like its Dockerfile counterpart, accepts an array of strings representing the command to be executed. The array notation used in the listing is great when the array contains only a few elements, but becomes difficult to read as the number of elements increases. In this case, you&#8217;re better off using the following notation:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1c7781438df8fb7f513272d2be20ab25" data-text-hash="9857fb3050820e3af6958dc9b8f5e160" id="32" refid="32">
+<div class="code-area-container">
+<pre class="code-area">command:
+    - node
+    - --cpu-prof
+    - --heap-prof
+    - app.js</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="33" refid="33">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="eda14968948046f299ea96979d995dc0" data-text-hash="2ffde1cda21182f226ed72c6b89a2125" id="34" refid="34">
+<p> Values that the YAML parser might interpret as something other than a string must be enclosed in quotes. This includes numeric values such as <code>1234</code>, and Boolean values such as <code>true</code> and <code>false</code>. Some other special strings must also be quoted, otherwise they would also be interpreted as Boolean or other types. These include the values <code>true</code>, <code>false</code>, <code>yes</code>, <code>no</code>, <code>on</code>, <code>off</code>, <code>y</code>, <code>n</code>, <code>t</code>, <code>f</code>, <code>null</code>, and others.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a585fc477d9d2e61f51e8e318f34d477" data-text-hash="5d1c77ddb2256cc77cf5b717c5b6e50b" id="35" refid="35">
+<h4>Setting command arguments</h4>
+</div>
+<div class="readable-text" data-hash="a7f7d3d37efc52ca97d11d4b65253145" data-text-hash="806561bb9c4255b94b611a26f9b35485" id="36" refid="36">
+<p>Command line arguments can be overridden with the <code>args</code> field, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="aa87fc44be25a53c58c8d049d48ac390" data-text-hash="6c5d776a937f66609ef3319405af7018" id="37" refid="37">
+<h5>Listing 9.3 A container definition with the args fields set</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.4
+    args: ["--listen-port", "9090"]    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBvdmVycmlkZXMgdGhlIGFyZ3VtZW50cyBzZXQgaW4gdGhlIGNvbnRhaW5lciBpbWFnZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dc854bb2618e7a73a3cc8583e6f4d4a0" data-text-hash="aa364888f9c62367460be3d837c7d894" id="38" refid="38">
+<p>The pod manifest in the listing overrides the default <code>--listen-port 8080</code> arguments set in the Dockerfile with <code>--listen-port 9090</code>. When you deploy this pod, the full command that runs in the container is <code>node app.js --listen-port 9090</code>. The command is a concatenation of the <code>ENTRYPOINT</code> in the Dockerfile and the <code>args</code> field in the pod manifest.</p>
+</div>
+<div class="readable-text" data-hash="dcbcb9b5ff189b1c653110c106d31b95" data-text-hash="2eebebf42539190a6bd3273171b47123" id="39" refid="39">
+<h3 id="sigil_toc_id_149">9.1.2&#160;Setting environment variables in a container</h3>
+</div>
+<div class="readable-text" data-hash="6bea26c6a73b3f22d7339fad5074f76b" data-text-hash="bcd447f4eb37f8f4312fa553f8891066" id="40" refid="40">
+<p>Containerized applications are often configured using environment variables. Just like the command and arguments, you can set environment variables for each of the pod&#8217;s containers, as shown in figure 9.2.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b4e64a1adac0f0e8324b4af6d2cffc10" data-text-hash="deb649e287d0fec2da6ce66eaf82de71" id="41" refid="41">
+<h5>Figure 9.2 Environment variables are set per container.</h5>
+<img alt="" data-processed="true" height="258" id="Picture_2" loading="lazy" src="EPUB/images/09image003.png" width="699">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="42" refid="42">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="414f2639dddb97dfff1feff5a944c838" data-text-hash="57e82cf1ff53798a79001618e9fc73fa" id="43" refid="43">
+<p> As I write this, environment variables can only be set for each container individually. It isn&#8217;t possible to set a global set of environment variables for the entire pod and have them inherited by all its containers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="118fbc0c4fc03bc6c9330e981cabd862" data-text-hash="13afeb6f40f9cd52ac0bf5ee9cf377e6" id="44" refid="44">
+<p>You can set an environment variable to a literal value, have it reference another environment variable, or obtain the value from an external source. Let&#8217;s see how.</p>
+</div>
+<div class="readable-text" data-hash="eed19842844931364ecb288d914d9407" data-text-hash="3ac54097437781758cbd48aa9b025f62" id="45" refid="45">
+<h4>Setting a literal value to an environment variable</h4>
+</div>
+<div class="readable-text" data-hash="30b55053027f16380b0c55363b8c44d3" data-text-hash="a72662135159d3115423dbd4742428db" id="46" refid="46">
+<p>Version 0.4 of the Kiada application displays the name of the pod, which it reads from the environment variable <code>POD_NAME</code>. It also allows you to set the status message using the environment variable <code>INITIAL_STATUS_MESSAGE</code>. Let&#8217;s set these two variables in the pod manifest.</p>
+</div>
+<div class="readable-text" data-hash="308b878538e43739e018098011fc1094" data-text-hash="475527a21c0cf7949344a5d8abdaad7d" id="47" refid="47">
+<p>To set the environment variable, you could add the <code>ENV</code> directive to the Dockerfile and rebuild the image, but the faster way is to add the <code>env</code> field to the container definition in the pod manifest, as I&#8217;ve done in the following listing (file <code>pod.kiada.env-value.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e87b3b5f25333cd6a39e1e276084030e" data-text-hash="12cdfbb1c0362f524e2c9541af08faa7" id="48" refid="48">
+<h5>Listing 9.4 Setting environment variables in the pod manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+metadata:
+  name: kiada
+spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.4
+    env:                                                      #A
+    - name: POD_NAME                                          #B
+      value: kiada                                            #B
+    - name: INITIAL_STATUS_MESSAGE                            #C
+      value: This status message is set in the pod spec.      #C
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGVudiBmaWVsZCBjb250YWlucyBhIGxpc3Qgb2YgZW52aXJvbm1lbnQgdmFyaWFibGVzIGZvciB0aGUgY29udGFpbmVyCiNCIFRoZSBlbnZpcm9ubWVudCB2YXJpYWJsZSBQT0RfTkFNRSBpcyBzZXQgdG8g4oCca2lhZGHigJ0KI0MgQW5vdGhlciBlbnZpcm9ubWVudCB2YXJpYWJsZSBpcyBzZXQgaGVyZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f15bca69d86aeea09182ece600825a1b" data-text-hash="c626931bb169e79b2bf4998feb96e50d" id="49" refid="49">
+<p>As you can see in the listing, the <code>env</code> field takes an array of values. Each entry in the array specifies the name of the environment variable and its value.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="50" refid="50">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="0657ee41ceb38b53125049de5c4b8ebd" data-text-hash="69649fd0d2b85744d0f35e97ef393081" id="51" refid="51">
+<p> Since environment variables values must be strings, you must enclose values that aren&#8217;t strings in quotes to prevent the YAML parser from treating them as anything other than a string. As explained in section 9.1.1, this also applies to strings such as <code>yes</code>, <code>no</code>, <code>true</code>, <code>false</code>, and so on.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="082a189ecd7ac7b6973e94b070c4f880" data-text-hash="337b65e858261cb0d257dbdfb84b9ab2" id="52" refid="52">
+<p>When you deploy the pod in the listing and send an HTTP request to the application, you should see the pod name and status message that you specified using environment variables. You can also run the following command to examine the environment variables in the container. You&#8217;ll find the two environment variables in the following output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="98a17fb6d54391027de4d35c34e2dc99" data-text-hash="452f553db00b61791f2dcfcf77c74673" id="53" refid="53">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada -- env
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin    #A
+HOSTNAME=kiada                                                       #A
+NODE_VERSION=12.19.1                                                 #B
+YARN_VERSION=1.22.5                                                  #B
+POD_NAME=kiada                                                       #C
+INITIAL_STATUS_MESSAGE=This status message is set in the pod spec.   #C
+KUBERNETES_SERVICE_HOST=10.96.0.1                                    #D
+...                                                                  #D
+KUBERNETES_SERVICE_PORT=443                                          #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgU2V0IGJ5IHRoZSBzeXN0ZW0KI0IgU2V0IGluIHRoZSBjb250YWluZXIgaW1hZ2UKI0MgU2V0IGluIHRoZSBwb2QgbWFuaWZlc3QKI0QgU2V0IGJ5IEt1YmVybmV0ZXM="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0994c9febe0cd6862edec26b619e5d7b" data-text-hash="a44794355da6462906ecf9688f968851" id="54" refid="54">
+<p>As you can see, there are a few other variables set in the container. They come from different sources - some are defined in the container image, some are added by Kubernetes, and the rest come from elsewhere. While there is no way to know where each of the variables comes from, you&#8217;ll learn to recognize some of them. For example, the ones added by Kubernetes relate to the Service object, which is covered in chapter 11. To determine where the rest come from, you can inspect the pod manifest and the Dockerfile of the container image.</p>
+</div>
+<div class="readable-text" data-hash="72bb6c8431f4301e987aaaa5db5787d6" data-text-hash="3cde953c373dabee59d1724ea932f92a" id="55" refid="55">
+<h4>Using variable references in environment variable values</h4>
+</div>
+<div class="readable-text" data-hash="f523316c4197564460aacf93106a09f5" data-text-hash="8c050162aa2892397b1181d70696a619" id="56" refid="56">
+<p>In the previous example, you set a fixed value for the environment variable <code>INITIAL_STATUS_MESSAGE</code>, but you can also reference other environment variables in the value by using the syntax <code>$(VAR_NAME)</code>.</p>
+</div>
+<div class="readable-text" data-hash="c3e1da1ff1912461e4062ab7032f31cc" data-text-hash="0adb78826a4d90f4e0cbe7dfaa7405a9" id="57" refid="57">
+<p>For example, you can reference the variable <code>POD_NAME</code> within the status message variable as in the following listing, which shows part of the file <code>pod.kiada.env-value-ref.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ab3cd8b33171175d373a82136b091d98" data-text-hash="911c90492311410e2aef663f21cab413" id="58" refid="58">
+<h5>Listing 9.5 Referring to an environment variable in another variable</h5>
+<div class="code-area-container">
+<pre class="code-area">env:
+- name: POD_NAME
+  value: kiada
+- name: INITIAL_STATUS_MESSAGE
+  value: My name is $(POD_NAME). I run NodeJS version $(NODE_VERSION).   #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHZhbHVlIGluY2x1ZGVzIGEgcmVmZXJlbmNlIHRvIHRoZSBQT0RfTkFNRSBhbmQgTk9ERV9WRVJTSU9OIGVudmlyb25tZW50IHZhcmlhYmxlcw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9475ce6efdabff9f74a03aa3d25ab577" data-text-hash="be338268846aefccf27bf059498ff857" id="59" refid="59">
+<p>Notice that one of the references points to the environment variable <code>POD_NAME</code> defined above, whereas the other points to the variable <code>NODE_VERSION</code> set in the container image. You saw this variable when you ran the <code>env</code> command in the container earlier. When you deploy the pod, the status message it returns is the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ccaa7e65437b07a2e1b798fdb05d0cdd" data-text-hash="7e46ad3c435361ca4e0f6686e653ba4a" id="60" refid="60">
+<div class="code-area-container">
+<pre class="code-area">My name is kiada. I run NodeJS version $(NODE_VERSION).</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a8927c5517f7377a508143ae6de27cc8" data-text-hash="d43519a6d6b6e4192b27a1c2a1f630fc" id="61" refid="61">
+<p>As you can see, the reference to <code>NODE_VERSION</code> isn&#8217;t resolved. This is because you can only use the <code>$(VAR_NAME)</code> syntax to refer to variables defined in the same manifest. The referenced variable must be defined <i>before</i> the variable that references it. Since <code>NODE_VERSION</code> is defined in the NodeJS image&#8217;s Dockerfile and not in the pod manifest, it can&#8217;t be resolved.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="62" refid="62">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="2bbbe53e8e42d9b64f2f8e7e4d2dfe01" data-text-hash="6b536857aa9756e6b09e976d4d251cfc" id="63" refid="63">
+<p> If a variable reference can&#8217;t be resolved, the reference string remains unchanged.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="64" refid="64">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5ffd7c26fc8c7b32c6ac996cd71180d0" data-text-hash="2bb05839fe5f11be1b3905ad8b6c4d26" id="65" refid="65">
+<p> When you want a variable to contain the literal string <code>$(VAR_NAME)</code> and don&#8217;t want Kubernetes to resolve it, use a double dollar sign as in <code>$$(VAR_NAME)</code>. Kubernetes will remove one of the dollar signs and skip resolving the variable.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2177582c8880c4374c093544ff6c5178" data-text-hash="4e54d1c9493faf5d33d40ee856bf4282" id="66" refid="66">
+<h4>Using variable references in the command and arguments</h4>
+</div>
+<div class="readable-text" data-hash="2ef3a1711b4fc54d07cfe9e2f22cd898" data-text-hash="353f3cac5a50a2eab25e0043fe58a667" id="67" refid="67">
+<p>You can refer to environment variables defined in the manifest not only in other variables, but also in the <code>command</code> and <code>args</code> fields you learned about in the previous section. For example, the file <code>pod.kiada.env-value-ref-in-args.yaml</code> defines an environment variable named <code>LISTEN_PORT</code> and references it in the <code>args</code> field. The following listing shows the relevant part of this file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1d17cda8b492c1487ee8017fc072a723" data-text-hash="154eddf72e2929bc5b25acee4468856e" id="68" refid="68">
+<h5>Listing 9.6 Referring to an environment variable in the args field</h5>
+<div class="code-area-container">
+<pre class="code-area">spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.4
+    args:
+    - --listen-port
+    - $(LISTEN_PORT)           #A
+    env:
+    - name: LISTEN_PORT
+      value: "8080"</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVzb2x2ZWQgdG8gdGhlIExJU1RFTl9QT1JUIHZhcmlhYmxlIHNldCBiZWxvdw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="45b24de980b2ccf16c4dae2f7594892a" data-text-hash="5c33192af76bc1ae96dc1d60f7e28aff" id="69" refid="69">
+<p>This isn&#8217;t the best example, since there&#8217;s no good reason to use a variable reference instead of just specifying the port number directly. But later you&#8217;ll learn how to get the environment variable value from an external source. You can then use a reference as shown in the listing to inject that value into the container&#8217;s command or arguments.</p>
+</div>
+<div class="readable-text" data-hash="a1f96f6c84d55a17d1f8b1333755d1bc" data-text-hash="7aa27c30c82d4d1d6474f1541ab3b410" id="70" refid="70">
+<h4>Referring to environment variables that aren&#8217;t in the manifest</h4>
+</div>
+<div class="readable-text" data-hash="66a9d98411ce61b234dc52021f5afd6d" data-text-hash="0e367b9b799fed152a5f9a0358b503e8" id="71" refid="71">
+<p>Just like using references in environment variables, you can only use the <code>$(VAR_NAME)</code> syntax in the <code>command</code> and <code>args</code> fields to reference variables that are defined in the pod manifest. You can&#8217;t reference environment variables defined in the container image, for example.</p>
+</div>
+<div class="readable-text" data-hash="2eb8a58aeb0033aeca722d175678c02a" data-text-hash="4133d9cc495b805e7f611dc81d2b357b" id="72" refid="72">
+<p>However, you can use a different approach. If you run the command through a shell, you can have the shell resolve the variable. If you are using the bash shell, you can do this by referring to the variable using the syntax <code>$VAR_NAME</code> or <code>${VAR_NAME}</code> instead of <code>$(VAR_NAME)</code>.</p>
+</div>
+<div class="readable-text" data-hash="3bcb63df0a78c554066a148c37935a50" data-text-hash="34da5826bec30e62cc0814c55b37bfc4" id="73" refid="73">
+<p>For example, the command in the following listing correctly prints the value of the <code>HOSTNAME</code> environment variable even though it&#8217;s not defined in the pod manifest but is initialized by the operating system. You can find this example in the file <code>pod.env-var-references-in-shell.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5b4f1595118f4ef82a7aefb1adfb37c5" data-text-hash="d9503956a73e389c89adf74587ca12da" id="74" refid="74">
+<h5>Listing 9.7 Referring to environment variables in a shell command</h5>
+<div class="code-area-container">
+<pre class="code-area">containers:
+- name: main
+  image: alpine
+  command:
+  - sh   #A
+  - -c   #A
+  - 'echo "Hostname is $HOSTNAME."; sleep infinity'   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHRvcCBjb21tYW5kIGV4ZWN1dGVkIGluIHRoaXMgY29udGFpbmVyIGlzIHRoZSBzaGVsbC4KI0IgVGhlIHNoZWxsIHJlc29sdmVzIHRoZSByZWZlcmVuY2UgdG8gdGhlIEhPU1ROQU1FIGVudmlyb25tZW50IHZhcmlhYmxlIGJlZm9yZSBleGVjdXRpbmcgdGhlIGNvbW1hbmRzIGVjaG8gYW5kIHNsZWVwLg=="></div>
+</div>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="e00489bc3395aa80711e4ce2d82ad972" data-text-hash="8ec5d0ed6e113d383f484268b9cb5a37" id="75" refid="75">
+<h5>Setting the pod&#8217;s fully qualified domain name</h5>
+</div>
+<div class="readable-text" data-hash="127869ae7040e2e1c3086ffd4aad0e0c" data-text-hash="f2fbde0dcfe44d46fdae310f2a486f7e" id="76" refid="76">
+<p>While we&#8217;re on the subject of the pod&#8217;s hostname, this is a good time to explain that the pod&#8217;s hostname and subdomain are configurable in the pod manifest. By default, the hostname is the same as the pod&#8217;s name, but you can override it using the <code>hostname</code> field in the pod&#8217;s <code>spec</code>. You can also set the <code>subdomain</code> field so that the fully qualified domain name (FQDN) of the pod is as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="86b64164e3a429a56e513a3b2ccf0d76" data-text-hash="1d9c58353b1a5783bd3d9a971e18cbcd" id="77" refid="77">
+<div class="code-area-container">
+<pre class="code-area">&lt;hostname&gt;.&lt;subdomain&gt;.&lt;pod namespace&gt;.svc.&lt;cluster domain&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="019f067157ce944a4f27571760d2dae5" data-text-hash="1730e9088a94c1d4ad9516da68b4c04d" id="78" refid="78">
+<p>This is only the internal FQDN of the pod. It isn&#8217;t resolvable via DNS without additional steps, which are explained in chapter 11. You can find a sample pod that specifies a custom hostname for the pod in the file <code>pod.kiada.hostname.yaml</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0f3189079e84f017e509f82a38a0599b" data-text-hash="d8d05fa735998665381febd3d523bc24" id="79" refid="79">
+<h2 id="sigil_toc_id_150">9.2&#160;Using a config map to decouple configuration from the pod</h2>
+</div>
+<div class="readable-text" data-hash="f362f8d96bd007448d6f07960a995ea3" data-text-hash="6c7d739d43c2fc0c65270f1664bc274a" id="80" refid="80">
+<p>In the previous section, you learned how to hardcode configuration directly into your pod manifests. While this is much better than hard-coding in the container image, it&#8217;s still not ideal because it means you might need a separate version of the pod manifest for each environment you deploy the pod to, such as your development, staging, or production cluster.</p>
+</div>
+<div class="readable-text" data-hash="89f3a883ccc5abf340fc1947617daa37" data-text-hash="aef2634e0d733286ed336503ec62978c" id="81" refid="81">
+<p>To reuse the same pod definition in multiple environments, it&#8217;s better to decouple the configuration from the pod manifest. One way to do this is to move the configuration into a ConfigMap object, which you then reference in the pod manifest. This is what you&#8217;ll do next.</p>
+</div>
+<div class="readable-text" data-hash="efa5dd138adb5bfdec0af2a88e611645" data-text-hash="4b4f86440d6b9a8a0f1b2e4191eb24a6" id="82" refid="82">
+<h3 id="sigil_toc_id_151">9.2.1&#160;Introducing ConfigMaps</h3>
+</div>
+<div class="readable-text" data-hash="e9f67aee43b78b2bcbd4526ca6df1aeb" data-text-hash="81208448d0f1a6deb5ca57e631153bda" id="83" refid="83">
+<p>A ConfigMap is a Kubernetes API object that simply contains a list of key/value pairs. The values can range from short strings to large blocks of structured text that you typically find in an application configuration file. Pods can reference one or more of these key/value entries in the config map. A pod can refer to multiple config maps, and multiple pods can use the same config map.</p>
+</div>
+<div class="readable-text" data-hash="80bf33f51345d9703fcf93e4e9dabf56" data-text-hash="99b33a5a1a5c92d52d6d508c9ed3c20f" id="84" refid="84">
+<p>To keep applications Kubernetes-agnostic, they typically don&#8217;t read the ConfigMap object via the Kubernetes REST API. Instead, the key/value pairs in the config map are passed to containers as environment variables or mounted as files in the container&#8217;s filesystem via a <code>configMap</code> volume, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="10d4b1927f8fb6e8314fafc9424979f3" data-text-hash="b178c942ed0a5d4b7f951c1a4d480e40" id="85" refid="85">
+<h5>Figure 9.3 Pods use config maps through environment variables and configMap volumes.</h5>
+<img alt="" data-processed="true" height="337" id="Picture_3" loading="lazy" src="EPUB/images/09image004.png" width="853">
+</div>
+<div class="readable-text" data-hash="9fe60657f60661a2c1f1ef68e1016d60" data-text-hash="694643572fa9b2d22e605921dd43db6f" id="86" refid="86">
+<p>In the previous section you learned how to reference environment variables in command-line arguments. You can use this technique to pass a config map entry that you&#8217;ve exposed as an environment variable into a command-line argument.</p>
+</div>
+<div class="readable-text" data-hash="c62edcc6e2d9100392fabeedbd9a6a48" data-text-hash="0cf2b1ec35254aab35a6122b67fb0034" id="87" refid="87">
+<p>Regardless of how an application consumes config maps, storing the configuration in a separate object instead of the pod allows you to keep the configuration separate for different environments by simply keeping separate config map manifests and applying each to the environment for which it is intended. Because pods reference the config map by name, you can deploy the same pod manifest across all your environments and still have a different configuration for each environment by using the same config map name, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="14f48616ad19100fdf40eb0a4c60144b" data-text-hash="e4a0bdf52f87d05e6b3537954e979d07" id="88" refid="88">
+<h5>Figure 9.4 Deploying the same pod manifest and different config map manifests in different environments</h5>
+<img alt="" data-processed="true" height="470" id="Picture_4" loading="lazy" src="EPUB/images/09image005.png" width="840">
+</div>
+<div class="readable-text" data-hash="f30e43bd4f12410a20987df32e27be45" data-text-hash="35c5109b53b79df7e54a443cbef337a5" id="89" refid="89">
+<h3 id="sigil_toc_id_152">9.2.2&#160;Creating a ConfigMap object</h3>
+</div>
+<div class="readable-text" data-hash="7b1b1bf3ea7ec24f96da66333e72e778" data-text-hash="643d6ce75a400316ec03857c9bdab6f5" id="90" refid="90">
+<p>Let&#8217;s create a config map and use it in a pod. The following is a simple example where the config map contains a single entry used to initialize the environment variable <code>INITIAL_STATUS_MESSAGE</code> for the kiada pod.</p>
+</div>
+<div class="readable-text" data-hash="7215d0b89783eb5ec4f6ae10477d616e" data-text-hash="01fa9e4357a74f88da256e945141e821" id="91" refid="91">
+<h4>Creating a config map with the kubectl create configmap command</h4>
+</div>
+<div class="readable-text" data-hash="df2b4e4f605d0b9204730f3d2ad365f3" data-text-hash="5e7c7e6a222c2c35aee07049a40c664c" id="92" refid="92">
+<p>As with pods, you can create the ConfigMap object from a YAML manifest, but a faster way is to use the <code>kubectl</code> <code>create</code> <code>configmap</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ec82d2a9ad67b6432b1f807c656028e2" data-text-hash="6a5b6fd42fecd1ef3b059f04b6442059" id="93" refid="93">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create configmap kiada-config --from-literal status-message="This status message is set in the kiada-config config map"
+configmap "kiada-config" created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="94" refid="94">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5009133a71db6b213863af916552dfff" data-text-hash="659ae64b55a2d534a15d432a28ef0a61" id="95" refid="95">
+<p> Keys in a config map may only consist of alphanumeric characters, dashes, underscores, or dots. Other characters are not allowed.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e3ae1fdf402cbc652d885bc4f9ad01d1" data-text-hash="7815c5ee7f907f6056039a19c15114d4" id="96" refid="96">
+<p>Running this command creates a config map called <code>kiada-config</code> with a single entry. The key and value are specified with the <code>--from-literal</code> argument.</p>
+</div>
+<div class="readable-text" data-hash="a6a7aaf418da66212cf70a93f4ad61db" data-text-hash="90afcab470a9dc3ac2313f3b0390f49b" id="97" refid="97">
+<p>In addition to <code>--from-literal</code>, the <code>kubectl create configmap</code> command also supports sourcing the key/value pairs from files. The following table explains the available methods.</p>
+</div>
+<div class="browsable-container" data-hash="7cb9e04996a07d99f6a4efbbddd8065c" data-text-hash="72a72ea7cfa3c69b9a604ee678b6f239" id="98" refid="98">
+<h5>Table 9.2 Options for creating config map entries using kubectl create configmap</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Option</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>--from-literal
+</pre> </td>
+<td> <p>Inserts a key and a literal value into the config map. Example: <code>--from-literal mykey=myvalue</code>.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>--from-file
+</pre> </td>
+<td> <p>Inserts the contents of a file into the config map. The behavior depends on the argument that comes after <code>--from-file</code>:</p> <p>If only the filename is specified (example: <code>--from-file myfile.txt</code>), the base name of the file is used as the key and the entire contents of the file are used as the value.</p> <p>If <code>key=file</code> is specified (example: <code>--from-file mykey=myfile.txt</code>), the contents of the file are stored under the specified key.</p> <p>If the filename represents a directory, each file contained in the directory is included as a separate entry. The base name of the file is used as the key, and the contents of the file are used as the value. Subdirectories, symbolic links, devices, pipes, and files whose base name isn&#8217;t a valid config map key are ignored.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>--from-env-file
+</pre> </td>
+<td> <p>Inserts each line of the specified file as a separate entry (example: <code>--from-env-file myfile.env</code>). The file must contain lines with the following format: <code>key=value</code></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="5f9b7baddc5134d01fe1c0169db532ac" data-text-hash="164e64ae4f1dd5cb12926b3861e56c3c" id="99" refid="99">
+<p>Config maps usually contain more than one entry. To create a config map with multiple entries, you can use multiple arguments <code>--from-literal</code>, <code>--from-file</code>, and <code>--from-env-file</code>, or a combination thereof.</p>
+</div>
+<div class="readable-text" data-hash="56fb999229647e5783255b9afe6c36e4" data-text-hash="7ac1cc9e2650cc803c272c9f4a4e7680" id="100" refid="100">
+<h4>Creating a config map from a YAML manifest</h4>
+</div>
+<div class="readable-text" data-hash="b6535eccc8482b02657b6ca7f8375835" data-text-hash="f3956205390f599e746d30654a54a947" id="101" refid="101">
+<p>Alternatively, you can create the config map from a YAML manifest file. The following listing shows the contents of an equivalent manifest file named <code>cm.kiada-config.yaml</code>, which is available in the code repository You can create the config map by applying this file using <code>kubectl apply</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2910f70bea27d475b48731c138041994" data-text-hash="a21450d8ed0fa5591477b3b82d69d3c1" id="102" refid="102">
+<h5>Listing 9.8 A config map manifest file</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1   #A
+kind: ConfigMap   #A
+metadata:
+  name: kiada-config   #B
+data:                             #C
+  status-message: This status message is set in the kiada-config config map   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCBkZWZpbmVzIGEgQ29uZmlnTWFwIG9iamVjdC4KI0IgVGhlIG5hbWUgb2YgdGhpcyBjb25maWcgbWFwCiNDIEtleS92YWx1ZSBwYWlycyBhcmUgc3BlY2lmaWVkIGluIHRoZSBkYXRhIGZpZWxk"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8ccdd6b79ba9c67e3e8a52bb8df9d078" data-text-hash="b4fb414ac2e7803a54d985376606be11" id="103" refid="103">
+<h4>Listing config maps and displaying their contents</h4>
+</div>
+<div class="readable-text" data-hash="ef5414811a6200e0b2582b78c1a476fc" data-text-hash="5fe746a2a8fcba4ff310774628762662" id="104" refid="104">
+<p>Config maps are Kubernetes API objects that live alongside pods, nodes, persistent volumes, and the others you&#8217;ve learned about so far. You can use various kubectl commands to perform CRUD operations on them. For example, you can list config maps with:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="443e78869b41cf6f76a6778fb448314b" data-text-hash="3703d785998af48b2a1499e28b0dd7bc" id="105" refid="105">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cm</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="106" refid="106">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="34144fe301cd1a502b7b77fa939fcf8d" data-text-hash="dbe012cf6278ca8b477ac9f08569d7d0" id="107" refid="107">
+<p> The shorthand for <code>configmaps</code> is <code>cm</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2f5f8f2b4af7b001d857baae76e4fae3" data-text-hash="46084c976ca82943c1438814bb4e611e" id="108" refid="108">
+<p>You can display the entries in the config map by instructing kubectl to print its YAML manifest:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6a89c72a97a2eeb7d67732b7eefd0a0d" data-text-hash="2029d9bb3554cfbffe5d847233e32bb2" id="109" refid="109">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cm kiada-config -o yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="110" refid="110">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d8ea65619feffab5e786c9bbd0f1ebf3" data-text-hash="c06fdd4c82e036ad042daf469d73d545" id="111" refid="111">
+<p> Because YAML fields are output in alphabetical order, you&#8217;ll find the <code>data</code> field at the top of the output.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="112" refid="112">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="79adc76998f8dabdfefb9c4f9434187c" data-text-hash="a1bbf11c95400d2f8fe03ab974fa3b21" id="113" refid="113">
+<p> To display only the key/value pairs, combine <code>kubectl</code> with <code>jq</code>. For example: <code>kubectl get cm kiada-config -o json | jq .data</code>. Display the value of a given entry as follows: <code>kubectl... | jq '.data["status-message"]'</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e3c146b6be33acbe70fa258aea07b566" data-text-hash="d4ac6e70378cecdecb1a3a324f1609ab" id="114" refid="114">
+<h3 id="sigil_toc_id_153">9.2.3&#160;Injecting config map values into environment variables</h3>
+</div>
+<div class="readable-text" data-hash="0840004faf82b84f40a0937c956c5f01" data-text-hash="3447a0ab973af09923162db94af7c238" id="115" refid="115">
+<p>In the previous section, you created the <code>kiada-config</code> config map. Let&#8217;s use it in the kiada pod.</p>
+</div>
+<div class="readable-text" data-hash="3b6f1b98a8ef68cd6cc0e9a75b94c5a2" data-text-hash="f8abfb39e303fb7abc25180456b1b5e4" id="116" refid="116">
+<h4>Injecting a single config map entry</h4>
+</div>
+<div class="readable-text" data-hash="a01a5d927a60f1e2ae36d954a9406df6" data-text-hash="fef18777463d63f9556c239e484cd464" id="117" refid="117">
+<p>To inject the single config map entry into an environment variable, you just need to replace the <code>value</code> field in the environment variable definition with the <code>valueFrom</code> field and refer to the config map entry. The following listing shows the relevant part of the pod manifest. The full manifest can be found in the file <code>pod.kiada.env-valueFrom.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="135dd068966857d8a7f4293fae416355" data-text-hash="3a31c51992be2e37bc2227d70be1cfb6" id="118" refid="118">
+<h5>Listing 9.9 Setting an environment variable from a config map entry</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+...
+spec:
+  containers:
+  - name: kiada
+    env:   #A
+    - name: INITIAL_STATUS_MESSAGE   #A
+      valueFrom:   #B
+        configMapKeyRef:   #B
+          name: kiada-config   #C
+          key: status-message   #D
+          optional: true   #E
+    volumeMounts:
+    - ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgWW914oCZcmUgc2V0dGluZyB0aGUgZW52aXJvbm1lbnQgdmFyaWFibGUgSU5JVElBTF9TVEFUVVNfTUVTU0FHRS4KI0IgSW5zdGVhZCBvZiB1c2luZyBhIGZpeGVkIHZhbHVlLCB0aGUgdmFsdWUgaXMgb2J0YWluZWQgZnJvbSBhIGNvbmZpZyBtYXAga2V5CiNDIFRoZSBuYW1lIG9mIHRoZSBjb25maWcgbWFwIHRoYXQgY29udGFpbnMgdGhlIHZhbHVlCiNEIFRoZSBjb25maWcgbWFwIGtleSB5b3XigJlyZSByZWZlcmVuY2luZwojRSBUaGUgY29udGFpbmVyIG1heSBydW4gZXZlbiBJZiB0aGUgY29uZmlnIG1hcCBvciBrZXkgaXMgbm90IGZvdW5k"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="66a4404b3cec9c79f3c71e6a32e91bbc" data-text-hash="b089577bcb128b197d65f91e9456fe63" id="119" refid="119">
+<p>Let me break down the definition of the environment variable that you see in the listing. Instead of specifying a fixed value for the variable, you declare that the value should be obtained from a config map. The name of the config map is specified using the <code>name</code> field, whereas the <code>key</code> field specifies the key within that map.</p>
+</div>
+<div class="readable-text" data-hash="d956836bfc83cefe25a7a94795456b03" data-text-hash="28983f0c997cd05b3364f7e56b0eec48" id="120" refid="120">
+<p>Create the pod from this manifest and inspect its environment variables using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5de5b5f0aa64ac2fc636dc20cad2a8be" data-text-hash="37e7be4b19ede071f5e4c15ed094bb21" id="121" refid="121">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada -- env
+...
+INITIAL_STATUS_MESSAGE=This status message is set in the kiada-config config map
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0b0f13bff4e31e57e8135481483d6393" data-text-hash="ac3878f616ffd818713421c5e8a9e6fa" id="122" refid="122">
+<p>The status message should also appear in the pod&#8217;s response when you access it via <code>curl</code> or your browser.</p>
+</div>
+<div class="readable-text" data-hash="845c2e9fc902e56406a4e1870679b702" data-text-hash="b13c4b215722532f53b17142b2331c0f" id="123" refid="123">
+<h4>Marking a reference optional</h4>
+</div>
+<div class="readable-text" data-hash="cfc5b3984f4bc34d0c9ec94cafa2e979" data-text-hash="babacc396803869439f3bab0eedf6c80" id="124" refid="124">
+<p>In the previous listing, the reference to the config map key is marked as <code>optional</code> so that the container can be executed even if the config map or key is missing. If that&#8217;s the case, the environment variable isn&#8217;t set. You can mark the reference as optional because the Kiada application will run fine without it. You can delete the config map and deploy the pod again to confirm this.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="125" refid="125">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8ef48f831759a5e0b9d4daaef6e5668c" data-text-hash="4f58cfacb8cbf59e925b8f9f150795eb" id="126" refid="126">
+<p> If a config map or key referenced in the container definition is missing and not marked as optional, the pod will still be scheduled normally. The other containers in the pod are started normally. The container that references the missing config map key is started as soon as you create the config map with the referenced key.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="56474118e8aa41c151708eb44ef25112" data-text-hash="7eb46fd5e239c2d8a74587670de99a9a" id="127" refid="127">
+<h4>Injecting the entire config map</h4>
+</div>
+<div class="readable-text" data-hash="9030ac9398907273e66567c4f263e08f" data-text-hash="006ceb8954464cf724fd9ac3355972d9" id="128" refid="128">
+<p>The <code>env</code> field in a container definition takes an array of values, so you can set as many environment variables as you need. However, if you want to set more than a few variables, it can become tedious and error prone to specify them one at a time. Fortunately, by using the <code>envFrom</code> instead of the <code>env</code> field, you can inject all the entries that are in the config map without having to specify each key individually.</p>
+</div>
+<div class="readable-text" data-hash="6cf9a9be102e22fff8222eab5df714b2" data-text-hash="556381c284eb5dd7f9ad69764655621a" id="129" refid="129">
+<p>The downside to this approach is that you lose the ability to transform the key to the environment variable name, so the keys must already have the proper form. The only transformation that you can do is to prepend a prefix to each key.</p>
+</div>
+<div class="readable-text" data-hash="b3515d569f57c75c1961b2cc73b6e9f6" data-text-hash="6c3ab53b7d1117b7df5d948956ef0a82" id="130" refid="130">
+<p>For example, the Kiada application reads the environment variable <code>INITIAL_STATUS_MESSAGE</code>, but the key you used in the config map is <code>status-message</code>. You must change the config map key to match the expected environment variable name if you want it to be read by the application when you use the <code>envFrom</code> field to inject the entire config map into the pod. I&#8217;ve already done this in the <code>cm.kiada-config.envFrom.yaml</code> file. In addition to the <code>INITIAL_STATUS_MESSAGE</code> key, it contains two other keys to demonstrate that they will all be injected into the container&#8217;s environment.</p>
+</div>
+<div class="readable-text" data-hash="8472bbab312b1fb1e53cda4325fc74f8" data-text-hash="6a769eb694cb1d3024b2b100387397a9" id="131" refid="131">
+<p>Replace the config map with the one in the file by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="21c05618ea498f93940cfd721491c336" data-text-hash="f7815faa4aa5d9ab024c2b147dcbc4d3" id="132" refid="132">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl replace -f cm.kiada-config.envFrom.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2570bb95979451c9b15cd2eb9744f0df" data-text-hash="328fc53fbad3818b66087b9d0fd4f9cf" id="133" refid="133">
+<p>The pod manifest in the <code>pod.kiada.envFrom.yaml</code> file uses the <code>envFrom</code> field to inject the entire config map into the pod. The following listing shows the relevant part of the manifest.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ea0015ab5c5c8273fa62b422f22c9d7b" data-text-hash="ed60d4422fd8695ecd0803adc1dc3737" id="134" refid="134">
+<h5>Listing 9.10 Using envFrom to inject the entire config map into environment variables</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+...
+spec:
+  containers:
+  - name: kiada
+    envFrom:   #A
+    - configMapRef:   #B
+        name: kiada-config   #B
+        optional: true   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVXNpbmcgZW52RnJvbSBpbnN0ZWFkIG9mIGVudiB0byBpbmplY3QgdGhlIGVudGlyZSBjb25maWcgbWFwCiNCIFRoZSBuYW1lIG9mIHRoZSBjb25maWcgbWFwIHRvIGluamVjdC4gVW5saWtlIGJlZm9yZSwgbm8ga2V5IGlzIHNwZWNpZmllZC4KI0MgVGhlIGNvbnRhaW5lciBzaG91bGQgcnVuIGV2ZW4gaWYgdGhlIGNvbmZpZyBtYXAgZG9lcyBub3QgZXhpc3Q="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e9906c3d3375e15da53d0f8affa31897" data-text-hash="a445b1b7f9605e19a116876bd9982379" id="135" refid="135">
+<p>Instead of specifying both the config map name and the key as in the previous example, only the config map name is specified. If you create the pod from this manifest and inspect its environment variables, you&#8217;ll see that it contains the environment variable <code>INITIAL_STATUS_MESSAGE</code> as well as the other two keys defined in the config map.</p>
+</div>
+<div class="readable-text" data-hash="181738abeee900a181ea9c3e1256cf01" data-text-hash="0fe2238c2a65c0514586f16658391150" id="136" refid="136">
+<p>As before, you can mark the config map reference as <code>optional</code>, allowing the container to run even if the config map doesn&#8217;t exist. By default, this isn&#8217;t the case. Containers that reference config maps are prevented from starting until the referenced config maps exist.</p>
+</div>
+<div class="readable-text" data-hash="2833e63ab9f91b402f6028c28b1ddfda" data-text-hash="72e6e5b86c04a9e80a205ff0b8fdee72" id="137" refid="137">
+<h4>Injecting multiple config maps</h4>
+</div>
+<div class="readable-text" data-hash="a7d791a1ed85f3d6d2c52ad2ce142968" data-text-hash="602552e7a72b51c44bfed4fe0ddf0b60" id="138" refid="138">
+<p>Listing 9.10 shows that the <code>envFrom</code> field takes an array of values, which means you can combine entries from multiple config maps. If two config maps contain the same key, the last one takes precedence. You can also combine the <code>envFrom</code> field with the <code>env</code> field if you wish to inject all entries of one config map and particular entries of another.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="139" refid="139">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="2e82fa7e701742e41a2c7cffd47104a3" data-text-hash="af8c89f7fefe3d4f17db002e6541ec92" id="140" refid="140">
+<p> When an environment variable is configured in the <code>env</code> field, it takes precedence over environment variables set in the <code>envFrom</code> field.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c9b85e3c421c4fb22958c7fadd022a9c" data-text-hash="9f8f3f1ca3326376945a6e0f919d308b" id="141" refid="141">
+<h4>Prefixing keys</h4>
+</div>
+<div class="readable-text" data-hash="294df242cac7b809c418798ab74ef925" data-text-hash="97fbd2609d8e8862a67fc53aea87112c" id="142" refid="142">
+<p>Regardless of whether you inject a single config map or multiple config maps, you can set an optional <code>prefix</code> for each config map. When their entries are injected into the container&#8217;s environment, the prefix is prepended to each key to yield the environment variable name.</p>
+</div>
+<div class="readable-text" data-hash="d5e41c91dbb0d7ac693b5b92f7fa7dcc" data-text-hash="08b60159c8ddec4aefc8274e0d86165f" id="143" refid="143">
+<h3 id="sigil_toc_id_154">9.2.4&#160;Injecting config map entries into containers as files</h3>
+</div>
+<div class="readable-text" data-hash="34d4db39e222150e81944c568ab896bb" data-text-hash="8160fe296c89f319bf5e7e19c66eeff8" id="144" refid="144">
+<p>Environment variables are typically used to pass small single-line values to the application, while multiline values are usually passed as files. Config map entries can also contain larger blocks of data that can be projected into the container using the special <code>configMap</code> volume type.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="145" refid="145">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="03972102f15ea77dcdd3a835cb358663" data-text-hash="89a5b3e933db86f7268b45a4b9a6da3f" id="146" refid="146">
+<p> The amount of information that can fit in a config map is dictated by etcd, the underlying data store used to store API objects. At this point, the maximum size is on the order of one megabyte.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4513c33ef31ef557e3b4a8de33bb6c90" data-text-hash="abf8084b76f22afb878174270ebaeb71" id="147" refid="147">
+<p>A <code>configMap</code> volume makes the config map entries available as individual files. The process running in the container gets the entry&#8217;s value by reading the contents of the file. This mechanism is most often used to pass large config files to the container, but can also be used for smaller values, or combined with the <code>env</code> or <code>envFrom</code> fields to pass large entries as files and others as environment variables.</p>
+</div>
+<div class="readable-text" data-hash="44c4ddf04838f5daf6df7f7c291642f9" data-text-hash="63333556e84c75307fcf37adbc814e65" id="148" refid="148">
+<h4>Creating config map entries from files</h4>
+</div>
+<div class="readable-text" data-hash="a55ea3438e6dedefae58a1e4b5db50bf" data-text-hash="b46510f1001357d39fdfdd2b409de2f6" id="149" refid="149">
+<p>In chapter 4, you deployed the kiada pod with an Envoy sidecar that handles TLS traffic for the pod. Because volumes weren&#8217;t explained at that point, the configuration file, TLS certificate, and private key that Envoy uses were built into the container image. It would be more convenient if these files were stored in a config map and injected into the container. That way you could update them without having to rebuild the image. But since the security considerations of these files are different, we must handle them differently. Let&#8217;s focus on the config file first.</p>
+</div>
+<div class="readable-text" data-hash="f14be528221b98f1eb5b4ee0d8d04def" data-text-hash="b494d67adb17ac086dd15b175861b036" id="150" refid="150">
+<p>You&#8217;ve already learned how to create a config map from a literal value using the <code>kubectl create configmap</code> command. This time, instead of creating the config map directly in the cluster, you&#8217;ll create a YAML manifest for the config map so that you can store it in a version control system alongside your pod manifest.</p>
+</div>
+<div class="readable-text" data-hash="601fcbf502050018b5d57c76ab14d62a" data-text-hash="a8af030cb686c0198c73ee8d95596e3a" id="151" refid="151">
+<p>Instead of writing the manifest file by hand, you can create it using the same <code>kubectl create</code> command that you used to create the object directly. The following command creates the YAML file for a config map named <code>kiada-envoy-config</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bb8208b7a1bd880e19f905f32f845af7" data-text-hash="258b520f37d5fe79491b64cbca9ff719" id="152" refid="152">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create configmap kiada-envoy-config \
+      --from-file=envoy.yaml \
+      --from-file=dummy.bin \
+      --dry-run=client -o yaml &gt; cm.kiada-envoy-config.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="32608bf598f8277d2dc2ee23b4a20198" data-text-hash="0fa615cd28db6cec7738ce5c0148d33b" id="153" refid="153">
+<p>The config map will contain two entries that come from the files specified in the command. One is the <code>envoy.yaml</code> configuration file, while the other is just some random data to demonstrate that binary data can also be stored in a config map.</p>
+</div>
+<div class="readable-text" data-hash="ebbcd154a860587ed9bc4dbcc67e3a08" data-text-hash="12653e7d9d1db02e423533ee6044aecd" id="154" refid="154">
+<p>When using the <code>--dry-run</code> option, the command doesn&#8217;t create the object in the Kubernetes API server, but only generates the object definition. The <code>-o yaml</code> option prints the YAML definition of the object to standard output, which is then redirected to the <code>cm.kiada-envoy-config.yaml</code> file. The following listing shows the contents of this file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1f3cfd2b2cbf06ea8c881ca0d30e2f93" data-text-hash="48e9e6245fec11ec595807b79b9a32e0" id="155" refid="155">
+<h5>Listing 9.11 A config map manifest containing a multi-line value</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+binaryData:
+  dummy.bin: n2VW39IEkyQ6Jxo+rdo5J06Vi7cz5...   #A
+data:
+  envoy.yaml: |   #B
+    admin:   #B
+      access_log_path: /tmp/envoy.admin.log   #B
+      address:   #B
+        socket_address:   #B
+          protocol: TCP   #B
+          address: 0.0.0.0    #B
+    ...   #B
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: kiada-envoy-config   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQmFzZTY0LWVuY29kZWQgY29udGVudCBvZiB0aGUgZHVtbXkuYmluIGZpbGUuCiNCIENvbnRlbnRzIG9mIHRoZSBlbnZveS55YW1sIGZpbGUuCiNDIFRoZSBuYW1lIG9mIHRoaXMgY29uZmlnIG1hcC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7f91dfa90b5c6f1eb4513ee9b714a69" data-text-hash="a9d0aaf3dbf870bf7360eff20062bed9" id="156" refid="156">
+<p>As you can see in the listing, the binary file ends up in the <code>binaryData</code> field, whereas the envoy config file is in the <code>data</code> field, which you know from the previous sections. If a config map entry contains non-UTF-8 byte sequences, it must be defined in the <code>binaryData</code> field. The <code>kubectl create configmap</code> command automatically determines where to put the entry. The values in this field are Base64 encoded, which is how binary values are represented in YAML.</p>
+</div>
+<div class="readable-text" data-hash="49e286eefa61474b73accf14cb42bc4a" data-text-hash="0ee99c6eb50ef45d62545c04ec5dbc15" id="157" refid="157">
+<p>In contrast, the contents of the <code>envoy.yaml</code> file are clearly visible in the <code>data</code> field. In YAML, you can specify multi-line values using a pipeline character and appropriate indentation. See the YAML specification on <a href=".html">YAML.org</a> for more ways to do this.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="d73207624a8aff857575b953be4a93a7" data-text-hash="ef54c20b6033c420a9d15fd772f60aa9" id="158" refid="158">
+<h5>Mind your whitespace hygiene when creating config maps</h5>
+</div>
+<div class="readable-text" data-hash="3e07a3c193dc37e6ba4615588ee4d612" data-text-hash="8e157fcc1f16cabb7a3a0011825acffc" id="159" refid="159">
+<p>When creating config maps from files, make sure that none of the lines in the file contain trailing whitespace. If any line ends with whitespace, the value of the entry in the manifest is formatted as a quoted string with the newline character escaped. This makes the manifest incredibly hard to read and edit.</p>
+</div>
+<div class="readable-text" data-hash="363cb172ec7e327dd97d01178ed7db60" data-text-hash="340b105b604694671211a60e91294225" id="160" refid="160">
+<p>Compare the formatting of the two values in the following config map:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="97d5bddf0d312be77bb5cb6934cf72cb" data-text-hash="813df811dd96e0abf966181917a86d53" id="161" refid="161">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create configmap whitespace-demo \
+--from-file=envoy.yaml \
+--from-file=envoy-trailingspace.yaml \
+--dry-run=client -o yaml
+apiVersion: v1
+data:
+envoy-trailingspace.yaml: "admin: \n access_log_path: /tmp/envoy.admin.log\n #A
+\ address:\n socket_address:\n protocol: TCP\n address: 0.0.0.0\n #A
+\ port_value: 9901\nstatic_resources:\n listeners:\n - name: listener_0\n... #A
+envoy.yaml: | #B
+admin: #B
+access_log_path: /tmp/envoy.admin.log #B
+address: #B
+socket_address:... #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRW50cnkgY3JlYXRlZCBmcm9tIGEgZmlsZSB3aXRoIHRyYWlsaW5nIHdoaXRlc3BhY2UKI0IgRW50cnkgY3JlYXRlZCBmcm9tIGEgY2xlYW4gZmlsZSB3aXRoIG5vIHRyYWlsaW5nIHdoaXRlc3BhY2U="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="96c7d9e6447d95baa8d22b7398aae1d8" data-text-hash="b23298cd7433afda2b9b187007feaf9d" id="162" refid="162">
+<p>Notice that the <code>envoy-trailingspace.yaml</code> file contains a space at the end of the first line. This causes the config map entry to be presented in a not very human-friendly format. In contrast, the <code>envoy.yaml</code> file contains no trailing whitespace and is presented as an unescaped multi-line string, which makes it easy to read and modify in place.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="03e0e2e8a7572dd07512b08d6ab5d750" data-text-hash="7fd79f2fe70b0a0b9519827d083d6aac" id="163" refid="163">
+<p>Don&#8217;t apply the config map manifest file to the Kubernetes cluster yet. You&#8217;ll first create the pod that refers to the config map. This way you can see what happens when a pod points to a config map that doesn&#8217;t exist.</p>
+</div>
+<div class="readable-text" data-hash="f16d698dad607aea09bf13a7534bda17" data-text-hash="7611bdc7bf9bcda03a9a7450f4844044" id="164" refid="164">
+<h4>Using a configMap volume in a pod</h4>
+</div>
+<div class="readable-text" data-hash="5b2bdf9490045916ed1eba0b0992a616" data-text-hash="71f77bb556eeb22f08fcb7fd00849a35" id="165" refid="165">
+<p>To make config map entries available as files in the container&#8217;s filesystem, you define a <code>configMap</code> volume in the pod and mount it in the container, as in the following listing, which shows the relevant parts of the <code>pod.kiada-ssl.configmap-volume.yaml</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fa0d11f3591261424e76c98a38ac362c" data-text-hash="50f86df9a1b0b861e886085d0517d96b" id="166" refid="166">
+<h5>Listing 9.12 Defining a configMap volume in a pod</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl
+spec:
+  volumes:
+  - name: envoy-config   #A
+    configMap:   #A
+      name: kiada-envoy-config   #A
+  ...
+  containers:
+  ...
+  - name: envoy
+    image: luksa/kiada-ssl-proxy:0.1
+    volumeMounts:   #B
+    - name: envoy-config   #B
+      mountPath: /etc/envoy   #B
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRlZmluaXRpb24gb2YgdGhlIGNvbmZpZ01hcCB2b2x1bWUKI0IgVGhlIHZvbHVtZSBpcyBtb3VudGVkIGludG8gdGhlIGNvbnRhaW5lcg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b9576509be64f96cc59e282e96bad420" data-text-hash="c748cabf88cba73727c44d67c4b27ab6" id="167" refid="167">
+<p>If you&#8217;ve read the previous two chapters, the definitions of the <code>volume</code> and <code>volumeMount</code> in this listing should be clear. As you can see, the volume is a <code>configMap</code> volume that points to the <code>kiada-envoy-config</code> config map, and it&#8217;s mounted in the <code>envoy</code> container under <code>/etc/envoy</code>. The volume contains the <code>envoy.yaml</code> and <code>dummy.bin</code> files that match the keys in the config map.</p>
+</div>
+<div class="readable-text" data-hash="385c90ef798c94b5871015045dfe045b" data-text-hash="5ab6d82857b291173f18e0e328bb1df7" id="168" refid="168">
+<p>Create the pod from the manifest file and check its status. Here&#8217;s what you&#8217;ll see:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d10a540643054127feba2304875bbad9" data-text-hash="151815592e60343ecd18d7611adf5d3c" id="169" refid="169">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po
+NAME        READY   STATUS              RESTARTS   AGE
+Kiada-ssl   0/2     ContainerCreating   0          2m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="026a28341ffff81c5b38d4c044603f90" data-text-hash="1d8d06621595fc511753f963bfe30c0d" id="170" refid="170">
+<p>Because the pod&#8217;s <code>configMap</code> volume references a config map that doesn&#8217;t exist, and the reference isn&#8217;t marked as optional, the container can&#8217;t run.</p>
+</div>
+<div class="readable-text" data-hash="c8c7b22ae67eacbf15df28236f936f04" data-text-hash="edee7eb0f1985b4eeedefa7669221bf0" id="171" refid="171">
+<h4>Marking a configMap volume as optional</h4>
+</div>
+<div class="readable-text" data-hash="26bc74c0f0efe44c6da74fd2e84b572f" data-text-hash="39de5990404d25d3bc19e2732ddef75d" id="172" refid="172">
+<p>Previously, you learned that if a container contains an environment variable definition that refers to a config map that doesn&#8217;t exist, the container is prevented from starting until you create that config map. You also learned that this doesn&#8217;t prevent the other containers from starting. What about the case at hand where the missing config map is referenced in a volume?</p>
+</div>
+<div class="readable-text" data-hash="9598ab3a62b98b21564c4504e1c2b552" data-text-hash="4bbe05a332587882cfcc041158a13f29" id="173" refid="173">
+<p>Because all of the pod&#8217;s volumes must be set up before the pod&#8217;s containers can be started, referencing a missing config map in a volume prevents all the containers in the pod from starting, not just the container in which the volume is mounted. An event is generated indicating the problem. You can display it with the <code>kubectl describe pod</code> or <code>kubectl get events</code> command, as explained in the previous chapters.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="174" refid="174">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="519a30982ee6ede53e46d47761c7a4af" data-text-hash="9befb1ca6bf6178dfc545799e82bac8f" id="175" refid="175">
+<p> A <code>configMap</code> volume can be marked as optional by adding the line <code>optional: true</code> to the volume definition. If a volume is optional and the config map doesn&#8217;t exist, the volume is not created, and the container is started without mounting the volume.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a1b74e398215cb9798dc2ee85b7b2976" data-text-hash="7b2f2f4e56a7dd5cad50090971f6b962" id="176" refid="176">
+<p>To enable the pod&#8217;s containers to start, create the config map by applying the <code>cm.kiada-envoy-config.yaml</code> file you created earlier. Use the <code>kubectl apply</code> command. After doing this, the pod should start, and you should be able to confirm that both config map entries are exposed as files in the container by listing the contents of the <code>/etc/envoy</code> directory as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="482f3c74c79d2b072a61883ac37f2865" data-text-hash="41be7906c83594401c404f95c3157734" id="177" refid="177">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada-ssl -c envoy -- ls /etc/envoy
+dummy.bin
+envoy.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5a7d5727ff27505dc568844139319673" data-text-hash="f8099cb112291c4de338f9548f0b6dac" id="178" refid="178">
+<h4>Projecting only specific config map entries</h4>
+</div>
+<div class="readable-text" data-hash="b862199b42cf9d177fb8963a706077a2" data-text-hash="469e7bca8a664a19f254943a3243571b" id="179" refid="179">
+<p>Envoy doesn&#8217;t need the dummy.bin file, but imagine that it&#8217;s needed by another container or pod and you can&#8217;t remove it from the config map. But having this file appear in <code>/etc/envoy</code> is not ideal, so let&#8217;s do something about it.</p>
+</div>
+<div class="readable-text" data-hash="86d55d9c8fabf3d393f04be19ff84490" data-text-hash="091eca0579300fbe592c6f8b6fcbb01d" id="180" refid="180">
+<p>Fortunately, configMap volumes let you specify which config map entries to project into files. The following listing shows how.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2ddce713d707389f1a53b733aa599041" data-text-hash="8b99e15e2c9e2b00d54aa1c4c2123fce" id="181" refid="181">
+<h5>Listing 9.13 Specifying which config map entries to include into a configMap volume</h5>
+<div class="code-area-container">
+<pre class="code-area">volumes:
+  - name: envoy-config
+    configMap:
+      name: kiada-envoy-config
+      items:   #A
+      - key: envoy.yaml   #B
+        path: envoy.yaml   #B
+ </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgT25seSB0aGUgZm9sbG93aW5nIGNvbmZpZyBtYXAgZW50cnkgc2hvdWxkIGJlIGluY2x1ZGVkIGluIHRoZSB2b2x1bWUuCiNCIFRoZSBjb25maWcgbWFwIGVudHJ5IHZhbHVlIHN0b3JlZCB1bmRlciB0aGUga2V5IGVudm95LnlhbWwgc2hvdWxkIGJlIGluY2x1ZGVkIGluIHRoZSB2b2x1bWUgYXMgZmlsZSBlbnZveS55YW1sLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d3ecddc074883c1ad6e1d0de489422ae" data-text-hash="d94ae108b866a6105997cf77ca3c2a0f" id="182" refid="182">
+<p>The <code>items</code> field specifies the list of config map entries to include in the volume. Each item must specify the <code>key</code> and the file name in the <code>path</code> field. Entries not listed here aren&#8217;t included in the volume. In this way, you can have a single config map for a pod with some entries showing up as environment variables and others as files.</p>
+</div>
+<div class="readable-text" data-hash="526be24e6326c4958533784753e4f0a6" data-text-hash="126c5707d0141ec2b7e98b82d1f05119" id="183" refid="183">
+<h4>Setting file permissions in a configMap volume</h4>
+</div>
+<div class="readable-text" data-hash="6f72c114ba478bc5e512d668d19d08f1" data-text-hash="20b8539b57f7a79a4d237042ab62b4e4" id="184" refid="184">
+<p>By default, the file permissions in a <code>configMap</code> volume are set to <code>rw-r--r--</code> or <code>0644</code> in octal form.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="185" refid="185">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a2028569ac099823abfc8ae5656ed541" data-text-hash="680a5eb1541e96faf95f624bb0841bd2" id="186" refid="186">
+<p> If you aren&#8217;t familiar with Unix file permissions, <code>0644</code> in the octal number system is equivalent to <code>110</code>,<code>100</code>,<code>100</code> in the binary system, which maps to the permissions triplet <code>rw-,r--,r--</code>. The first element refers to the file owner&#8217;s permissions, the second to the owning group, and the third to all other users. The owner can read (<code>r</code>) and write (<code>w</code>) the file but can&#8217;t execute it (<code>-</code> instead of <code>x</code>), while the owning group and other users can read, but not write or execute the file (<code>r--</code>).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b7684f763d0da1851e48ba564ad36ebe" data-text-hash="7167ba7ddbe3c22a1689b98a13ecbc45" id="187" refid="187">
+<p>You can set the default permissions for the files in a <code>configMap</code> volume by setting the <code>defaultMode</code> field in the volume definition. In YAML, the field takes either an octal or decimal value. For example, to set permissions to <code>rwxr-----</code>, add <code>defaultMode: 0740</code> to the <code>configMap</code> volume definition. To set permissions for individual files, set the <code>mode</code> field next to the item&#8217;s <code>key</code> and <code>path</code>.</p>
+</div>
+<div class="readable-text" data-hash="3be7ae8bdf295885f7386dedaba9a861" data-text-hash="c18e131386c63846ddf96799a60ea9a4" id="188" refid="188">
+<p>When specifying file permissions in YAML manifests, make sure you never forget the leading zero, which indicates that the value is in octal form. If you omit the zero, the value will be treated as decimal, which may cause the file to have permissions that you didn&#8217;t intend.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="ce7d3fa2d1c31421f7068edc2beb0e4e" data-text-hash="0ab984d91ab0a037bdf692bf0e73c349" id="189" refid="189">
+<h5>Important</h5>
+</div>
+<div class="readable-text" data-hash="f55849c8242dbc2a9073131600146f7c" data-text-hash="cd7a7c4b621f2e1374d1e5bee132e64f" id="190" refid="190">
+<p> When you use <code>kubectl get -o yaml</code> to display the YAML definition of a pod, note that the file permissions are represented as decimal values. For example, you&#8217;ll regularly see the value <code>420</code>. This is the decimal equivalent of the octal value <code>0644</code>, which is the default file permissions.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9dfbb0b04acdaede46141d72b0d5f575" data-text-hash="594d7ed3b1e94d14ef1817bdc5ed20eb" id="191" refid="191">
+<p>Before you move on to setting file permissions and checking them in the container, you should know that the files you find in the <code>configMap</code> volume are symbolic links (section 9.2.6 explains why). To see the permissions of the actual file, you must follow these links, because they themselves have no permissions and are always shown as <code>rwxrwxrwx</code>.</p>
+</div>
+<div class="readable-text" data-hash="e51523c4d5a719d0f55f7ed6e02355d7" data-text-hash="6d682ba91531238be9c7ad877460fc76" id="192" refid="192">
+<h3 id="sigil_toc_id_155">9.2.5&#160;Updating and deleting config maps</h3>
+</div>
+<div class="readable-text" data-hash="c0781a7b039ca1559972c6c5c1ec2446" data-text-hash="526c02138bbceaaac768c9ce08945cce" id="193" refid="193">
+<p>As with most Kubernetes API objects, you can update a config map at any time by modifying the manifest file and reapplying it to the cluster using <code>kubectl apply</code>. There&#8217;s also a quicker way, which you&#8217;ll mostly use during development.</p>
+</div>
+<div class="readable-text" data-hash="b146026c42d6413631cd65557c8fd817" data-text-hash="9f768b998ef0f03bc51975cf3d18adc9" id="194" refid="194">
+<h4>In-place editing of API objects using kubectl edit</h4>
+</div>
+<div class="readable-text" data-hash="b7268623edc8cf81c68891f5bf99995d" data-text-hash="13c6dddcb7fc5728a83edec9344730b4" id="195" refid="195">
+<p>When you want to make a quick change to an API object, such as a ConfigMap, you can use the <code>kubectl edit</code> command. For example, to edit the <code>kiada-envoy-config</code> config map, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="52874a87cb95d7eba76362449a6bcce8" data-text-hash="4b537cfa16c01a4a6f3c878593eb0ce5" id="196" refid="196">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl edit configmap kiada-envoy-config</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1cf2c002a6333fa63f6ecf31eca5e852" data-text-hash="3967ee6bab048b9515a0ba73f09499c7" id="197" refid="197">
+<p>This opens the object manifest in your default text editor, allowing you to change the object directly. When you close the editor, kubectl posts your changes to the Kubernetes API server.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="0cf02f7c24b7bb72145381811d4301db" data-text-hash="a642171d631de7f4755d264c83e1d2a0" id="198" refid="198">
+<h5>Configuring kubectl edit to use a different text editor</h5>
+</div>
+<div class="readable-text" data-hash="8a8000265736e391c138d8645cae959f" data-text-hash="a5ec0971b02898c4d459e19a6a462915" id="199" refid="199">
+<p>You can tell <code>kubectl</code> to use a text editor of your choice by setting the <code>KUBE_EDITOR</code> environment variable. For example, if you&#8217;d like to use <code>nano</code> for editing Kubernetes resources, execute the following command (or put it into your <code>~/.bashrc</code> or an equivalent file):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8383bb7db00be3787b7e16b408b42143" data-text-hash="407056149a2bb734d7be90902174f4af" id="200" refid="200">
+<div class="code-area-container">
+<pre class="code-area">export KUBE_EDITOR="/usr/bin/nano"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="205fce26c0ac27054a5b4367a14a9aa1" data-text-hash="7c5c3666470427158f9c366dd46643ac" id="201" refid="201">
+<p>If the <code>KUBE_EDITOR</code> environment variable isn&#8217;t set, <code>kubectl</code> <code>edit</code> falls back to using the default editor, usually configured through the <code>EDITOR</code> environment variable.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="182e73c0b0a559ee6bd37392a1ea548b" data-text-hash="48a32cabb5afef1d77897962728f3ff0" id="202" refid="202">
+<h4>What happens when you modify a config map</h4>
+</div>
+<div class="readable-text" data-hash="1ef6b0ddc6b3b7e66c691cb34637b6a4" data-text-hash="525dc75db3116880545b4c47f7cdfa31" id="203" refid="203">
+<p>When you update a config map, the files in the <code>configMap</code> volume are automatically updated.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="204" refid="204">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="6a566d0f369ecb75110e36db285cf46b" data-text-hash="6545a0d0c6e409607a9aafb143234024" id="205" refid="205">
+<p>&#8195;It can take up to a minute for the files in a <code>configMap</code> volume to be updated after you change the config map.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f430a5f3eead01ddd62c339b1acca1d3" data-text-hash="a40a45ea798a732ea69070b7764e5356" id="206" refid="206">
+<p>Unlike files, environment variables can&#8217;t be updated while the container is running. However, if the container is restarted for some reason (because it crashed or because it was terminated externally due to a failed liveness probe), Kubernetes will use the new config map values when it sets up the environment variables for the new container. The question is whether you want it to do that at all.</p>
+</div>
+<div class="readable-text" data-hash="7d98dfdd8e0a99deea495e7772713dce" data-text-hash="a62bf8e1ff934cac2dbb31f3d9f833e1" id="207" refid="207">
+<h4>Understanding the consequences of updating a config map</h4>
+</div>
+<div class="readable-text" data-hash="e54a232e41932bcdc4049839dabf5a92" data-text-hash="a822d76b717cdd7081a8e28f05f4798c" id="208" refid="208">
+<p>One of the most important properties of containers is their immutability, which allows you to be sure that there are no differences between multiple instances of the same container (or pod). Shouldn&#8217;t the config maps from which these instances get their configuration also be immutable?</p>
+</div>
+<div class="readable-text" data-hash="61058636046e36903e52fb545ef9b0c0" data-text-hash="1a873b1c7064caed5d72a0d9fc9044ef" id="209" refid="209">
+<p>Let&#8217;s think about this for a moment. What happens if you change a config map used to inject environment variables into an an application? What if the application is configured via config files, but it doesn&#8217;t automatically reload them when they are modified? The changes you make to the config map don&#8217;t affect any of these running application instances. However, if some of these instances are restarted or if you create additional instances, they <i>will</i> use the new configuration.</p>
+</div>
+<div class="readable-text" data-hash="6df4b69cb037799322520ffcba96e86c" data-text-hash="1e4b88f47dabefbf623eb4e3f656f2da" id="210" refid="210">
+<p>A similar scenario occurs even with applications that can reload their configuration. Kubernetes updates <code>configMap</code> volumes asynchronously. Some application instances may see the changes sooner than others. And because the update process may take dozens of seconds, the files in individual pod instances can be out of sync for a considerable amount of time.</p>
+</div>
+<div class="readable-text" data-hash="a6d7e33aec1a85ea39fa069c3dfe570e" data-text-hash="a662c315797e35955c47c982560aa33d" id="211" refid="211">
+<p>In both scenarios, you get instances that are configured differently. This may cause parts of your system to behave differently than the rest. You need to take this into account when deciding whether to allow changes to a config map while it&#8217;s being used by running pods.</p>
+</div>
+<div class="readable-text" data-hash="7ecc73d0d6ac63cf59bc2dc944b8629f" data-text-hash="c18ab54b2187fe6d613c0bd1b611f970" id="212" refid="212">
+<h4>Preventing a config map from being updated</h4>
+</div>
+<div class="readable-text" data-hash="e43662329135775d15aa545144140b8b" data-text-hash="f86d6f8343f01cce5e945d50d72d83c5" id="213" refid="213">
+<p>To prevent users from changing the values in a config map, you can mark the config map as immutable, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="01c0ddfe63be0d01ba3e6c21acd7d77c" data-text-hash="dac1f7a8dafbcc64d7f3d9fe91963291" id="214" refid="214">
+<h5>Listing 9.14 Creating an immutable config map</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-immutable-configmap
+data:
+  mykey: myvalue
+  another-key: another-value
+immutable: true                   #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwcmV2ZW50cyB0aGlzIGNvbmZpZyBtYXDigJlzIHZhbHVlcyBmcm9tIGJlaW5nIHVwZGF0ZWQ="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2837212a287fedcfa6a1371093d53956" data-text-hash="ea419f6d8790b88a5513e20874955eb2" id="215" refid="215">
+<p>If someone tries to change the <code>data</code> or <code>binaryData</code> fields in an immutable config map, the API server will prevent it. This ensures that all pods using this config map use the same configuration values. If you want to run a set of pods with a different configuration, you typically create a new config map and point them to it.</p>
+</div>
+<div class="readable-text" data-hash="731cd619ca56758e541c8dbc9bc3d135" data-text-hash="b529ba6504771151da41a1daa108a887" id="216" refid="216">
+<p>Immutable config maps prevent users from accidentally changing application configuration, but also help improve the performance of your Kubernetes cluster. When a config map is marked as immutable, the Kubelets on the worker nodes that use it don&#8217;t have to be notified of changes to the ConfigMap object. This reduces the load on the API server.</p>
+</div>
+<div class="readable-text" data-hash="f697adccf2c0cb68e0a62708b6bdefe8" data-text-hash="bade7c5c10b1bfce77a5600ab91695c6" id="217" refid="217">
+<h4>Deleting a config map</h4>
+</div>
+<div class="readable-text" data-hash="3578936f10ee61a7f7eadd467afb8133" data-text-hash="e981bc97cb1e2337db0e595a807bd00f" id="218" refid="218">
+<p>ConfigMap objects can be deleted with the <code>kubectl delete</code> command. The running pods that reference the config map continue to run unaffected, but only until their containers must be restarted. If the config map reference in the container definition isn&#8217;t marked as optional, the container will fail to run.</p>
+</div>
+<div class="readable-text" data-hash="9ce75ce87508cebda9a0e344f6f780a7" data-text-hash="b4f08b9934023e446c67dc75f5498e92" id="219" refid="219">
+<h3 id="sigil_toc_id_156">9.2.6&#160;Understanding how configMap volumes work</h3>
+</div>
+<div class="readable-text" data-hash="11acfbdc1f5d9d3725a0678065ee5e5b" data-text-hash="be9af551f7ec0e5a90ce68cb86a623c5" id="220" refid="220">
+<p>Before you start using <code>configMap</code> volumes in your own pods, it&#8217;s important that you understand how they work, or you&#8217;ll spend a lot of time fighting them.</p>
+</div>
+<div class="readable-text" data-hash="9be79ccdd94d40d9440a07ad217721e6" data-text-hash="3544bb31e2be19f4d7dbae242c155830" id="221" refid="221">
+<p>You might think that when you mount a configMap volume in a directory in the container, Kubernetes merely creates some files in that directory, but things are more complicated than that. There are two caveats that you need to keep in mind. One is how volumes are mounted in general, and the other is how Kubernetes uses symbolic links to ensure that files are updated atomically.</p>
+</div>
+<div class="readable-text" data-hash="1673b4e081d2fb38c255c1d00981e350" data-text-hash="82dec0de754fd0bd4c6764e3529a59cf" id="222" refid="222">
+<h4>Mounting a volume hides existing files in the file directory</h4>
+</div>
+<div class="readable-text" data-hash="b2f31d890b6e6d8e1c3bf5571c0cf798" data-text-hash="8be875279007b1369d4e922683fe9acd" id="223" refid="223">
+<p>If you mount any volume to a directory in the container&#8217;s filesystem, the files that are in the container image in that directory can no longer be accessed. For example, if you mount a <code>configMap</code> volume into the <code>/etc</code> directory, which in a Unix system contains important configuration files, the applications running in the container will only see the files defined in the config map. This means that all other files that should be in <code>/etc</code> are no longer present and the application may not run. However, this problem can be mitigated by using the <code>subPath</code> field when mounting the volume.</p>
+</div>
+<div class="readable-text" data-hash="18475a88748857287abb2627baa5cc12" data-text-hash="251c862b29d1fef5b8ac019561bef918" id="224" refid="224">
+<p>Imagine you have a <code>configMap</code> volume that contains the file <code>my-app.conf</code>, and you want to add it to the <code>/etc</code> directory without losing any existing files in that directory. Instead of mounting the entire volume in <code>/etc</code>, you mount only the specific file using a combination of the <code>mountPath</code> and <code>subPath</code> fields, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4dd501f85ca878b149c9bd318b8f332a" data-text-hash="70c05c97a88b5477f79be29b6ddaaf06" id="225" refid="225">
+<h5>Listing 9.15 Mounting an individual file into a container</h5>
+<div class="code-area-container">
+<pre class="code-area">spec:
+  containers:
+  - name: my-container
+    volumeMounts:
+    - name: my-volume
+      subPath: my-app.conf                 #A
+      mountPath: /etc/my-app.conf          #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5zdGVhZCBvZiBtb3VudGluZyB0aGUgZW50aXJlIHZvbHVtZSwgeW91IG1vdW50IG9ubHkgdGhlIG15LWFwcC5jb25mIGZpbGUuCiNCIFlvdeKAmXJlIG1vdW50aW5nIGEgc2luZ2xlIGZpbGUgaW5zdGVhZCBvZiB0aGUgZW50aXJlIGRpcmVjdG9yeS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="bbee58e32e0c4a98ceccaa91e1e25db0" data-text-hash="6d26015da4bf97b812b7b860a7cbbb0e" id="226" refid="226">
+<p>To make it easier to understand how all this works, inspect the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="cfb34d5c410baf40c59e225172133654" data-text-hash="1460560c6b59591e0a6fdd6d7d82427a" id="227" refid="227">
+<h5>Figure 9.5 Using subPath to mount a single file from the volume</h5>
+<img alt="" data-processed="true" height="357" id="Picture_5" loading="lazy" src="EPUB/images/09image006.png" width="832">
+</div>
+<div class="readable-text" data-hash="87f4e1e544f9604961c8542123caf632" data-text-hash="0fc31ae1db467c13f942c5ce52006f9c" id="228" refid="228">
+<p>The <code>subPath</code> property can be used when mounting any type of volume, but when you use it with a <code>configMap</code> volume, please note the following warning:</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="229" refid="229">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="7a84ca2169f51f58b724aa3134561e15" data-text-hash="61885405ae5d922a01e891fd6fd66cad" id="230" refid="230">
+<p> If you use the <code>subPath</code> field to mount individual files instead of the entire <code>configMap</code> volume, the file won&#8217;t be updated when you modify the config map.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5211363d55d6aac18dad1efda0ff5b4b" data-text-hash="b5d2dcafd4b9be5d0456a06b2e3fc943" id="231" refid="231">
+<p>To get around this problem, you can mount the entire volume in another directory and create a symbolic link in the desired location pointing to the file in the other directory. You can create this symbolic link beforehand in the container image itself.</p>
+</div>
+<div class="readable-text" data-hash="9dd5e5683058dd27c526449a66c80056" data-text-hash="b36682531dbb8a394555e21dce11e445" id="232" refid="232">
+<h4>ConfigMap volumes use symbolic links to provide atomic updates</h4>
+</div>
+<div class="readable-text" data-hash="022625c06a714dd4d9cf21b04e30fb79" data-text-hash="09a328ad98cb88c549bb0c2ab3e94576" id="233" refid="233">
+<p>Some applications watch for changes to their configuration files and reload them when this happens. However, if the application is using a large file or multiple files, the application may detect that a file has changed before all file updates are complete. If the application reads the partially updated files, it may not function properly.</p>
+</div>
+<div class="readable-text" data-hash="9e8d261ea6fc129b3bd5c9b546a4495c" data-text-hash="f81e53475d25aab59796972b01eb65c2" id="234" refid="234">
+<p>To prevent this, Kubernetes ensures that all files in a <code>configMap</code> volume are updated atomically, meaning that all updates are done instantaneously. This is achieved with the use of symbolic file links, as you can see if you list all the files in the <code>/etc/envoy</code> directory:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="747c5a46c8d987c145dd7e6ffeb70fdf" data-text-hash="4aede2b8e54a574c9d05f6dec543524c" id="235" refid="235">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada-ssl -c envoy -- ls -lA /etc/envoy
+total 4
+drwxr-xr-x   ...  ..2020_11_14_11_47_45.728287366   #A
+lrwxrwxrwx   ...  ..data -&gt; ..2020_11_14_11_47_45.728287366   #B
+lrwxrwxrwx   ...  envoy.yaml -&gt; ..data/envoy.yaml   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgU3ViLWRpcmVjdG9yeSB0aGF0IGNvbnRhaW5zIHRoZSBhY3R1YWwgZmlsZXMKI0IgQSBzeW1ib2xpYyBsaW5rIHRvIHRoZSBzdWJkaXJlY3RvcnkKI0MgQSBzeW1ib2xpYyBsaW5rIGZvciBlYWNoIGNvbmZpZyBtYXAgZW50cnk="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2cd352615031cdc82bcd028197fb8d35" data-text-hash="5947ad502cb01af177ac3f0a71155341" id="236" refid="236">
+<p>As you can see in the listing, the config map entries that are projected as files into the volume are symbolic links that point to file paths within the directory named <code>..data</code>, which is also a symbolic link. It points to a directory whose name clearly represents a timestamp. So the file paths that the application reads point to actual files via two successive symbolic links.</p>
+</div>
+<div class="readable-text" data-hash="7ef75344492ec10eff2e66cc5eb6aacd" data-text-hash="3c215b95c6cd0f6f949c1484c80eb16e" id="237" refid="237">
+<p>This may look unnecessary, but it allows you to update all files atomically. Every time you change the config map, Kubernetes creates a new timestamped directory, writes the files to it, and then associates the <code>..data</code> symbolic link with this new directory, replacing all files instantaneously.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="238" refid="238">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ecda54d1e8acce71bc4f19ae4a4a5ecc" data-text-hash="bfda2a9de6491551b1f22057fbb9b448" id="239" refid="239">
+<p> If you use <code>subPath</code> in your volume mount definition, this mechanism isn&#8217;t used. Instead, the file is written directly to the target directory and the file isn&#8217;t updated when you modify the config map.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="bb7d0da97521a3be1715a53eb86d61a9" data-text-hash="f3f9d14502cdd5b18277bd9dd8a83c12" id="240" refid="240">
+<h2 id="sigil_toc_id_157">9.3&#160;Using Secrets to pass sensitive data to containers</h2>
+</div>
+<div class="readable-text" data-hash="8112f829e9334956b7b52ed0c0a2aa57" data-text-hash="23fd12eb3bbc203699486e5e4906d187" id="241" refid="241">
+<p>In the previous section, you learned how to store configuration data in ConfigMap objects and make it available to the application via environment variables or files. You may think that you can also use config maps to also store sensitive data such as credentials and encryption keys, but this isn&#8217;t the best option. For any data that needs to be kept secure, Kubernetes provides another type of object - <i>Secrets</i>. They will be covered next.</p>
+</div>
+<div class="readable-text" data-hash="3faf2ab2f72017decba83687ba11649b" data-text-hash="09b507d24e5fdcd016d65eab58464062" id="242" refid="242">
+<h3 id="sigil_toc_id_158">9.3.1&#160;Introducing Secrets</h3>
+</div>
+<div class="readable-text" data-hash="08b1265939d1bdf8d0bd343c7e45c6b7" data-text-hash="73313623c332689ccb79bdb605f0029f" id="243" refid="243">
+<p>Secrets are remarkably similar to config maps. Just like config maps, they contain key-value pairs and can be used to inject environment variables and files into containers. So why do we need secrets at all?</p>
+</div>
+<div class="readable-text" data-hash="85de1222385cd3c355b9a4d29d2bc4bc" data-text-hash="605ff5576c25f49a4643c1053d427532" id="244" refid="244">
+<p>Kubernetes supported secrets even before config maps were added. Originally, secrets were not user-friendly when it came to storing plain-text data. For this reason, config maps were then introduced. Over time, both the secrets and config maps evolved to support both types of values. The functions provided by these two types of object converged. If they were added now, they would certainly be introduced as a single object type. However, because they each evolved gradually, there are some differences between them.</p>
+</div>
+<div class="readable-text" data-hash="b4d8f41dd748c26398d523813e789fa0" data-text-hash="0dc77450c6e2fa2f7b5c280f812f5642" id="245" refid="245">
+<h4>Differences in fields between config maps and secrets</h4>
+</div>
+<div class="readable-text" data-hash="c9b8780eabfe60dd4c5fede47e21a833" data-text-hash="6d609afaf73442197e50d3e78b9f722e" id="246" refid="246">
+<p>The structure of a secret is slightly different from that of a config map. The following table shows the fields in each of the two object types.</p>
+</div>
+<div class="browsable-container" data-hash="491376980e703896a15e7033c7599c9d" data-text-hash="42b75ea5829b12e5390b80d2ac2b80d7" id="247" refid="247">
+<h5>Table 9.3 Differences in the structure of secrets and config maps</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Secret</p> </td>
+<td> <p>ConfigMap</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>data
+</pre> </td>
+<td> <p></p><pre>binaryData
+</pre> </td>
+<td> <p>A map of key-value pairs. The values are Base64-encoded strings.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>stringData
+</pre> </td>
+<td> <p></p><pre>data
+</pre> </td>
+<td> <p>A map of key-value pairs. The values are plain text strings. The stringData field in secrets is write-only.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>immutable
+</pre> </td>
+<td> <p></p><pre>immutable
+</pre> </td>
+<td> <p>A boolean value indicating whether the data stored in the object can be updated or not.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>type
+</pre> </td>
+<td> <p></p><pre>N/A
+</pre> </td>
+<td> <p>A string indicating the type of secret. Can be any string value, but several built-in types have special requirements.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="afed6478edd20974f51f09f5ac1d1184" data-text-hash="9556e6decf07d0466d3c64ef824d6574" id="248" refid="248">
+<p>As you can see in the table, the <code>data</code> field in secrets corresponds to the <code>binaryData</code> field in config maps. It can contain binary values as Base64-encoded strings. The <code>stringData</code> field in secrets is equivalent to the <code>data</code> field in config maps and is used to store plain text values. This <code>stringData</code> field in secrets is write-only. You can use it to add plaintext values to the secret without having to encode them manually. When you read back the Secret object, any values you added to <code>stringData</code> will be included in the <code>data</code> field as Base64-encoded strings.</p>
+</div>
+<div class="readable-text" data-hash="de90e8bcf52e9fee532f1a7ed8c7d33d" data-text-hash="44c2dfea6ef83c348598b100e11a5418" id="249" refid="249">
+<p>This is different from the behavior of the <code>data</code> and <code>binaryData</code> fields in config maps. Whatever key-value pair you add to one of these fields will remain in that field when you read the ConfigMap object back from the API.</p>
+</div>
+<div class="readable-text" data-hash="db93814edccbe41d659107c89c776990" data-text-hash="64c6322665a756c9f258bbcd72ab386e" id="250" refid="250">
+<p>Like config maps, secrets can be marked immutable by setting the <code>immutable</code> field to <code>true</code>.</p>
+</div>
+<div class="readable-text" data-hash="82544a46ca5a0e8ea9909dade297c8aa" data-text-hash="feb60c99f946a701b06c333946b7ed2e" id="251" refid="251">
+<p>Secrets have a field that config maps do not. The <code>type</code> field specifies the type of the secret and is mainly used for programmatic handling of the secret. You can set the type to any value you want, but there are several built-in types with specific semantics.</p>
+</div>
+<div class="readable-text" data-hash="9981e2d2b3e266992fe14eb0312943ce" data-text-hash="82ff673c4b674a159ee5ebd6d9c75809" id="252" refid="252">
+<h4>Understanding built-in secret types</h4>
+</div>
+<div class="readable-text" data-hash="956650547b13ab7662642bfc7cc14ca1" data-text-hash="04c5defb241271134c0690806b0a49ef" id="253" refid="253">
+<p>When you create a secret and set its type to one of the built-in types, it must meet the requirements defined for that type, because they are used by various Kubernetes components that expect them to contain values in specific formats under specific keys. The following table explains the built-in secret types that exist at the time of writing this.</p>
+</div>
+<div class="browsable-container" data-hash="7e848d22e5858a882a0b0fb5c83f3275" data-text-hash="0d819da09f2c4b6028fe33ffe86176d9" id="254" refid="254">
+<h5>Table 9.4 Types of secrets</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Built-in secret type</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Opaque
+</pre> </td>
+<td> <p>This type of secret can contain secret data stored under arbitrary keys. If you create a secret with no <code>type</code> field, an Opaque secret is created.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>bootstrap.kubernetes.io/token
+</pre> </td>
+<td> <p>This type of secret is used for tokens that are used when bootstrapping new cluster nodes.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/basic-auth
+</pre> </td>
+<td> <p>This type of secret stores the credentials required for basic authentication. It must contain the <code>username</code> and <code>password</code> keys.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/dockercfg
+</pre> </td>
+<td> <p>This type of secret stores the credentials required for accessing a Docker image registry. It must contain a key called <code>.dockercfg</code>, where the value is the contents of the <code>~/.dockercfg</code> configuration file used by legacy versions of Docker.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/dockerconfigjson
+</pre> </td>
+<td> <p>Like above, this type of secret stores the credentials for accessing a Docker registry, but uses the newer Docker configuration file format. The secret must contain a key called <code>.dockerconfigjson</code>. The value must be the contents of the <code>~/.docker/config.json</code> file used by Docker.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/service-account-token
+</pre> </td>
+<td> <p>This type of secret stores a token that identifies a Kubernetes service account. You'll learn about service accounts and this token in chapter 23.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/ssh-auth
+</pre> </td>
+<td> <p>This type of secret stores the private key used for SSH authentication. The private key must be stored under the key <code>ssh-privatekey</code> in the secret.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kubernetes.io/tls
+</pre> </td>
+<td> <p>This type of secrets stores a TLS certificate and the associated private key. They must be stored in the secret under the key <code>tls.crt</code> and <code>tls.key</code>, respectively.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="1dc98f38d22fe5514ef1895164cd2b86" data-text-hash="a79404e8d810f76173733bbedfe7e191" id="255" refid="255">
+<h4>Understanding how Kubernetes stores secrets and config maps</h4>
+</div>
+<div class="readable-text" data-hash="f117751ca5b4e809f4bd2065a24ebbf1" data-text-hash="1ce63523cb0b841a2ffa5cec1c8fdf9f" id="256" refid="256">
+<p>In addition to the small differences in the names of the fields supported by config maps or secrets, Kubernetes treats them differently. When it comes to secrets, you need to remember that they are handled in specific ways in all Kubernetes components to ensure their security. For example, Kubernetes ensures that the data in a secret is distributed only to the node that runs the pod that needs the secret. Also, secrets on the worker nodes themselves are always stored in memory and never written to physical storage. This makes it less likely that sensitive data will leak out.</p>
+</div>
+<div class="readable-text" data-hash="24c5dca4c28e16e23f86848154c8b1bb" data-text-hash="6199e5f67c8fbdda3ee1e1bb43d34cc9" id="257" refid="257">
+<p>For this reason, it&#8217;s important that you store sensitive data only in secrets and not config maps.</p>
+</div>
+<div class="readable-text" data-hash="cc7bf3b29fb4398cff65b5a187d4b55c" data-text-hash="ff24d83f2e8927c5babfbeed7e96b40a" id="258" refid="258">
+<h3 id="sigil_toc_id_159">9.3.2&#160;Creating a secret</h3>
+</div>
+<div class="readable-text" data-hash="7aa2c5bcb2f2dcc56d1af83bc8dbdd2d" data-text-hash="5826b54820b91d24e352870f36603125" id="259" refid="259">
+<p>In section 9.2, you used a config map to inject the configuration file into the Envoy sidecar container. In addition to the file, Envoy also requires a TLS certificate and private key. Because the key represents sensitive data, it should be stored in a secret.</p>
+</div>
+<div class="readable-text" data-hash="59638f45b2ab2be2a68166002e24d965" data-text-hash="fa07375bae347dd92ddf755f2df52607" id="260" refid="260">
+<p>In this section, you&#8217;ll create a secret to store the certificate and key, and project it into the container&#8217;s filesystem. With the config, certificate and key files all sourced from outside the container image, you can replace the custom <code>kiada-ssl-proxy</code> image with the generic <code>envoyproxy/envoy</code> image. This is a considerable improvement, as removing custom images from the system is always a good thing, since you no longer need to maintain them.</p>
+</div>
+<div class="readable-text" data-hash="d38bc51f6a3f703213c0e851b6e9bd92" data-text-hash="34574a4076f5262ff5c65e4c88aae98d" id="261" refid="261">
+<p>First, you&#8217;ll create the secret. The files for the certificate and private key are provided in the book&#8217;s code repository, but you can also create them yourself.</p>
+</div>
+<div class="readable-text" data-hash="46d217d6add2b0f2ff75b462a0e0ba47" data-text-hash="1b731da7abcd44e826e970b241d7f21a" id="262" refid="262">
+<h4>Creating a TLS secret</h4>
+</div>
+<div class="readable-text" data-hash="42966ecb6b9a6b388c7e962e4bb10abc" data-text-hash="c7148cd358691daacd0072484e07784c" id="263" refid="263">
+<p>Like for config maps, <code>kubectl</code> also provides a command for creating different types of secrets. Since you are creating a secret that will be used by your own application rather than Kubernetes, it doesn&#8217;t matter whether the secret you create is of type <code>Opaque</code> or <code>kubernetes.io/tls</code>, as described in table 9.4. However, since you are creating a secret with a TLS certificate and a private key, you should use the built-in secret type <code>kubernetes.io/tls</code> to standardize things.</p>
+</div>
+<div class="readable-text" data-hash="a6e396df1bf7e72d18498bb0e3c76cfa" data-text-hash="01d6fb908470441e603a101bc4a9d66a" id="264" refid="264">
+<p>To create the secret, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f58224abbe5f45e2d56fd556adefa72f" data-text-hash="3776ffe7315aa45837a8cb6e312f8a98" id="265" refid="265">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create secret tls kiada-tls \       #A
+  --cert example-com.crt \                    #B
+  --key example-com.key                       #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQ3JlYXRpbmcgYSBUTFMgc2VjcmV0IGNhbGxlZCBraWFkYS10bHMKI0IgVGhlIHBhdGggdG8gdGhlIGNlcnRpZmljYXRlIGZpbGUKI0MgVGhlIHBhdGggdG8gdGhlIHByaXZhdGUga2V5IGZpbGU="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8f7df442e832bd27b8d1e5d42cc17f0c" data-text-hash="6d411914c5c1bbbcef2983ea7d7933ec" id="266" refid="266">
+<p>This command instructs <code>kubectl</code> to create a <code>tls</code> secret named <code>kiada-tls</code>. The certificate and private key are read from the file <code>example-com.crt</code> and <code>example-com.key</code>, respectively.</p>
+</div>
+<div class="readable-text" data-hash="a0b41a18664607b51d3240ba30f830fb" data-text-hash="2409717753ad6448dbb1bd305600287d" id="267" refid="267">
+<h4>Creating a generic (opaque) secret</h4>
+</div>
+<div class="readable-text" data-hash="15ee19b3727a794252a9fd04490c129f" data-text-hash="e0278b96202259c2ed27af6a4801ec8a" id="268" refid="268">
+<p>Alternatively, you could use kubectl to create a generic secret. The items in the resulting secret would be the same, the only difference would be its type. Here&#8217;s the command to create the secret:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0e8d291d66be5c83fe4f57ebdc23e0cb" data-text-hash="8a32c5a7cb2ed60c12e89696717eaf15" id="269" refid="269">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create secret generic kiada-tls \    #A
+    --from-file tls.crt=example-com.crt \      #B
+    --from-file tls.key=example-com.key        #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQ3JlYXRpbmcgYSBnZW5lcmljIHNlY3JldCBjYWxsZWQga2lhZGEtdGxzCiNCIFRoZSBjb250ZW50cyBvZiB0aGUgZXhhbXBsZS1jb20uY3J0IGZpbGUgc2hvdWxkIGJlIHN0b3JlZCB1bmRlciB0aGUga2V5IHRscy5jcnQKI0MgVGhlIGNvbnRlbnRzIG9mIHRoZSBleGFtcGxlLWNvbS5rZXkgZmlsZSBzaG91bGQgYmUgc3RvcmVkIHVuZGVyIHRoZSBrZXkgdGxzLmtleQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="be9f5fda9374ae22114d0c8592af98c7" data-text-hash="cdc97c88deaac0dd2dc07a43d076ff7c" id="270" refid="270">
+<p>In this case, <code>kubectl</code> creates a generic secret. The contents of the <code>example-com.crt</code> file are stored under the <code>tls.crt</code> key, while the contents of the <code>example-com.key</code> file are stored under <code>tls.key</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="271" refid="271">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="762bef8f22d8e76f4cdaf6cd58bc21ad" data-text-hash="9155bdcb3968a184db1cc88a924aabb6" id="272" refid="272">
+<p> Like config maps, the maximum size of a secret is approximately 1MB.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9d563e34a926d51f65afa5b088db6483" data-text-hash="ee5d509d1dacf6cd525d26683d27f3bc" id="273" refid="273">
+<h4>Creating secrets from YAML manifests</h4>
+</div>
+<div class="readable-text" data-hash="d2face29f05742eda73c337004e84e5b" data-text-hash="6c1fe66831e51f93f1a1f55e26a40cfd" id="274" refid="274">
+<p>The kubectl create secret command creates the secret directly in the cluster. Previously, you learned how to create a YAML manifest for a config map. What about secrets?</p>
+</div>
+<div class="readable-text" data-hash="0a33049ce4d00c92d5155cacb8800020" data-text-hash="1004e3446a2a661827fd0b09d66a62e4" id="275" refid="275">
+<p>For obvious reasons, it&#8217;s not the best idea to create YAML manifests for your secrets and store them in your version control system, as you do with config maps. However, if you need to create a YAML manifest instead of creating the secret directly, you can again use the <code>kubectl create --dry-run=client -o yaml</code> trick.</p>
+</div>
+<div class="readable-text" data-hash="be3cc92e76a4dc268f35c1c16e3387b2" data-text-hash="91f19ee47182349f63775f6093f7f639" id="276" refid="276">
+<p>Suppose you want to create a secret YAML manifest containing user credentials under the keys <code>user</code> and <code>pass</code>. You can use the following command to create the YAML manifest:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="815218d9221566cccb3138218d176f49" data-text-hash="45d58e2fffdf0cfac836c03f265f4231" id="277" refid="277">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create secret generic my-credentials \    #A
+   --from-literal user=my-username \                #B
+   --from-literal pass=my-password \                #B
+   --dry-run=client -o yaml                         #C
+apiVersion: v1
+data:
+  pass: bXktcGFzc3dvcmQ=                            #D
+  user: bXktdXNlcm5hbWU=                            #D
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: my-credentials</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQ3JlYXRlIGEgZ2VuZXJpYyBzZWNyZXQKI0IgU3RvcmUgdGhlIGNyZWRlbnRpYWxzIGluIGtleXMgdXNlciBhbmQgcGFzcwojQyBQcmludCB0aGUgWUFNTCBtYW5pZmVzdCBpbnN0ZWFkIG9mIHBvc3RpbmcgdGhlIHNlY3JldCB0byB0aGUgQVBJIHNlcnZlcgojRCBCYXNlNjQtZW5jb2RlZCBjcmVkZW50aWFscw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0ecc617244cec787f6cf0e9c97564f6d" data-text-hash="f7b80bbd683b412570ca1ad550b5e9f3" id="278" refid="278">
+<p>Creating the manifest using the <code>kubectl create</code> trick as shown here is much easier than creating it from scratch and manually entering the Base64-encoded credentials. Alternatively, you could avoid encoding the entries by using the <code>stringData</code> field as explained next.</p>
+</div>
+<div class="readable-text" data-hash="fc69ddc617fc92e8e1c4a7f8ab02e1b6" data-text-hash="0f3d1c53b38a7a278f2ca44fad14d521" id="279" refid="279">
+<h4>Using the stringData field</h4>
+</div>
+<div class="readable-text" data-hash="5f3796011a82c2a7355be10af2cf12db" data-text-hash="98f65aba5ee7750b767356912266da6d" id="280" refid="280">
+<p>Since not all sensitive data is in binary form, Kubernetes also allows you to specify plain text values in secrets by using <code>stringData</code> instead of the <code>data</code> field. The following listing shows how you&#8217;d create the same secret that you created in the previous example.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="be66f15338e3038426d5bd21ac75e903" data-text-hash="418beab042feeb0ab7c441b6eaa19cef" id="281" refid="281">
+<h5>Listing 9.16 Adding plain text entries to a secret using the <code class="codechar">stringData</code> <span class="calibre91">field</span></h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Secret
+stringData:                  #A
+  user: my-username          #B
+  pass: my-password          #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHN0cmluZ0RhdGEgaXMgdXNlZCB0byBlbnRlciBwbGFpbi10ZXh0IHZhbHVlcyB3aXRob3V0IGVuY29kaW5nIHRoZW0KI0IgVGhlc2UgY3JlZGVudGlhbHMgYXJlbuKAmXQgZW5jb2RlZCB1c2luZyBCYXNlNjQgZW5jb2Rpbmc="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dc0ddf340394913d355cf35104a6ec5a" data-text-hash="fa9a8207f74abd0a7c496653e416f6d1" id="282" refid="282">
+<p>The <code>stringData</code> field is write-only and can only be used to set values. If you create this secret and read it back with <code>kubectl</code> <code>get</code> <code>-o</code> <code>yaml</code>, the <code>stringData</code> field is no longer present. Instead, any entries you specified in it will be displayed in the <code>data</code> field as Base64-encoded values.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="283" refid="283">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="b6379ebb36d56345e18521d7240f7c12" data-text-hash="ccccece879280dac97cbc04889100ba7" id="284" refid="284">
+<p> Since entries in a secret are always represented as Base64-encoded values, working with secrets (especially reading them) is not as human-friendly as working with config maps, so use config maps wherever possible. But never sacrifice security for the sake of comfort.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9d71ea4c11e0683d2cea1682d5642f58" data-text-hash="da1824de907c6c3c14ddd369ebbd327e" id="285" refid="285">
+<p>Okay, let&#8217;s return to the TLS secret you created earlier. Let&#8217;s use it in a pod.</p>
+</div>
+<div class="readable-text" data-hash="ff49eac8d6f15742cb8c2134a583d5ed" data-text-hash="0d63eb5c41b79d71d0cdee4e5659b1a8" id="286" refid="286">
+<h3 id="sigil_toc_id_160">9.3.3&#160;Using secrets in containers</h3>
+</div>
+<div class="readable-text" data-hash="e3e79590435a83c3ee7fc07b8cfbd0d8" data-text-hash="7f8399fac9e89640d2f8dd57e0046460" id="287" refid="287">
+<p>As explained earlier, you can use secrets in containers the same way you use config maps - you can use them to set environment variables or create files in the container&#8217;s filesystem. Let&#8217;s look at the latter first.</p>
+</div>
+<div class="readable-text" data-hash="3d808fb6ac451cb45c6fcc0c91cc2e77" data-text-hash="e46d4a749d6acbc58a250a7a10c34d37" id="288" refid="288">
+<h4>Using a secret volume to project secret entries into files</h4>
+</div>
+<div class="readable-text" data-hash="69eb7716b5b9f0566a269889d75c57de" data-text-hash="d87d35875bf09b6957a48e6f1aff7aee" id="289" refid="289">
+<p>In one of the previous sections, you created a secret called kiada-tls. Now you will project the two entries it contains into files using a <code>secret</code> volume. A <code>secret</code> volume is analogous to the <code>configMap</code> volume used before, but points to a secret instead of a config map.</p>
+</div>
+<div class="readable-text" data-hash="9e47dfd1897086a73e7f1e597eef77f5" data-text-hash="fa7c76dc6a35ab573ac6dc4bb992eda9" id="290" refid="290">
+<p>To project the TLS certificate and private key into the <code>envoy</code> container of the <code>kiada-ssl</code> pod, you need to define a new <code>volume</code> and a new <code>volumeMount</code>, as shown in the next listing, which contains the important parts of the <code>pod.kiada-ssl.secret-volume.yaml</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="451bfdc8aab94e5df4d5bbd9736aa8c5" data-text-hash="6bbefce16364b5db03b31d2acd5d5ef4" id="291" refid="291">
+<h5>Listing 9.17 Using a secret volume in a pod</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl
+spec:
+  volumes:
+  - name: cert-and-key   #A
+    secret:   #A
+      secretName: kiada-tls   #A
+      items:   #B
+      - key: tls.crt   #B
+        path: example-com.crt   #B
+      - key: tls.key   #B
+        path: example-com.key   #B
+        mode: 0600   #C
+  ...
+  containers:
+  - name: kiada
+    ...
+  - name: envoy
+    image: envoyproxy/envoy:v1.14.1
+    volumeMounts:   #D
+    - name: cert-and-key   #D
+      mountPath: /etc/certs   #D
+      readOnly: true   #D
+    ...
+    ports:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBkZWZpbmVzIGEgc2VjcmV0IHZvbHVtZSB0aGF0IHByb2plY3RzIHRoZSBlbnRyaWVzIG9mIHRoZSBraWFkYS10bHMgc2VjcmV0IGludG8gZmlsZXMuCiNCIFRoZSBrZXlzIGluIHRoZSBzZWNyZXQgbmVlZCB0byBiZSBtYXBwZWQgdG8gdGhlIGNvcnJlY3QgZmlsZW5hbWVzIHRoYXQgYXJlIGNvbmZpZ3VyZWQgaW4gdGhlIEVudm95IGNvbmZpZ3VyYXRpb24gZmlsZS4KI0MgVGhlIGV4YW1wbGUtY29tLmtleSBmaWxl4oCZcyBwZXJtaXNzaW9ucyBhcmUgc2V0IHRvIDA2MDAgb3IgcnctLS0tLS0tIHNvIG9ubHkgdGhlIGZpbGUgb3duZXIgY2FuIHJlYWQgdGhlIGZpbGUuCiNEIFRoZSBzZWNyZXQgdm9sdW1lIGlzIG1vdW50ZWQgaW4gL2V0Yy9jZXJ0cy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4b3abe5891d4b53c5230d3b54635d39f" data-text-hash="a5c091e381eb2c95b5c0d667cdecff35" id="292" refid="292">
+<p>If you&#8217;ve read section 9.2 on config maps, the definitions of the <code>volume</code> and <code>volumeMount</code> in this listing should be straightforward since they contain the same fields as you&#8217;d find if you were using a config map. The only two differences are that the volume type is <code>secret</code> instead of <code>configMap</code>, and that the name of the referenced secret is specified in the <code>secretName</code> field, whereas in a <code>configMap</code> volume definition the config map is specified in the <code>name</code> field.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="293" refid="293">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9a7e3d34755d816d92c3aad11c98abe2" data-text-hash="1340a1f3e6cb6c786e5e73721fafbc59" id="294" refid="294">
+<p> As with <code>configMap</code> volumes, you can set the file permissions on <code>secret</code> volumes with the <code>defaultMode</code> and <code>mode</code> fields. Also, you can set the <code>optional</code> field to <code>true</code> if you want the pod to start even if the referenced secret doesn&#8217;t exist. If you omit the field, the pod won&#8217;t start until you create the secret.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a5733cd7cf7b7fde920dc267b3be14c5" data-text-hash="90a0786a00ee97280c12b01734a960b1" id="295" refid="295">
+<p>Given the sensitive nature of the example-com.key file, the <code>mode</code> field is used to set the file permissions to <code>0600</code> or <code>rw-------</code>. The file <code>example-com.crt</code> is given the default permissions.</p>
+</div>
+<div class="readable-text" data-hash="75ba617be8781c50f058280d4797b5f2" data-text-hash="ab08cf85c598ca91390e2bb30fa73006" id="296" refid="296">
+<p>To illustrate the pod, its secret volume and the referenced secret and its entries, see the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="720395918303c2d3d890aedf2b8861d6" data-text-hash="9e05b121f951d1055155c282dedd1c69" id="297" refid="297">
+<h5>Figure 9.6 Projecting a secret&#8217;s entries into the container&#8217;s filesystem via a secret volume</h5>
+<img alt="" data-processed="true" height="349" id="Picture_6" loading="lazy" src="EPUB/images/09image007.png" width="764">
+</div>
+<div class="readable-text" data-hash="d3d9e18a083c79541c4233ce4e430d64" data-text-hash="2d86cb23ae66395d87d04ecbb64bb3d3" id="298" refid="298">
+<h4>Reading the files in the secret volume</h4>
+</div>
+<div class="readable-text" data-hash="f8b6453624053af7686532bf3be396a8" data-text-hash="066190d55cb7a3671418217235529829" id="299" refid="299">
+<p>After you deploy the pod from the previous listing, you can use the following command to inspect the certificate file in the secret volume:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="dfcb53256abf90d64379548f9e4026b0" data-text-hash="9b429715558861b1971b77555c0c8595" id="300" refid="300">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada-ssl -c envoy -- cat /etc/certs/example-com.crt
+-----BEGIN CERTIFICATE-----
+MIIFkzCCA3ugAwIBAgIUQhQiuFP7vEplCBG167ICGxg4q0EwDQYJKoZIhvcNAQEL
+BQAwWDELMAkGA1UEBhMCWFgxFTATBgNVBAcMDERlZmF1bHQgQ2l0eTEcMBoGA1UE
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c95feefdf3e602ec2eb0e0bef7121566" data-text-hash="7628e84b21d09d45eeb3a17ee7336d16" id="301" refid="301">
+<p>As you can see, when you project the entries of a secret into a container via a <code>secret</code> volume, the projected file is not Base64-encoded. The application doesn&#8217;t need to decode the file. The same is true if the secret entries are injected into environment variables.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="302" refid="302">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d32ab2ac72ba2b3cb44a8ba4a81aff3a" data-text-hash="e355383e011f3b9b7aa73a961aa5ddce" id="303" refid="303">
+<p> The files in a secret volume are stored in an in-memory filesystem (tmpfs), so they are less likely to be compromised.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b9dba1f82a0376e01cb068ac42616f9d" data-text-hash="479cb1f8731c29289ecebf3c1444c534" id="304" refid="304">
+<h4>Injecting secrets into environment variables</h4>
+</div>
+<div class="readable-text" data-hash="950676435329228e0dd476b67059d380" data-text-hash="674b8d60a038274a300f377db1561e42" id="305" refid="305">
+<p>As with config maps, you can also inject secrets into the container&#8217;s environment variables. For example, you can inject the TLS certificate into the <code>TLS_CERT</code> environment variable as if the certificate were stored in a config map. The following listing shows how you&#8217;d do this.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9af3f598d9e95cf3fd1a544671830a24" data-text-hash="03c4db495ab097331d8c65415c6c97dd" id="306" refid="306">
+<h5>Listing 9.18 Exposing a secret&#8217;s key-value pair as an environment variable</h5>
+<div class="code-area-container">
+<pre class="code-area">containers:
+  - name: my-container
+    env:
+    - name: TLS_CERT
+      valueFrom:                  #A
+        secretKeyRef:             #A
+          name: kiada-tls         #B
+          key: tls.crt            #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHZhbHVlIGlzIG9idGFpbmVkIGZyb20gYSBzZWNyZXQuCiNCIFRoZSBuYW1lIG9mIHRoZSBzZWNyZXQgdGhhdCBjb250YWlucyB0aGUga2V5LgojQyBUaGUga2V5IHRoYXQgY29udGFpbnMgdGhlIHZhbHVlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b8940ad64e6af8d756352c5e0f5f0bbf" data-text-hash="6fe35b2ca12c428610a46e6cfd749dea" id="307" refid="307">
+<p>This is not unlike setting the <code>INITIAL_STATUS_MESSAGE</code> environment variable, except that you&#8217;re now referring to a secret by using <code>secretKeyRef</code> instead of <code>configMapKeyRef</code>.</p>
+</div>
+<div class="readable-text" data-hash="52825afbca043f07a55d287c7f4d84bc" data-text-hash="7c1c48726ca822db04e251926c928474" id="308" refid="308">
+<p>Instead of using <code>env.valueFrom</code>, you could also use <code>envFrom</code> to inject the entire secret instead of injecting its entries individually, as you did in section 9.2.3. Instead of <code>configMapRef</code>, you&#8217;d use the <code>secretRef</code> field.</p>
+</div>
+<div class="readable-text" data-hash="6502e8f45c7f3b77ff033dd29b6866ad" data-text-hash="535068b277a0b0aef4d04f5d1f152499" id="309" refid="309">
+<h4>Should you inject secrets into environment variables?</h4>
+</div>
+<div class="readable-text" data-hash="06e5bb01503e707ffef132c52082b684" data-text-hash="cc590b90fd86379bae3ad591e7c95e32" id="310" refid="310">
+<p>As you can see, injecting secrets into environment variables is no different from injecting config maps. But even if Kubernetes allows you to expose secrets in this way, it may not be the best idea, as it can pose a security risk. Applications typically output environment variables in error reports or even write them to the application log at startup, which can inadvertently expose secrets if you inject them into environment variables. Also, child processes inherit all environment variables from the parent process. So, if your application calls a third-party child process, you don&#8217;t know where your secrets end up.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="311" refid="311">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="6c65edad68d8d0fc9499478e52baf64b" data-text-hash="918d790b77a0cca461f78dc1b1fa2409" id="312" refid="312">
+<p> Instead of injecting secrets into environment variables, project them into the container as files in a secret volume. This reduces the likelihood that the secrets will be inadvertently exposed to attackers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8eb38decd5e8d6729a79b9d470f62eb2" data-text-hash="81362a6546f74bf8e5b6ab0a5e1b7ae8" id="313" refid="313">
+<h2 id="sigil_toc_id_161">9.4&#160;Passing pod metadata to the application via the Downward API</h2>
+</div>
+<div class="readable-text" data-hash="22d611d2783560322469c35a05f620b8" data-text-hash="eb5ab95ca9159d9bb90ff1be6b2b6410" id="314" refid="314">
+<p>So far in this chapter, you&#8217;ve learned how to pass configuration data to your application. But that data was always static. The values were known before you deployed the pod, and if you deployed multiple pod instances, they would all use the same values.</p>
+</div>
+<div class="readable-text" data-hash="201f1e89f4739a2a24d5a45a2991d5aa" data-text-hash="fd8d5dac9416d1b772c46d7f0e402903" id="315" refid="315">
+<p>But what about data that isn&#8217;t known until the pod is created and scheduled to a cluster node, such as the IP of the pod, the name of the cluster node, or even the name of the pod itself? And what about data that is already specified elsewhere in the pod manifest, such as the amount of CPU and memory that is allocated to the container? Good engineers never want to repeat themselves.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="316" refid="316">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="657368cff4798177d65d61c652dc49ef" data-text-hash="97172a7a0011d6f079ec371133b01bfd" id="317" refid="317">
+<p> You&#8217;ll learn how to specify the container&#8217;s CPU and memory limits in chapter 20.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a1d63d5ce4f79e39da54746fe291fa49" data-text-hash="47be786843e163903328a1dd8abc101d" id="318" refid="318">
+<h3 id="sigil_toc_id_162">9.4.1&#160;Introducing the Downward API</h3>
+</div>
+<div class="readable-text" data-hash="06dfcd4bc0188737887d9b44cdd4eedf" data-text-hash="541b2d0c828567cd1dd069dfcd017421" id="319" refid="319">
+<p>In the remaining chapters of the book, you&#8217;ll learn about many additional configuration options that you can set in your pods. There are cases where you need to pass the same information to your application. You could repeat this information when defining the container&#8217;s environment variable, but a better option is to use what&#8217;s called the Kubernetes <i>Downward API</i>, which allows you to expose pod and container metadata via environment variables or files.</p>
+</div>
+<div class="readable-text" data-hash="c9bb720bd794111cd0a65ead2d32018a" data-text-hash="fcaf4569b226d2b451815effad1dd150" id="320" refid="320">
+<h4>Understanding what the Downward API is</h4>
+</div>
+<div class="readable-text" data-hash="2f44e6fcefba3a93ee2c9cc27f440573" data-text-hash="4714c4ffe50f1f98566a672ffbef2817" id="321" refid="321">
+<p>The Downward API isn&#8217;t a REST endpoint that your app needs to call to get the data. It&#8217;s simply a way to inject values from the pod&#8217;s <code>metadata</code>, <code>spec,</code> or <code>status</code> fields down into the container. Hence the name. An illustration of the Downward API is shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="eec0a47df559f6bf770140f67b8a7f4c" data-text-hash="ccb7926265c2d4ded0b58feb700a5002" id="322" refid="322">
+<h5>Figure 9.7 The Downward API exposes pod metadata through environment variables or files.</h5>
+<img alt="" data-processed="true" height="364" id="Picture_7" loading="lazy" src="EPUB/images/09image008.png" width="825">
+</div>
+<div class="readable-text" data-hash="1f22eb1b3c1be2c1390496e754ec299c" data-text-hash="b5a7c956e38b7ef92284dea901ebe92d" id="323" refid="323">
+<p>As you can see, this is no different from setting environment variables or projecting files from config maps and secrets, except that the values come from the pod object itself.</p>
+</div>
+<div class="readable-text" data-hash="6ed4ecd5e8a0109f777255923a3c550a" data-text-hash="6c8d57ef8214c5a3855440fefdafc81a" id="324" refid="324">
+<h4>Understanding how the metadata is injected</h4>
+</div>
+<div class="readable-text" data-hash="4cecb5f248ac4b4d0a4a37b31ad3ff5f" data-text-hash="e8ec97034ae8fd05cd4e0f4d2465dd2a" id="325" refid="325">
+<p>Earlier in the chapter, you learned that you initialize environment variables from external sources using the <code>valueFrom</code> field. To get the value from a config map, use the <code>configMapKeyRef</code> field, and to get it from a secret, use <code>secretKeyRef</code>. To instead use the Downward API to source the value from the pod object itself, use either the <code>fieldRef</code> or the <code>resourceFieldRef</code> field, depending on what information you want to inject. The former is used to refer to the pod&#8217;s general metadata, whereas the latter is used to refer to the container&#8217;s compute resource constraints.</p>
+</div>
+<div class="readable-text" data-hash="e3397fbb12eb1f09547ef2346e24d34c" data-text-hash="5e6b834829d8d32a97be03c0f432e31f" id="326" refid="326">
+<p>Alternatively, you can project the pod&#8217;s metadata as files into the container&#8217;s filesystem by adding a <code>downwardAPI</code> volume to the pod, just as you&#8217;d add a <code>configMap</code> or <code>secret</code> volume. You&#8217;ll learn how to do this soon, but first let&#8217;s see what information you can inject.</p>
+</div>
+<div class="readable-text" data-hash="5347ced7924004e1fc69ffe20614188f" data-text-hash="93b13e61be0076f57c32de52587fa119" id="327" refid="327">
+<h4>Understanding what metadata can be injected</h4>
+</div>
+<div class="readable-text" data-hash="7f49a2007174816c8932c8bfab2e3a04" data-text-hash="01e28d92627faae4d62d922ba9f7cc56" id="328" refid="328">
+<p>You can&#8217;t use the Downward API to inject any field from the pod object. Only certain fields are supported. The following table shows the fields you can inject via <code>fieldRef</code>, and whether they can only be exposed via environment variables, files, or both.</p>
+</div>
+<div class="browsable-container" data-hash="97484eb84e9c07a279213cc4297248ae" data-text-hash="9d55693e221513dda5bc87c96c5b5282" id="329" refid="329">
+<h5>Table 9.5 Downward API fields injected via the fieldRef field</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Field</p> </td>
+<td> <p>Description</p> </td>
+<td> <p>Allowed in env</p> </td>
+<td> <p>Allowed in volume</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.name
+</pre> </td>
+<td> <p>The pod&#8217;s name.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.namespace
+</pre> </td>
+<td> <p>The pod&#8217;s namespace.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.uid
+</pre> </td>
+<td> <p>The pod&#8217;s UID.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.labels
+</pre> </td>
+<td> <p>All the pod&#8217;s labels, one label per line, formatted as <code>key=&#8221;value&#8221;</code>.</p> </td>
+<td> <p>No</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.labels['key']
+</pre> </td>
+<td> <p>The value of the specified label.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.annotations
+</pre> </td>
+<td> <p>All the pod&#8217;s annotations, one per line, formatted as <code>key=&#8221;value&#8221;</code>.</p> </td>
+<td> <p>No</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>metadata.annotations['key']
+</pre> </td>
+<td> <p>The value of the specified annotation.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>spec.nodeName
+</pre> </td>
+<td> <p>The name of the worker node the pod runs on.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>No</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>spec.serviceAccountName
+</pre> </td>
+<td> <p>The name of the pod&#8217;s service account.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>No</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>status.podIP
+</pre> </td>
+<td> <p>The pod&#8217;s IP address.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>No</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>status.hostIP
+</pre> </td>
+<td> <p>The worker node&#8217;s IP address.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>No</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="87307d35fe2c279a71e0ddbb81a2355a" data-text-hash="caea2ada1874c2f4a34efc61f4661446" id="330" refid="330">
+<p>You may not know most of these fields yet, but you will in the remaining chapters of this book. As you can see, some fields can only be injected into environment variables, whereas others can only be projected into files. Some allow doing both.</p>
+</div>
+<div class="readable-text" data-hash="5779704e358f91121a514ff1e1a70d5d" data-text-hash="ee29976ddbb3d652340342f7a41a9b07" id="331" refid="331">
+<p>Information about the container&#8217;s computational resource constraints is injected via the <code>resourceFieldRef</code> field. They can all be injected into environment variables and via a downwardAPI volume. The following table lists them.</p>
+</div>
+<div class="browsable-container" data-hash="99e34564b8f044fbb1dae4a00daa1a17" data-text-hash="230567f395895a8c4d3fc0c979891b81" id="332" refid="332">
+<h5>Table 9.6 Downward API resource fields injected via the resourceFieldRef field</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Resource field</p> </td>
+<td> <p>Description</p> </td>
+<td> <p>Allowed in env</p> </td>
+<td> <p>Allowed in vol</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>requests.cpu
+</pre> </td>
+<td> <p>The container&#8217;s CPU request.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>requests.memory
+</pre> </td>
+<td> <p>The container&#8217;s memory request.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>requests.ephemeral-storage
+</pre> </td>
+<td> <p>The container&#8217;s ephemeral storage request.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>limits.cpu
+</pre> </td>
+<td> <p>The container&#8217;s CPU limit.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>limits.memory
+</pre> </td>
+<td> <p>The container&#8217;s memory limit.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>limits.ephemeral-storage
+</pre> </td>
+<td> <p>The container&#8217;s ephemeral storage limit.</p> </td>
+<td> <p>Yes</p> </td>
+<td> <p>Yes</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="a5339a1b639c3278fec90ae2b5bb7cd5" data-text-hash="1420d79649520a467007e99b6c66807d" id="333" refid="333">
+<p>You&#8217;ll learn what resource requests and limits are in chapter 20, which explains how to constrain the compute resources available to a container.</p>
+</div>
+<div class="readable-text" data-hash="ae33af2f9af4479ed30cc39d0c76fdc8" data-text-hash="131f997e8468b756cd4eda8c75da5b8a" id="334" refid="334">
+<p>The book&#8217;s code repository contains the file <code>pod.downward-api-test.yaml</code>, which defines a pod that uses the Downward API to inject each supported field into both environment variables and files. You can deploy the pod and then look in its container log to see what was injected.</p>
+</div>
+<div class="readable-text" data-hash="36c77654f3108289e70163ed7bccfed9" data-text-hash="ea70913bbff53e8faa62797e30b933ec" id="335" refid="335">
+<p>A practical example of using the Downward API in the Kiada application is presented next.</p>
+</div>
+<div class="readable-text" data-hash="42ec54cfed74b2e7099368ea65ba67ff" data-text-hash="d159d01bc1d60705585adcc13b4e2e04" id="336" refid="336">
+<h3 id="sigil_toc_id_163">9.4.2&#160;Injecting pod metadata into environment variables</h3>
+</div>
+<div class="readable-text" data-hash="94539238ad944dd8ac56def593bc3371" data-text-hash="22d942b7fe4e46817039a6fc2cfc093a" id="337" refid="337">
+<p>At the beginning of this chapter, a new version of the Kiada application was introduced. The application now includes the pod and node names and their IP addresses in the HTTP response. You&#8217;ll make this information available to the application through the Downward API.</p>
+</div>
+<div class="readable-text" data-hash="f300fa4f1de711214738ac84b2406a04" data-text-hash="8ee0f0b347de530bdad5a7920dfcd5e5" id="338" refid="338">
+<h4>Injecting pod object fields</h4>
+</div>
+<div class="readable-text" data-hash="5aeb342e093365688fd6d48a00668535" data-text-hash="d5f6e53e6bdc947e9e6b3f651af8f9a0" id="339" refid="339">
+<p>The application expects the pod&#8217;s name and IP, as well as the node name and IP, to be passed in via the environment variables <code>POD_NAME</code>, <code>POD_IP</code>, <code>NODE_NAME,</code> and <code>NODE_IP</code>, respectively. You can find a pod manifest that uses the Downward API to provide these variables to the container in the <code>pod.kiada-ssl.downward-api.yaml</code> file. The contents of this file are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="822493620247bf57991e19875329d1c5" data-text-hash="42864c1a464ce107e08ab45e0812342f" id="340" refid="340">
+<h5>Listing 9.19 Using the Downward API to set environment variables</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl
+spec:
+  ...
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.4
+    env:                               #A
+    - name: POD_NAME                   #B
+      valueFrom:                       #B
+        fieldRef:                      #B
+          fieldPath: metadata.name     #B
+    - name: POD_IP                     #C
+      valueFrom:                       #C
+        fieldRef:                      #C
+          fieldPath: status.podIP      #C
+    - name: NODE_NAME                  #D
+      valueFrom:                       #D
+        fieldRef:                      #D
+          fieldPath: spec.nodeName     #D
+    - name: NODE_IP                    #E
+      valueFrom:                       #E
+        fieldRef:                      #E
+          fieldPath: status.hostIP     #E
+    ports:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgYXJlIHRoZSBlbnZpcm9ubWVudCB2YXJpYWJsZXMgZm9yIHRoaXMgY29udGFpbmVyLgojQiBUaGUgUE9EX05BTUUgZW52aXJvbm1lbnQgdmFyaWFibGUgZ2V0cyBpdHMgdmFsdWUgZnJvbSB0aGUgUG9kIG9iamVjdOKAmXMgbWV0YWRhdGEubmFtZSBmaWVsZC4KI0MgVGhlIFBPRF9JUCBlbnZpcm9ubWVudCB2YXJpYWJsZSBnZXRzIHRoZSB2YWx1ZSBmcm9tIHRoZSBQb2Qgb2JqZWN04oCZcyBzdGF0dXMucG9kSVAgZmllbGQuCiNEIFRoZSBOT0RFX05BTUUgdmFyaWFibGUgZ2V0cyB0aGUgdmFsdWUgZnJvbSB0aGUgc3BlYy5ub2RlTmFtZSBmaWVsZC4KI0UgVGhlIE5PREVfSVAgdmFyaWFibGUgaXMgaW5pdGlhbGl6ZWQgZnJvbSB0aGUgc3RhdHVzLmhvc3RJUCBmaWVsZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d511ea8f1eada951c526edd6af327734" data-text-hash="00356ca09488e222d84afe6223db5e5b" id="341" refid="341">
+<p>After you create this pod, you can examine its log using <code>kubectl</code> <code>logs</code>. The application prints the values of the three environment variables at startup. You can also send a request to the application and you should get a response like the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="971035f6cf387dbd78c8bd9bcde6f86b" data-text-hash="1a4f73b50e82bcea8fe1e3a9a880785a" id="342" refid="342">
+<div class="code-area-container">
+<pre class="code-area">Request processed by Kiada 0.4 running in pod "kiada-ssl" on node "kind-worker". 
+Pod hostname: kiada-ssl; Pod IP: 10.244.2.15; Node IP: 172.18.0.4. Client IP: ::ffff:127.0.0.1.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="15c373b2a6eb35dbb7abf9b32456ef12" data-text-hash="4138b4d377c071455a3d060ba8fd71b5" id="343" refid="343">
+<p>Compare the values in the response with the field values in the YAML definition of the Pod object by running the command <code>kubectl get po kiada-ssl -o yaml</code>. Alternatively, you can compare them with the output of the following commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="dfe9e419723b6ee9a36c36d58f65f963" data-text-hash="6aee194474f3f4cef68df1d1c8505002" id="344" refid="344">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada-ssl -o wide
+NAME    READY   STATUS    RESTARTS   AGE     IP            NODE         ...
+kiada   1/1     Running   0          7m41s   10.244.2.15   kind-worker  ... 
+ 
+$ kubectl get node kind-worker -o wide
+NAME          STATUS   ROLES    AGE   VERSION   INTERNAL-IP   ...  
+kind-worker   Ready    &lt;none&gt;   26h   v1.19.1   172.18.0.4    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1ab53386e1468e33055f1664a6fddcbb" data-text-hash="2e256ea917290bcf46b9d8cc26336f57" id="345" refid="345">
+<p>You can also inspect the container&#8217;s environment by running <code>kubectl exec kiada-ssl -- env</code>.</p>
+</div>
+<div class="readable-text" data-hash="997bd1b15112d46229137091b0a1c514" data-text-hash="7dbf274b481373fa73f1636f8cc4de8e" id="346" refid="346">
+<h4>Injecting container resource fields</h4>
+</div>
+<div class="readable-text" data-hash="103f3a387b2c404187edbf9563d2406a" data-text-hash="9a41728e14aef3a420ad2b87258a0ede" id="347" refid="347">
+<p>Even if you haven&#8217;t yet learned how to constrain the compute resources available to a container, let&#8217;s take a quick look at how to pass those constraints to the application when it needs them.</p>
+</div>
+<div class="readable-text" data-hash="46b7fbdc69eb0b205dffab8d253c64c6" data-text-hash="12a796b3ab0f1aed943300b299461728" id="348" refid="348">
+<p>Chapter 20 explains how to set the number of CPU cores and the amount of memory a container may consume. These settings are called CPU and memory resource <i>limits</i>. Kubernetes ensures that the container can&#8217;t use more than the allocated amount.</p>
+</div>
+<div class="readable-text" data-hash="0d447d0d6edbab4a56221d69ffc13b57" data-text-hash="111b17cf60e88d82ae3b87930cd95864" id="349" refid="349">
+<p>Some applications need to know how much CPU time and memory they have been given to run optimally within the given constraints. That&#8217;s another thing the Downward API is for. The following listing shows how to expose the CPU and memory limits in environment variables.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a73c2630fc7b5fbe97be6a7aaed00931" data-text-hash="b07a46c93eec1bc47b1ea0c4c8e376e5" id="350" refid="350">
+<h5>Listing 9.20 Using the Downward API to inject the container&#8217;s compute resource limits</h5>
+<div class="code-area-container">
+<pre class="code-area">env:
+    - name: MAX_CPU_CORES              #A
+      valueFrom:                       #A
+        resourceFieldRef:              #A
+          resource: limits.cpu         #A
+    - name: MAX_MEMORY_KB              #B
+      valueFrom:                       #B
+        resourceFieldRef:              #B
+          resource: limits.memory      #B
+          divisor: 1k                  #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIE1BWF9DUFVfQ09SRVMgZW52aXJvbm1lbnQgdmFyaWFibGUgd2lsbCBjb250YWluIHRoZSBDUFUgcmVzb3VyY2UgbGltaXQuCiNCIFRoZSBNQVhfTUVNT1JZX0tCIHZhcmlhYmxlIHdpbGwgY29udGFpbiB0aGUgbWVtb3J5IGxpbWl0IGluIGtpbG9ieXRlcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5e3507e6d582a17380e86fcf73b09168" data-text-hash="9ee9c75dc81c18bd5ad1ac791d1a4a6d" id="351" refid="351">
+<p>To inject container resource fields, the field <code>resourceFieldRef</code> is used. The <code>resource</code> field specifies the resource value that is injected.</p>
+</div>
+<div class="readable-text" data-hash="38108370d358a15f2cdc1068bf8df6d8" data-text-hash="002ea9b9ed9f73c994b5b1c85be65fea" id="352" refid="352">
+<p>Each <code>resourceFieldRef</code> can also specify a <code>divisor</code>. It specifies which unit to use for the value. In the listing, the <code>divisor</code> is set to <code>1k</code>. This means that the memory limit value is divided by 1000 and the result is then stored in the environment variable. So, the memory limit value in the environment variable will use kilobytes as the unit. If you don&#8217;t specify a divisor, as is the case in the <code>MAX_CPU_CORES</code> variable definition in the listing, the value defaults to 1.</p>
+</div>
+<div class="readable-text" data-hash="2601b324f1a95dd6139d3be832c689bf" data-text-hash="ae503f9d852667c9899c2d24e935a666" id="353" refid="353">
+<p>The divisor for memory limits/requests can be <code>1</code> (byte), <code>1k</code> (kilobyte) or <code>1Ki</code> (kibibyte), <code>1M</code> (megabyte) or <code>1Mi</code> (mebibyte), and so on. The default divisor for CPU is <code>1</code>, which is a whole core, but you can also set it to <code>1m</code>, which is a milli core or a thousandth of a core.</p>
+</div>
+<div class="readable-text" data-hash="480165b2e70d76367cd9002598a1b279" data-text-hash="d6abdde67e122e346ebdc5cec6de7371" id="354" refid="354">
+<p>Because environment variables are defined within a container definition, the resource constraints of the enclosing container are used by default. In cases where a container needs to know the resource limits of another container in the pod, you can specify the name of the other container using the <code>containerName</code> field within <code>resourceFieldRef</code>.</p>
+</div>
+<div class="readable-text" data-hash="b89e3c91c4fdbe625c3ce95f600c156a" data-text-hash="3dda803f821f2245f3ad99cd529d8d06" id="355" refid="355">
+<h3 id="sigil_toc_id_164">9.4.3&#160;Using a downwardAPI volume to expose pod metadata as files</h3>
+</div>
+<div class="readable-text" data-hash="c288acf5c65e79530670bf51cd169b56" data-text-hash="c72ad8e0a35409dfb9f883e2449fc525" id="356" refid="356">
+<p>As with config maps and secrets, pod metadata can also be projected as files into the container&#8217;s filesystem using the <code>downwardAPI</code> volume type.</p>
+</div>
+<div class="readable-text" data-hash="9e3fba5cfddca408c97d898ca979a381" data-text-hash="acacde3acccbab651354c508e8ae4487" id="357" refid="357">
+<p>Suppose you want to expose the name of the pod in the <code>/pod-metadata/pod-name</code> file inside the container. The following listing shows the <code>volume</code> and <code>volumeMount</code> definitions you&#8217;d add to the pod.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5aad6f66552cf681a737d4057487a813" data-text-hash="c06de9e215bf0b04b1889f73d7e2d747" id="358" refid="358">
+<h5>Listing 9.21 Injecting pod metadata into the container&#8217;s filesystem</h5>
+<div class="code-area-container">
+<pre class="code-area">...
+  volumes:                              #A
+  - name: pod-meta                      #A
+    downwardAPI:                        #A
+      items:                            #B
+      - path: pod-name.txt              #B
+        fieldRef:                       #B
+          fieldPath: metadata.name      #B
+  containers:
+  - name: foo
+    ...
+    volumeMounts:                       #C
+    - name: pod-meta                    #C
+      mountPath: /pod-metadata          #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBkZWZpbmVzIGEgZG93bndhcmRBUEkgdm9sdW1lIHdpdGggdGhlIG5hbWUgcG9kLW1ldGEuCiNCIEEgc2luZ2xlIGZpbGUgd2lsbCBhcHBlYXIgaW4gdGhlIHZvbHVtZS4gVGhlIG5hbWUgb2YgdGhlIGZpbGUgaXMgcG9kLW5hbWUudHh0IGFuZCBpdCBjb250YWlucyB0aGUgbmFtZSBvZiB0aGUgcG9kLgojQyBUaGUgdm9sdW1lIGlzIG1vdW50ZWQgaW50byB0aGUgL3BvZC1tZXRhZGF0YSBwYXRoIGluIHRoZSBjb250YWluZXIu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="61bca2a366d6a4c21d950f94bb67a8ed" data-text-hash="8209bb4e7fb5b725f0b6e23721ed6419" id="359" refid="359">
+<p>The pod manifest in the listing contains a single volume of type <code>downwardAPI</code>. The volume definition contains a single file named <code>pod-name.txt</code>, which contains the name of the pod read from the <code>metadata.name</code> field of the pod object. This volume is mounted in the container&#8217;s filesystem at <code>/pod-metadata</code>.</p>
+</div>
+<div class="readable-text" data-hash="7bb684be70b900b8062399fa3602abc7" data-text-hash="880d9a85a924fe12a3068f821394db30" id="360" refid="360">
+<p>As with environment variables, each item in a <code>downwardAPI</code> volume definition uses either <code>fieldRef</code> to refer to the pod object&#8217;s fields, or <code>resourceFieldRef</code> to refer to the container&#8217;s resource fields. For resource fields, the <code>containerName</code> field must be specified because volumes are defined at the pod level and it isn&#8217;t obvious which container&#8217;s resources are being referenced. As with environment variables, a <code>divisor</code> can be specified to convert the value into the expected unit.</p>
+</div>
+<div class="readable-text" data-hash="89fae8e9537d8e5cbb8b15db59c02d28" data-text-hash="f0f169817c163b0e131b0dc8466adce0" id="361" refid="361">
+<p>As with <code>configMap</code> and <code>secret</code> volumes, you can set the default file permissions using the <code>defaultMode</code> field or per-file using the <code>mode</code> field, as explained earlier.</p>
+</div>
+<div class="readable-text" data-hash="20a2468835856d7f1099b63c26a40081" data-text-hash="36b677a07300669a126e85815593bcb0" id="362" refid="362">
+<h2 id="sigil_toc_id_165">9.5&#160;Using projected volumes to combine volumes into one</h2>
+</div>
+<div class="readable-text" data-hash="97d616254688a1b478895a6228372e7d" data-text-hash="7a5ae90c58955a2a62efa557fcfa11bf" id="363" refid="363">
+<p>In this chapter, you learned how to use three special volume types to inject values from config maps, secrets, and the Pod object itself. Unless you use the <code>subPath</code> field in your <code>volumeMount</code> definition, you can't inject the files from these different sources, or even multiple sources of the same type, into the same file directory. For example, you can't combine the keys from different secrets into a single volume and mount them into a single file directory. While the <code>subPath</code> field allows you to inject individual files from multiple volumes, it isn&#8217;t the final solution because it prevents the files from being updated when the source values change.</p>
+</div>
+<div class="readable-text" data-hash="6680056f0a7c3f5fbb77885e3e58ec09" data-text-hash="41b6c9d7a99f5328228282b127d19967" id="364" refid="364">
+<p>If you need to populate a single volume from multiple sources, you can use the <code>projected</code> volume type.</p>
+</div>
+<div class="readable-text" data-hash="29fdfb1671403ef0539f62b0f28e4dfe" data-text-hash="106224602ead891c04be8abf46a6af02" id="365" refid="365">
+<h3 id="sigil_toc_id_166">9.5.1&#160;Introducing the projected volume type</h3>
+</div>
+<div class="readable-text" data-hash="b4baf93ad4f03054c0afbad4e5a19c5f" data-text-hash="b163f54c48748efee2088d6f91c803a1" id="366" refid="366">
+<p>Projected volumes allow you to combine information from multiple config maps, secrets, and the Downward API into a single pod volume that you can then mount in the pod&#8217;s containers. They behave exactly like the <code>configMap</code>, <code>secret</code>, and <code>downwardAPI</code> volumes you learned about in the previous sections of this chapter. They provide the same features and are configured in almost the same way as the other volume types.</p>
+</div>
+<div class="readable-text" data-hash="f56218f7d250b3bfdc225e947f3a8fef" data-text-hash="6f73412fe089ad546d899e6f25bf64d5" id="367" refid="367">
+<p>The following figure shows a visualization of a projected volume.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="dac4d0146d7ee5d4d1fa7abc9cc60088" data-text-hash="8f5a60d70f66dbfd9bda39f8b20a9ee2" id="368" refid="368">
+<h5>Figure 9.8 Using a projected volume with several sources</h5>
+<img alt="" data-processed="true" height="446" id="Picture_8" loading="lazy" src="EPUB/images/09image009.png" width="836">
+</div>
+<div class="readable-text" data-hash="27745c60af1f90ed2d4f052eaf56869c" data-text-hash="dfe84bd6b6d3b33d28464ea839c8d7aa" id="369" refid="369">
+<p>In addition to the three volume types described earlier, you can also use projected volumes to expose the service account token to your application. You&#8217;ll learn what those are in chapter 23.</p>
+</div>
+<div class="readable-text" data-hash="4ccc3ef732953e1f99dbb88204f09a0c" data-text-hash="dfcd6b9508eba195fdab49f783e75f7a" id="370" refid="370">
+<h3 id="sigil_toc_id_167">9.5.2&#160;Using a projected volume in a pod</h3>
+</div>
+<div class="readable-text" data-hash="9cfc8310323e8f18f99687f9968f37d6" data-text-hash="97bac7ecd56da53c2d6c07027c5403c1" id="371" refid="371">
+<p>In the final exercise of this chapter, you&#8217;ll modify the <code>kiada-ssl</code> pod to use a single <code>projected</code> volume in the <code>envoy</code> container. The previous version of the pod used a <code>configMap</code> volume mounted in <code>/etc/envoy</code> to inject the <code>envoy.yaml</code> config file and a <code>secret</code> volume mounted in <code>/etc/certs</code> to inject the TLS certificate and key files. You&#8217;ll now replace these two volumes with a single <code>projected</code> volume. This will allow you to keep all three files in the same directory (<code>/etc/envoy</code>).</p>
+</div>
+<div class="readable-text" data-hash="37c47f647cf59f839aff14f7e9bdaaae" data-text-hash="acdc62cff9e13ae197e7a74ec2667f51" id="372" refid="372">
+<p>First, you need to change the TLS certificate paths in the <code>envoy.yaml</code> configuration file inside the <code>kiada-envoy-config</code> config map so that the certificate and key are read from the same directory. After editing, the lines in the config map should look like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e4541ca4396045a72238c6cfbfc4b5ec" data-text-hash="7976839d575c8c257f61b5e11a1ecf5a" id="373" refid="373">
+<div class="code-area-container">
+<pre class="code-area">tls_certificates:
+                - certificate_chain:
+                    filename: "/etc/envoy/example-com.crt"   #A
+                  private_key:
+                    filename: "/etc/envoy/example-com.key"   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB1c2VkIHRvIGJlICIvZXRjL2NlcnRzL2V4YW1wbGUtY29tLmNydCIKI0IgVGhpcyB1c2VkIHRvIGJlICIvZXRjL2NlcnRzL2V4YW1wbGUtY29tLmtleSI="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="15d0c60a80a6f46932e815f870303f0f" data-text-hash="1f920c06af0318ea5558cb0f1f0c6d81" id="374" refid="374">
+<p>You can find the pod manifest with the projected volume in the file <code>pod.kiada-ssl.projected-volume.yaml</code>. The relevant parts are shown in the next listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c4603c69cc48f23120ae001a2317bc3f" data-text-hash="eaf791b0ff55dab630880aac39cebaa1" id="375" refid="375">
+<h5>Listing 9.22 Using a projected volume instead of a configMap and secret volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl
+spec:
+  volumes:
+  - name: etc-envoy   #A
+    projected:   #A
+      sources:   #A
+      - configMap:   #B
+          name: kiada-envoy-config   #B
+      - secret:   #C
+          name: kiada-tls   #C
+          items:   #C
+          - key: tls.crt   #C
+            path: example-com.crt   #C
+          - key: tls.key   #C
+            path: example-com.key   #C
+            mode: 0600   #D
+  containers:
+  - name: kiada
+    image: luksa/kiada:1.2
+    env:
+    ...
+  - name: envoy
+    image: envoyproxy/envoy:v1.14.1
+    volumeMounts:   #E
+    - name: etc-envoy   #E
+      mountPath: /etc/envoy   #E
+      readOnly: true   #E
+    ports:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQSBzaW5nbGUgcHJvamVjdGVkIHZvbHVtZSBpcyBkZWZpbmVkLgojQiBUaGUgZmlyc3Qgdm9sdW1lIHNvdXJjZSBpcyB0aGUgY29uZmlnIG1hcC4KI0MgVGhlIHNlY29uZCBzb3VyY2UgaXMgdGhlIHNlY3JldC4KI0QgU2V0IHJlc3RyaWN0ZWQgZmlsZSBwZXJtaXNzaW9ucyBmb3IgdGhlIHByaXZhdGUga2V5IGZpbGUuCiNFIFRoZSB2b2x1bWUgaXMgbW91bnRlZCBpbnRvIHRoZSBlbnZveSBjb250YWluZXIgYXQgL2V0Yy9lbnZveS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="65d532060392cb1377695e9f9ab5f8b7" data-text-hash="39ce5ec5c1c06875cc12fc622994d9bd" id="376" refid="376">
+<p>The listing shows that a single <code>projected</code> volume named <code>etc-envoy</code> is defined in the pod. Two sources are used for this volume. The first is the <code>kiada-envoy-config</code> config map. All entries in this config map become files in the projected volume. The second source is the <code>kiada-tls</code> secret. Two of its entries become files in the projected volume - the value of the <code>tls.crt</code> key becomes file <code>example-com.crt</code>, whereas the value of the <code>tls.key</code> key becomes file <code>example-com.key</code> in the volume. The volume is mounted in read-only mode in the <code>envoy</code> container at <code>/etc/envoy</code>.</p>
+</div>
+<div class="readable-text" data-hash="0af0384cdb909d56cff5a5bc671982da" data-text-hash="d441965657a550dbf8f822f218ae46d2" id="377" refid="377">
+<p>As you can see, the source definitions in the <code>projected</code> volume are not much different from the <code>configMap</code> and <code>secret</code> volumes you created in the previous sections. Therefore, further explanation of the projected volumes is unnecessary. Everything you learned about the other volumes also applies to this new volume type.</p>
+</div>
+<div class="readable-text" data-hash="eb233b3e5d0892ae7af5424f1813bbf5" data-text-hash="1bb45335b83fa6f3c66aee250aee56fd" id="378" refid="378">
+<h2 id="sigil_toc_id_168">9.6&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="6862fd42189e91a8eadfa153ffcd590e" data-text-hash="a1b68e5f8d605652c7dfc9cd4d2293ce" id="379" refid="379">
+<p>This wraps up this chapter on how to pass configuration data to containers. You&#8217;ve learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="027e833ea13c50cfcc76b10790ddf092" data-text-hash="027e833ea13c50cfcc76b10790ddf092" id="380" refid="380">The default command and arguments defined in the container image can be overridden in the pod manifest.</li>
+<li class="readable-text" data-hash="fa88ac54f1977790171d3d3beec81064" data-text-hash="fa88ac54f1977790171d3d3beec81064" id="381" refid="381">Environment variables for each container can also be set in the pod manifest. Their values can be hardcoded in the manifest or can come from other Kubernetes API objects.</li>
+<li class="readable-text" data-hash="3491d7d9d38822277d8bc75c54aef32b" data-text-hash="3491d7d9d38822277d8bc75c54aef32b" id="382" refid="382">Config maps are Kubernetes API objects used to store configuration data in the form of key/value pairs. Secrets are another similar type of object used to store sensitive data such as credentials, certificates, and authentication keys.</li>
+<li class="readable-text" data-hash="f876b4f5c201c32d4e88e7090f00dba7" data-text-hash="36654041494a18093448daaac50e9ab3" id="383" refid="383">Entries of both config maps and secrets can be exposed within a container as environment variables or as files via the <code>configMap</code> and <code>secret</code> volumes.</li>
+<li class="readable-text" data-hash="a4791965868cc79c34bad9967e3f3282" data-text-hash="6ec80520502c885193a553ac530acb8c" id="384" refid="384">Config maps and other API objects can be edited in place using the <code>kubectl edit</code> command.</li>
+<li class="readable-text" data-hash="4dbdb48cf035ce54e2fba3b1ba0a45a3" data-text-hash="4dbdb48cf035ce54e2fba3b1ba0a45a3" id="385" refid="385">The Downward API provides a way to expose the pod metadata to the application running within it. Like config maps and secrets, this data can be injected into environment variables or files.</li>
+<li class="readable-text" data-hash="742f442eb128197e3e3f04cf6494be62" data-text-hash="742f442eb128197e3e3f04cf6494be62" id="386" refid="386">Projected volumes can be used to combine multiple volumes of possibly different types into a composite volume that is mounted into a single directory, rather than being forced to mount each individual volume into its own directory.</li>
+</ul>
+<div class="readable-text" data-hash="5fcb29ca6f38f671140ad2bdc0b4545c" data-text-hash="e0574be89604cbcf041e2b9fb9216831" id="387" refid="387">
+<p>You&#8217;ve now seen that an application deployed in Kubernetes may require many additional objects. If you are deploying many applications in the same cluster, you need organize them so that everyone can see what fits where. In the next chapter, you&#8217;ll learn how to do just that.</p>
+</div></div>
+
+        </body>
+        
+        

@@ -1,0 +1,873 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="d0aa6bad6a24353e15dbd438d7dcf69f" data-text-hash="be85e133e83937132e6779215af9ec25" id="1" refid="1">
+<h1>4 Introducing Kubernetes API objects</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="897021f765dac25acba9e2f626d91b31" data-text-hash="897021f765dac25acba9e2f626d91b31" id="2" refid="2">Managing a Kubernetes cluster and the applications it hosts via its API</li>
+<li class="readable-text" data-hash="33201ed7b4160e8c100c1c670f212bba" data-text-hash="33201ed7b4160e8c100c1c670f212bba" id="3" refid="3">Understanding the structure of Kubernetes API objects</li>
+<li class="readable-text" data-hash="c7e617b83d5dde2ff03bed4c7a1428dd" data-text-hash="c7e617b83d5dde2ff03bed4c7a1428dd" id="4" refid="4">Retrieving and understanding an object&#8217;s YAML or JSON manifest</li>
+<li class="readable-text" data-hash="1987b108414843b052c8cc04d01dc22b" data-text-hash="1987b108414843b052c8cc04d01dc22b" id="5" refid="5">Inspecting the status of cluster nodes via Node objects</li>
+<li class="readable-text" data-hash="48d8f958f091e78120a7c433c880b025" data-text-hash="48d8f958f091e78120a7c433c880b025" id="6" refid="6">Inspecting cluster events through Event objects</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="cd1051acf3a87afb31755e1814dcfcec" data-text-hash="0f2e664e7e3f06c8b10fbf527050a041" id="7" refid="7">
+<p>The previous chapter introduced three fundamental objects that make up a deployed application. You created a Deployment object that spawned multiple Pod objects representing individual instances of your application and exposed them to the world by creating a Service object that deployed a load balancer in front of them.</p>
+</div>
+<div class="readable-text" data-hash="0a96c8c3c042ea9716647a0459c935bf" data-text-hash="14d2c091aeebd46ae17b4be46eb2ca5f" id="8" refid="8">
+<p>The chapters in the second part of this book explain these and other object types in detail. In this chapter, the common features of Kubernetes objects are presented using the example of Node and Event objects.</p>
+</div>
+<div class="readable-text" data-hash="0817c65061463046ebec569d976ba820" data-text-hash="0979d3c420717f8f9e18c45acbf0595d" id="9" refid="9">
+<h2 id="sigil_toc_id_52">4.1&#160;Getting familiar with the Kubernetes API</h2>
+</div>
+<div class="readable-text" data-hash="b461a145aeaa5ffa67820a7c7e706d87" data-text-hash="9d5a9435905cb979fc8a76df28f763e9" id="10" refid="10">
+<p>In a Kubernetes cluster, both users and Kubernetes components interact with the cluster by manipulating objects through the Kubernetes API, as shown in figure 4.1.</p>
+</div>
+<div class="readable-text" data-hash="ef9a8862dde97ba6ea972f6760b14348" data-text-hash="d04da9f38e9441f5466fc1af4603eb63" id="11" refid="11">
+<p>These objects represent the configuration of the entire cluster. They include the applications running in the cluster, their configuration, the load balancers through which they are exposed within the cluster or externally, the underlying servers and the storage used by these applications, the security privileges of users and applications, and many other details of the infrastructure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="918027a7a48411b8e27cc813200cd9a7" data-text-hash="21b2d564371bd6163987ee936328c7d8" id="12" refid="12">
+<h5>Figure 4.1 A Kubernetes cluster is configured by manipulating objects in the Kubernetes API</h5>
+<img alt="" data-processed="true" height="487" id="Picture_1" loading="lazy" src="EPUB/images/04image002.png" width="858">
+</div>
+<div class="readable-text" data-hash="563b4324d30cc026be045864455d9a6d" data-text-hash="9963ef28496499a0999cfbd540881ada" id="13" refid="13">
+<h3 id="sigil_toc_id_53">4.1.1&#160;Introducing the API</h3>
+</div>
+<div class="readable-text" data-hash="8f5083095d1cd52fca5bb3bc278a473a" data-text-hash="15049f736fce7905f1a76e01487c5b4b" id="14" refid="14">
+<p>The Kubernetes API is the central point of interaction with the cluster, so much of this book is dedicated to explaining this API. The most important API objects are described in the following chapters, but a basic introduction to the API is presented here.</p>
+</div>
+<div class="readable-text" data-hash="1f54e84db589830c20b998b78fbee56f" data-text-hash="4eff9168691034b900e933772f103a93" id="15" refid="15">
+<h4>Understanding the architectural style of the API</h4>
+</div>
+<div class="readable-text" data-hash="535feb4d4b46ce53eec1412e13020ff0" data-text-hash="28390f7117c962fbb86f0ee6c08c0c01" id="16" refid="16">
+<p>The Kubernetes API is an HTTP-based RESTful API where the state is represented by <i>resources</i> on which you perform CRUD operations (Create, Read, Update, Delete) using standard HTTP methods such as <code>POST</code>, <code>GET</code>, <code>PUT</code>/<code>PATCH</code> or <code>DELETE</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="079b754eeb5041e4c4cbe9936322a95c" data-text-hash="0b890b1926b90387673882e6ccae7fdc" id="17" refid="17">
+<h5>Definition</h5>
+</div>
+<div class="readable-text" data-hash="2a252353531ca17e36a8992c9c5efd0c" data-text-hash="e8e314abb21a3433260f5ae53a4a053d" id="18" refid="18">
+<p> REST is Representational State Transfer, an architectural style for implementing interoperability between computer systems via web services using stateless operations, described by Roy Thomas Fielding in his doctoral dissertation. To learn more, read the dissertation at <a href="dissertation.html"><span>https://www.ics.uci.edu/~fielding/pubs/dissertation/top.htm</span></a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4d66be9127ef4758b8ac2d3ff2cf19de" data-text-hash="6b519f8ceca43ac54540d65cbb3912dc" id="19" refid="19">
+<p>It is these resources (or objects) that represent the configuration of the cluster. Cluster administrators and engineers who deploy applications into the cluster therefore influence the configuration by manipulating these objects.</p>
+</div>
+<div class="readable-text" data-hash="7e66029ba5d173a81a0b261a853d0ca9" data-text-hash="d9f06baf85e750152fea976b3dcc563a" id="20" refid="20">
+<p>In the Kubernetes community, the terms &#8220;resource&#8221; and &#8220;object&#8221; are used interchangeably, but there are subtle differences that warrant an explanation.</p>
+</div>
+<div class="readable-text" data-hash="210915a983beb3e2c8e6b9879dd0924a" data-text-hash="8075818b146a7c3a07ea9d29211b4ec3" id="21" refid="21">
+<h4>Understanding the difference between resources and objects</h4>
+</div>
+<div class="readable-text" data-hash="414f35b0fabb0caccf2a1703bf6d6867" data-text-hash="befefa9a2c664d560f0b2f4977641b97" id="22" refid="22">
+<p>The essential concept in RESTful APIs is the resource, and each resource is assigned a URI or Uniform Resource Identifier that uniquely identifies it. For example, in the Kubernetes API, application deployments are represented by deployment resources.</p>
+</div>
+<div class="readable-text" data-hash="b59c92d6c75bd59ee133864f5cb3fde0" data-text-hash="242062abf76242aa5ada8b1fb150c62d" id="23" refid="23">
+<p>The collection of all deployments in the cluster is a REST resource exposed at <code>/api/v1/deployments</code>. When you use the <code>GET</code> method to send an HTTP request to this URI, you receive a response that lists all deployment instances in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="a02d1eb7a32f2ca6a3169b01aa31cccf" data-text-hash="718b69acf4460cc2b63dc729db514db1" id="24" refid="24">
+<p>Each individual deployment instance also has its own unique URI through which it can be manipulated. The individual deployment is thus exposed as another REST resource. You can retrieve information about the deployment by sending a <code>GET</code> request to the resource URI and you can modify it using a <code>PUT</code> request.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="870c49e59433bf35b985a378272c6c50" data-text-hash="45381d19bed0e5d7396c54cf87a350d1" id="25" refid="25">
+<h5>Figure 4.2 A single object can be exposed by two or more resources</h5>
+<img alt="" data-processed="true" height="474" id="Picture_2" loading="lazy" src="EPUB/images/04image003.png" width="859">
+</div>
+<div class="readable-text" data-hash="0f70fc5b01d2ab45a6acbdf5134bc22d" data-text-hash="4b58c8bb1bff9f78d9cb6e67825f6dc0" id="26" refid="26">
+<p>An object can therefore be exposed through more than one resource. As shown in figure 4.2, the Deployment object instance named <code>mydeploy</code> is returned both as an element of a collection when you query the <code>deployments</code> resource and as a single object when you query the individual resource URI directly.</p>
+</div>
+<div class="readable-text" data-hash="720e32746bf60cd4718f29a746ea12bc" data-text-hash="3628f0cee81d7dc84fee8dcd116b760b" id="27" refid="27">
+<p>In addition, a single object instance can also be exposed via multiple resources if multiple API versions exist for an object type. Up to Kubernetes version 1.15, two different representations of Deployment objects were exposed by the API. In addition to the <code>apps/v1</code> version, exposed at <code>/apis/apps/v1/deployments</code>, an older version, <code>extensions/v1beta1</code>, exposed at <code>/apis/extensions/v1beta1/deployments</code> was available in the API. These two resources didn&#8217;t represent two different sets of Deployment objects, but a single set that was represented in two different ways - with small differences in the object schema. You could create an instance of a Deployment object via the first URI and then read it back using the second.</p>
+</div>
+<div class="readable-text" data-hash="9a4ecf9da771e848fc200cce509480cb" data-text-hash="4b66da57bde0a19b3f8c46959b0d7151" id="28" refid="28">
+<p>In some cases, a resource doesn&#8217;t represent any object at all. An example of this is the way the Kubernetes API allows clients to verify whether a subject (a person or a service) is authorized to perform an API operation. This is done by submitting a <code>POST</code> request to the <code>/apis/authorization.k8s.io/v1/subjectaccessreviews</code> resource. The response indicates whether the subject is authorized to perform the operation specified in the request body. The key thing here is that no object is created by the <code>POST</code> request.</p>
+</div>
+<div class="readable-text" data-hash="9e684b5912ab2d552dd4d6c81f2b754e" data-text-hash="4a385c327d218ae9cad72cd9b8a93b3c" id="29" refid="29">
+<p>The examples described above show that a resource isn&#8217;t the same as an object. If you are familiar with relational database systems, you can compare resources and object types with views and tables. Resources are views through which you interact with objects.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="30" refid="30">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="32c0bf553ec4d753965abbe6a6a5b1e5" data-text-hash="3f1a1c920892e63f43f6ac8bc6a0bd9d" id="31" refid="31">
+<p> Because the term &#8220;resource&#8221; can also refer to compute resources, such as CPU and memory, to reduce confusion, the term &#8220;objects&#8221; is used in this book to refer to API resources.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="7ee2197ec7606939e4c2fbb1fa83e50a" data-text-hash="18450230bf834803c419b7a100808482" id="32" refid="32">
+<h4>Understanding how objects are represented</h4>
+</div>
+<div class="readable-text" data-hash="77b10b8efe141053ecb89b6e9d2ad724" data-text-hash="06f41d9ac63fd3b51ba91e05d1c08d59" id="33" refid="33">
+<p>When you make a <code>GET</code> request for a resource, the Kubernetes API server returns the object in structured text form. The default data model is JSON, but you can also tell the server to return YAML instead. When you update the object using a <code>POST</code> or <code>PUT</code> request, you also specify the new state with either JSON or YAML.</p>
+</div>
+<div class="readable-text" data-hash="37b72205d219f037dfafa64f7df4ec04" data-text-hash="6d609ad087d05243fe89298112903b21" id="34" refid="34">
+<p>The individual fields in an object&#8217;s manifest depend on the object type, but the general structure and many fields are shared by all Kubernetes API objects. You&#8217;ll learn about them next.</p>
+</div>
+<div class="readable-text" data-hash="02118bc1b7ccbe82d0215c24b350ab26" data-text-hash="056169b85b0df4e2111c8ff257a343ab" id="35" refid="35">
+<h3 id="sigil_toc_id_54">4.1.2&#160;Understanding the structure of an object manifest</h3>
+</div>
+<div class="readable-text" data-hash="13cfb7378e25221c6579d6a5a1c71102" data-text-hash="a15bd7bfc26d84178bb10f365cff4441" id="36" refid="36">
+<p>Before you are confronted with the complete manifest of a Kubernetes object, let me first explain its major parts, because this will help you to find your way through the sometimes hundreds of lines it is composed of.</p>
+</div>
+<div class="readable-text" data-hash="83c371055fc3953bf98a37811faf9b36" data-text-hash="7daa32cc4f9d790782ef4c59cf7455df" id="37" refid="37">
+<h4>Introducing the main parts of an object</h4>
+</div>
+<div class="readable-text" data-hash="0e03d7044d2feca41e7038175fc98c1b" data-text-hash="8a07b86db0cd99ab526c91a253b5bf02" id="38" refid="38">
+<p>The manifest of most Kubernetes API objects consists of the following four sections:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="429b0d44333ce7f23d4e0186c0aa454f" data-text-hash="9fea2bef9fc4ec4ff1b4a5f3cb8417ab" id="39" refid="39"><i>Type Metadata</i> contains information about the type of object this manifest describes. It specifies the object type, the group to which the type belongs, and the API version.</li>
+<li class="readable-text" data-hash="48a8ab896efdbfc59b71941da3a55f9e" data-text-hash="b5fd91aa11ddd33392bdd9c651086d1d" id="40" refid="40"><i>Object Metadata</i> holds the basic information about the object instance, including its name, time of creation, owner of the object, and other identifying information. The fields in the Object Metadata are the same for all object types.</li>
+<li class="readable-text" data-hash="35f5d8f673ebb60f183b536fb0df425a" data-text-hash="262f5984c5b404e87dc50cf8de15f842" id="41" refid="41"><i>Spec</i> is the part in which you specify the desired state of the object. Its fields differ between different object types. For pods, this is the part that specifies the pod&#8217;s containers, storage volumes and other information related to its operation.</li>
+<li class="readable-text" data-hash="abe6d7337d76fd20c767f695b25a245c" data-text-hash="65b380e9394d123d5ba11f8193289928" id="42" refid="42"><i>Status</i> contains the current actual state of the object. For a pod, it tells you the condition of the pod, the status of each of its containers, its IP address, the node it&#8217;s running on, and other information that reveals what&#8217;s happening to your pod.</li>
+</ul>
+<div class="readable-text" data-hash="9760a98de44639a3f64f98491ca4d5a8" data-text-hash="457d4484727f80019e3ffe08c497eb6f" id="43" refid="43">
+<p>A visual representation of an object manifest and its four sections is shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b7823673a26da62b5702631dd73976ff" data-text-hash="3f5a4851959ba4e46847099d93ce7bea" id="44" refid="44">
+<h5>Figure 4.3 The main sections of a Kubernetes API object.</h5>
+<img alt="" data-processed="true" height="452" id="Picture_3" loading="lazy" src="EPUB/images/04image004.png" width="852">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="45" refid="45">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="62a7f9f42c98ae4f91baf3eb1f8d297c" data-text-hash="d92c29a59b1d543048f455a98c79ed39" id="46" refid="46">
+<p> Although the figure shows that users write to the object&#8217;s Spec section and read its Status, the API server always returns the entire object when you perform a GET request; to update the object, you also send the entire object in the PUT request.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ee5f4c715d24539c62abb36d2ba03ba4" data-text-hash="9ca8d0a51e52ec6f83ae0b7a0216d703" id="47" refid="47">
+<p>You&#8217;ll see an example later to see which fields exist in these sections but let me first explain the Spec and Status sections, as they represent the flesh of the object.</p>
+</div>
+<div class="readable-text" data-hash="888c45c3053f9188f62d02c2d242977b" data-text-hash="2e418ceda1ec963d65fb693dc4fcef9a" id="48" refid="48">
+<h4>Understanding the spec and status sections</h4>
+</div>
+<div class="readable-text" data-hash="ab6b10b9ff5fbf779d2eb9e381baf140" data-text-hash="f126bcaa87b6d61f42e6c0cb18ed47ec" id="49" refid="49">
+<p>As you may have noticed in the previous figure, the two most important parts of an object are the Spec and Status sections. You use the Spec to specify the desired state of the object and read the actual state of the object from the Status section. So, you are the one who writes the Spec and reads the Status, but who or what reads the Spec and writes the Status?</p>
+</div>
+<div class="readable-text" data-hash="67dd6947428b102e54010f69856ca1f5" data-text-hash="cd191067f855c834f9ea40ff6dce91a5" id="50" refid="50">
+<p>The Kubernetes Control Plane runs several components called <i>controllers</i> that manage the objects you create. Each controller is usually only responsible for one object type. For example, the <i>Deployment controller</i> manages Deployment objects.</p>
+</div>
+<div class="readable-text" data-hash="c562cba9e29b9403fbb8a57ef986373f" data-text-hash="dd2f43eba41a07889c7de4e23e795a79" id="51" refid="51">
+<p>As shown in figure 4.4, the task of a controller is to read the desired object state from the object&#8217;s Spec section, perform the actions required to achieve this state, and report back the actual state of the object by writing to its Status section.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e08dedaa6ad8638402149824b39463d7" data-text-hash="3de13bfe24c77f36aa5ee025927bfcb7" id="52" refid="52">
+<h5>Figure 4.4 How a controller manages an object</h5>
+<img alt="" data-processed="true" height="440" id="Picture_4" loading="lazy" src="EPUB/images/04image005.png" width="841">
+</div>
+<div class="readable-text" data-hash="7ec657518e830345e1385e46af19f4ee" data-text-hash="f13a5efdcdfbe5756b186762e3487477" id="53" refid="53">
+<p>Essentially, you tell Kubernetes what it has to do by creating and updating API objects. Kubernetes controllers use the same API objects to tell you what they have done and what the status of their work is.</p>
+</div>
+<div class="readable-text" data-hash="8ea4dc12f27fafeaf2160d1eaff1b827" data-text-hash="2fdbd32a00a42a277516d9d96bc9566c" id="54" refid="54">
+<p>You&#8217;ll learn more about the individual controllers and their responsibilities in chapter 13. For now, just remember that a controller is associated with most object types and that the controller is the thing that reads the Spec and writes the Status of the object.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="659ae14f99c73325e9871962cf684c7b" data-text-hash="13000577546f84561f3c2b2b5d61ea06" id="55" refid="55">
+<h5>Not all objects have the spec and status sections</h5>
+</div>
+<div class="readable-text" data-hash="d156af79634c02c7184efef8d440d068" data-text-hash="81482928f30b463080b400839ca11bc5" id="56" refid="56">
+<p>All Kubernetes API objects contain the two metadata sections, but not all have the Spec and Status sections. Those that don&#8217;t, typically contain just static data and don&#8217;t have a corresponding controller, so it is not necessary to distinguish between the desired and the actual state of the object.</p>
+</div>
+<div class="readable-text" data-hash="82e9eb808a9d91940700214e938c9922" data-text-hash="3359cbe772bafcb2b4c4ea1709f9ba27" id="57" refid="57">
+<p>An example of such an object is the Event object, which is created by various controllers to provide additional information about what is happening with an object that the controller is managing. The Event object is explained in section 4.3.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="d23a4209791bf86d78fe9874923f0b79" data-text-hash="156c8a21fcfb55d9b006f80a9958d1d5" id="58" refid="58">
+<p>You now understand the general outline of an object, so the next section of this chapter can finally explore the individual fields of an object.</p>
+</div>
+<div class="readable-text" data-hash="c0f610248506374c4d69ebba1f3a081a" data-text-hash="bd2507f231bcd4711f23dc00d3947285" id="59" refid="59">
+<h2 id="sigil_toc_id_55">4.2&#160;Examining an object&#8217;s individual properties</h2>
+</div>
+<div class="readable-text" data-hash="4beeae902453fd4bd3d17887d57c482f" data-text-hash="b3ef34119444d61eee8d3b215799de1a" id="60" refid="60">
+<p>To examine Kubernetes API objects up close, we&#8217;ll need a concrete example. Let&#8217;s take the Node object, which should be easy to understand because it represents something you might be relatively familiar with - a computer in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="36be1bc673190f4759a88d686dea569e" data-text-hash="91e8ccac6901e82cf5d03419aff70b19" id="61" refid="61">
+<p>My Kubernetes cluster provisioned by the kind tool has three nodes - one master and two workers. They are represented by three Node objects in the API. I can query the API and list these objects using <code>kubectl get nodes</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="23ba664cc5dab158ff6574563254d96e" data-text-hash="7e40b376f4c8a36882f617b6adba3bce" id="62" refid="62">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get nodes
+NAME                 STATUS   ROLES    AGE    VERSION
+kind-control-plane   Ready    master   1h     v1.18.2
+kind-worker          Ready    &lt;none&gt;   1h     v1.18.2
+kind-worker2         Ready    &lt;none&gt;   1h     v1.18.2</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3e9b6a9904fccb897fa9023171c25c2c" data-text-hash="171cfea54d7813ee38ee2dcfc38ff680" id="63" refid="63">
+<p>The following figure shows the three Node objects and the actual cluster machines that make up the cluster. Each Node object instance represents one host. In each instance, the Spec section contains (part of) the configuration of the host, and the Status section contains the state of the host.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ac193fb545254296f35100c9ed876f86" data-text-hash="0ee0375bb452d6e256c4ba78920b2cce" id="64" refid="64">
+<h5>Figure 4.5 Cluster nodes are represented by Node objects</h5>
+<img alt="" data-processed="true" height="324" id="Picture_5" loading="lazy" src="EPUB/images/04image006.png" width="843">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="65" refid="65">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="606d45b70449dcb9355cd1f43dcd61a2" data-text-hash="b55dc522ff8c8e4b4f74862f5f433dc5" id="66" refid="66">
+<p> Node objects are slightly different from other objects because they are usually created by the Kubelet - the node agent running on the cluster node - rather than by users. When you add a machine to the cluster, the Kubelet registers the node by creating a Node object that represents the host. Users can then edit (some of) the fields in the Spec section.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c143f657360deb7e0726b82433409810" data-text-hash="f83fb57e800cd343aaaa4def71771f3a" id="67" refid="67">
+<h3 id="sigil_toc_id_56">4.2.1&#160;Exploring the full manifest of a Node object</h3>
+</div>
+<div class="readable-text" data-hash="dcb19a1619bc8b54e1231ac03f0cea2d" data-text-hash="008ae71d8e4820727ee2d187b06a24f9" id="68" refid="68">
+<p>Let&#8217;s take a close look at one of the Node objects. List all Node objects in your cluster by running the <code>kubectl get nodes</code> command and select one you want to inspect. Then, execute the <code>kubectl</code> <code>get node &lt;node-name&gt; -o yaml</code> command, where you replace <code>&lt;node-name&gt;</code> with the name of the node, as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="110fe967830e0c41ec66f815e4dce91e" data-text-hash="c295b2202c84ed50011677760293b8dc" id="69" refid="69">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node kind-control-plane -o yaml
+apiVersion: v1            #A
+kind: Node                #A
+metadata:                                                             #B
+  annotations: ...
+  creationTimestamp: "2020-05-03T15:09:17Z" 
+  labels: ... 
+  name: kind-control-plane                                          #C
+  resourceVersion: "3220054"
+  selfLink: /api/v1/nodes/kind-control-plane
+  uid: 16dc1e0b-8d34-4cfb-8ade-3b0e91ec838b
+spec:                                                                 #D
+  podCIDR: 10.244.0.0/24                                              #E
+  podCIDRs:                                                           #E
+  - 10.244.0.0/24                                                     #E
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+status:                                                               #F
+  addresses:                                                          #G
+  - address: 172.18.0.2                                               #G
+    type: InternalIP                                                  #G
+  - address: kind-control-plane                                       #G
+    type: Hostname                                                    #G
+  allocatable: ...
+  capacity:                                                           #H
+    cpu: "8"                                                          #H
+    ephemeral-storage: 401520944Ki                                    #H
+    hugepages-1Gi: "0"                                                #H
+    hugepages-2Mi: "0"                                                #H
+    memory: 32720824Ki                                                #H
+    pods: "110"                                                       #H
+  conditions:
+  - lastHeartbeatTime: "2020-05-17T12:28:41Z"
+    lastTransitionTime: "2020-05-03T15:09:17Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"
+    type: MemoryPressure
+    ...
+  daemonEndpoints:
+    kubeletEndpoint:
+      Port: 10250
+  images:                                                             #I
+  - names:                                                            #I
+    - k8s.gcr.io/etcd:3.4.3-0                                         #I
+    sizeBytes: 289997247                                              #I
+    ...                                                               #I
+  nodeInfo:                                                           #J
+    architecture: amd64                                               #J
+    bootID: 233a359f-5897-4860-863d-06546130e1ff                      #J
+    containerRuntimeVersion: containerd://1.3.3-14-g449e9269          #J
+    kernelVersion: 5.5.10-200.fc31.x86_64                             #J
+    kubeProxyVersion: v1.18.2                                         #J
+    kubeletVersion: v1.18.2                                           #J
+    machineID: 74b74e389bb246e99abdf731d145142d                       #J
+    operatingSystem: linux                                            #J
+    osImage: Ubuntu 19.10                                             #J
+    systemUUID: 8749f818-8269-4a02-bdc2-84bf5fa21700                  #J</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFR5cGUgTWV0YWRhdGEgc3BlY2lmaWVzIHRoZSB0eXBlIG9mIG9iamVjdCBhbmQgdGhlIEFQSSB2ZXJzaW9uIG9mIHRoaXMgb2JqZWN0IG1hbmlmZXN0LgojQiBUaGUgT2JqZWN0IE1ldGFkYXRhIHNlY3Rpb24gYmVnaW5zIGhlcmUKI0MgVGhlIG9iamVjdCBuYW1lICh0aGUgbm9kZeKAmXMgbmFtZSkKI0QgVGhlIG5vZGXigJlzIGRlc2lyZWQgc3RhdGUgaXMgc3BlY2lmaWVkIGluIHRoZSBzcGVjIHNlY3Rpb24sIHdoaWNoIGJlZ2lucyBoZXJlCiNFIFRoZSBJUCByYW5nZSByZXNlcnZlZCBmb3IgdGhlIHBvZHMgb24gdGhpcyBub2RlCiNGIFRoZSBub2Rl4oCZcyBhY3R1YWwgc3RhdGUgaXMgc2hvd24gaW4gdGhlIHN0YXR1cyBzZWN0aW9uLCB3aGljaCBiZWdpbnMgaGVyZSBhbmQgZXh0ZW5kcyB0byB0aGUgZW5kIG9mIHRoaXMgbGlzdGluZwojRyBUaGUgSVAocykgYW5kIGhvc3RuYW1lIG9mIHRoZSBub2RlCiNIIFRoZSBub2RlcyBjYXBhY2l0eSAodGhlIGFtb3VudCBvZiBjb21wdXRlIHJlc291cmNlcyBpdCBoYXMpCiNJIFRoZSBsaXN0IG9mIGNhY2hlZCBjb250YWluZXIgaW1hZ2VzIG9uIHRoaXMgbm9kZQojSiBJbmZvcm1hdGlvbiBhYm91dCB0aGUgbm9kZeKAmXMgb3BlcmF0aW5nIHN5c3RlbSBhbmQgdGhlIEt1YmVybmV0ZXMgY29tcG9uZW50cyBydW5uaW5nIG9uIGl0"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="70" refid="70">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="eac72c627d6f82c759042890b4afadfc" data-text-hash="107a7d79c4d509b53ae133e283f4232b" id="71" refid="71">
+<p> Use the <code>-o json</code> option to display the object in JSON instead of YAML.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6bf14e0ca207106d52cd197eb4c672dd" data-text-hash="8046087096b9f413e42e83e88c292996" id="72" refid="72">
+<p>In the YAML manifest, the four main sections of the object definition and the more important properties of the node are annotated to help you distinguish between the more and less important fields. Some lines have been omitted to reduce the length of the manifest.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="21282af114873fb8017cd4755a4e6e39" data-text-hash="774323992457320ee82f046a0bd41eb9" id="73" refid="73">
+<h5>Accessing the API directly</h5>
+</div>
+<div class="readable-text" data-hash="9e45f31560644823ae1f5bd69cfc10e8" data-text-hash="6977e49b00e0d3196ef9943c683f1659" id="74" refid="74">
+<p>You may be interested in trying to access the API directly instead of through kubectl. As explained earlier, the Kubernetes API is web based, so you can use a web browser or the curl command to perform API operations, but the API server uses TLS and you typically need a client certificate or token for authentication. Fortunately, kubectl provides a special proxy that takes care of this, allowing you to talk to the API through the proxy using plain HTTP.</p>
+</div>
+<div class="readable-text" data-hash="420d681af5b64e11256f032237ee8903" data-text-hash="83b7b3a2eb0e74925fc04eb2b0a43868" id="75" refid="75">
+<p>To run the proxy, execute the command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="97c6747d4984e97b5b4de93188c0b463" data-text-hash="2c5f0f36fa6699b8997de4dea94e8c39" id="76" refid="76">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl proxy
+Starting to serve on 127.0.0.1:8001</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6077d8066383a22fb73f5cfb183afdd1" data-text-hash="e8fe34478290a1ad8d2a3ff783ba4172" id="77" refid="77">
+<p class="">You can now access the API using HTTP at 127.0.0.1:8001. For example, to retrieve the node object, open the URL <span class="hyperlink">http://127.0.0.1:8001/api/v1/nodes/kind-control-plane</span> (replace kind-control-plane with one of your nodes&#8217; names).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="89fd35ddaaaed3a3a8f2bd474198bb92" data-text-hash="9b711e7f1949c19a10ebb4b4dd58da7d" id="78" refid="78">
+<p>Now let&#8217;s take a closer look at the fields in each of the four main sections.</p>
+</div>
+<div class="readable-text" data-hash="1d45165301e9bf0e1fc12ff628f32ea4" data-text-hash="425cf93f644856dfea000bf0299d4398" id="79" refid="79">
+<h4>The Type Metadata fields</h4>
+</div>
+<div class="readable-text" data-hash="9d3e7afafb4145869e27c3d0664cd7df" data-text-hash="9d82ebee0b424950e638e25eeff6f1ab" id="80" refid="80">
+<p>As you can see, the manifest starts with the <code>apiVersion</code> and <code>kind</code> fields, which specify the API version and type of the object that this object manifest specifies. The API version is the schema used to describe this object. As mentioned before, an object type can be associated with more than one schema, with different fields in each schema being used to describe the object. However, usually only one schema exists for each type.</p>
+</div>
+<div class="readable-text" data-hash="942476335443f08f20c7b6cce8844319" data-text-hash="aa2fa9295f1f99c757e73d8d2ec8a017" id="81" refid="81">
+<p>The <code>apiVersion</code> in the previous manifest is <code>v1</code>, but you&#8217;ll see in the following chapters that the <code>apiVersion</code> in other object types contains more than just the version number. For Deployment objects, for example, the <code>apiVersion</code> is <code>apps/v1</code>. Whereas the field was originally used only to specify the API version, it is now also used to specify the API group to which the resource belongs. Node objects belong to the core API group, which is conventionally omitted from the <code>apiVersion</code> field.</p>
+</div>
+<div class="readable-text" data-hash="e696893dfde281c8cdd105ba6981e5a7" data-text-hash="d7487dfff41725554c67956c7efcc8c1" id="82" refid="82">
+<p>The type of object defined in the manifest is specified by the field <code>kind</code>. The object kind in the previous manifest is <code>Node</code>. In the previous chapters, you created objects of kind Deployment, Service, and Pod.</p>
+</div>
+<div class="readable-text" data-hash="79b5c1d1f73e6dbebdf5c9f44f462f8c" data-text-hash="1becb995be50b67d74c0ced7040bd0ad" id="83" refid="83">
+<h4>Fields in the Object Metadata section</h4>
+</div>
+<div class="readable-text" data-hash="e4c2f1715043b347806527ed4006dc51" data-text-hash="ad6f1e0f90cf11f9cbd162a25ce4c389" id="84" refid="84">
+<p>The <code>metadata</code> section contains the metadata of this object instance. It contains the <code>name</code> of the instance, along with additional attributes such as <code>labels</code> and <code>annotations</code>, which are explained in chapter 9, and fields such as <code>resourceVersion</code>, <code>managedFields,</code> and other low-level fields, which are explained at depth in chapter 12.</p>
+</div>
+<div class="readable-text" data-hash="0fc689dfe310e9543bad4aaaa2fbceed" data-text-hash="fe3fb4807e0918b19dd76a88dd96039d" id="85" refid="85">
+<h4>Fields in the Spec section</h4>
+</div>
+<div class="readable-text" data-hash="e8dc1eea4077c14b70aea3a9efcb4282" data-text-hash="4c64b226fa8b7f7f40fceac6a03ee703" id="86" refid="86">
+<p>Next comes the <code>spec</code> section, which is specific to each object kind. It is relatively short for Node objects compared to what you find for other object kinds. The <code>podCIDR</code> fields specify the pod IP range assigned to the node. Pods running on this node are assigned IPs from this range. The <code>taints</code> field is not important at this point, but you&#8217;ll learn about it in chapter 18.</p>
+</div>
+<div class="readable-text" data-hash="e085c0e6ac63eac0b727989e002648b7" data-text-hash="0739060b5f9a6fc3d98ab8bd56bccdec" id="87" refid="87">
+<p>Typically, an object&#8217;s spec section contains many more fields that you use to configure the object.</p>
+</div>
+<div class="readable-text" data-hash="dae7eb52083d1935e46a35dc64d53530" data-text-hash="1fd84a0fe449526d1bb41f86bef3157f" id="88" refid="88">
+<h4>Fields in the Status section</h4>
+</div>
+<div class="readable-text" data-hash="806a8d732da157edf5d11954d7f76b22" data-text-hash="9c87af0eb0170bf67d7163d8ce3bb65c" id="89" refid="89">
+<p>The <code>status</code> section also differs between the different kinds of object, but its purpose is always the same - it contains the last observed state of the thing the object represents. For Node objects, the status reveals the node&#8217;s IP address(es), host name, capacity to provide compute resources, the current conditions of the node, the container images it has already downloaded and which are now cached locally, and information about its operating system and the version of Kubernetes components running on it.</p>
+</div>
+<div class="readable-text" data-hash="08249846d6636edbdf453bea3a69d06d" data-text-hash="5c4c3a2166e1ff2e599de2ebbfdd2861" id="90" refid="90">
+<h3 id="sigil_toc_id_57">4.2.2&#160;Understanding individual object fields</h3>
+</div>
+<div class="readable-text" data-hash="ef6ce935bbfbd46d5bb28c48d127a65b" data-text-hash="81d6d4a07ea1056c689e839f42f63969" id="91" refid="91">
+<p>To learn more about individual fields in the manifest, you can refer to the API reference documentation at <a href="reference.html">http://kubernetes.io/docs/reference/</a> or use the <code>kubectl explain</code> command as described next.</p>
+</div>
+<div class="readable-text" data-hash="660078e3402c94f7ba9c323ac1a512aa" data-text-hash="78e0198cf65afb97690d4c3681038aa2" id="92" refid="92">
+<h4>Using kubectl explain to explore API object fields</h4>
+</div>
+<div class="readable-text" data-hash="7f1988d0a79468cfa5cfadf3b022c158" data-text-hash="507e637ecdec234f1e61f370ebd3ce5d" id="93" refid="93">
+<p>The kubectl tool has a nice feature that allows you to look up the explanation of each field for each object type (kind) from the command line. Usually, you start by asking it to provide the basic description of the object kind by running <code>kubectl explain &lt;kind&gt;</code>, as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f3d1d4ea4ab369540865f13144fe1af0" data-text-hash="6784c829b1a01f8d21fc206078e2841a" id="94" refid="94">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl explain nodes
+KIND:     Node
+VERSION:  v1
+ 
+DESCRIPTION:
+     Node is a worker node in Kubernetes. Each node will have a unique
+     identifier in the cache (i.e. in etcd).
+ 
+FIELDS:
+   apiVersion   &lt;string&gt;
+     APIVersion defines the versioned schema of this representation of an
+     object. Servers should convert recognized schemas to the latest... 
+ 
+   kind &lt;string&gt;
+     Kind is a string value representing the REST resource this object
+     represents. Servers may infer this from the endpoint the client...
+ 
+   metadata     &lt;Object&gt;
+     Standard object's metadata. More info: ...
+ 
+   spec &lt;Object&gt;
+     Spec defines the behavior of a node...
+ 
+   status       &lt;Object&gt;
+     Most recently observed status of the node. Populated by the system.
+     Read-only. More info: ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c646575c6be3ff5894a622e4d4153373" data-text-hash="101b850908619c61b988bc5f87e35034" id="95" refid="95">
+<p>The command prints the explanation of the object and lists the top-level fields that the object can contain.</p>
+</div>
+<div class="readable-text" data-hash="6374edfe6e5d82f7aaf4c3e3be80c5dc" data-text-hash="61484cafdf99758a4288f3e79fa179d9" id="96" refid="96">
+<h4>Drilling deeper into an API object&#8217;s structure</h4>
+</div>
+<div class="readable-text" data-hash="42495c79ba497f2c746044db77bc0bde" data-text-hash="81ff8e0f4ff09fc205ab860d058816f2" id="97" refid="97">
+<p>You can then drill deeper to find subfields under each specific field. For example, you can use the following command to explain the node&#8217;s <code>spec</code> field:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="140291b9790529f8aa16c1abf2fa5a3d" data-text-hash="d65c074d2d8676d9a7ed7870c9896f62" id="98" refid="98">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl explain node.spec
+KIND:     Node
+VERSION:  v1
+ 
+RESOURCE: spec &lt;Object&gt;
+ 
+DESCRIPTION:
+     Spec defines the behavior of a node.
+ 
+     NodeSpec describes the attributes that a node is created with.
+ 
+FIELDS:
+   configSource &lt;Object&gt;
+     If specified, the source to get node configuration from The
+     DynamicKubeletConfig feature gate must be enabled for the Kubelet...
+ 
+   externalID   &lt;string&gt;
+     Deprecated. Not all kubelets will set this field... 
+ 
+   podCIDR      &lt;string&gt;
+     PodCIDR represents the pod IP range assigned to the node.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="98c3b9935cc88cd8639863d666fd1a2a" data-text-hash="540314c2a164d22488dac8fa02f8fe53" id="99" refid="99">
+<p>Please note the API version given at the top. As explained earlier, multiple versions of the same kind can exist. Different versions can have different fields or default values. If you want to display a different version, specify it with the <code>--api-version</code> option.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="100" refid="100">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3345e80a7251c1293670ed31889cc4a1" data-text-hash="80101459148768b4ec5ee1e00bc19207" id="101" refid="101">
+<p> If you want to see the complete structure of an object (the complete hierarchical list of fields without the descriptions), try <code>kubectl explain pods --recursive</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="74f20aed89a9c8a3d23fcda216d6291e" data-text-hash="180612bb103ecd62cd4f73f90e01323a" id="102" refid="102">
+<h3 id="sigil_toc_id_58">4.2.3&#160;Understanding an object&#8217;s status conditions</h3>
+</div>
+<div class="readable-text" data-hash="8a0831e56d8fb4ec1a02164e9e6f55c1" data-text-hash="3aab8eb4dbb351c78af5fba54f95dd0c" id="103" refid="103">
+<p>The set of fields in both the <code>spec</code> and <code>status</code> sections is different for each object kind, but the <code>conditions</code> field is found in many of them. It gives a list of conditions the object is currently in. They are very useful when you need to troubleshoot an object, so let&#8217;s examine them more closely. Since the Node object is used as an example, this section also teaches you how to easily identify problems with a cluster node.</p>
+</div>
+<div class="readable-text" data-hash="e8d88a029c9ac0b2ab86e60638582bb2" data-text-hash="ee32968b672aae31ac4287f6ca5436bb" id="104" refid="104">
+<h4>Introducing the node&#8217;s status conditions</h4>
+</div>
+<div class="readable-text" data-hash="be827a96e4bc0c0ae4baa966fe3c3c85" data-text-hash="ac883a1ae44311a1e3e104ea2cc47978" id="105" refid="105">
+<p>Let&#8217;s print out the YAML manifest of the one of the node objects again, but this time we&#8217;ll only focus on the <code>conditions</code> field in the object&#8217;s <code>status</code>. The command to run and its output are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9b35e6d892e3cf998c31c36659aad6f4" data-text-hash="c0206edc65c4ac99504fa27a626aa26b" id="106" refid="106">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node kind-control-plane -o yaml
+...
+status:
+  ...
+  conditions:
+  - lastHeartbeatTime: "2020-05-17T13:03:42Z"
+    lastTransitionTime: "2020-05-03T15:09:17Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"                                         #A
+    type: MemoryPressure                                    #A
+  - lastHeartbeatTime: "2020-05-17T13:03:42Z"
+    lastTransitionTime: "2020-05-03T15:09:17Z"
+    message: kubelet has no disk pressure
+    reason: KubeletHasNoDiskPressure
+    status: "False"                                         #B
+    type: DiskPressure                                      #B
+  - lastHeartbeatTime: "2020-05-17T13:03:42Z"
+    lastTransitionTime: "2020-05-03T15:09:17Z"
+    message: kubelet has sufficient PID available
+    reason: KubeletHasSufficientPID
+    status: "False"                                         #C
+    type: PIDPressure                                       #C
+  - lastHeartbeatTime: "2020-05-17T13:03:42Z"
+    lastTransitionTime: "2020-05-03T15:10:15Z"
+    message: kubelet is posting ready status
+    reason: KubeletReady
+    status: "True"                              #D
+    type: Ready                                 #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTm9kZSBpcyBub3QgcnVubmluZyBvdXQgb2YgbWVtb3J5CiNCIE5vZGUgaXMgbm90IHJ1bm5pbmcgb3V0IG9mIGRpc2sgc3BhY2UKI0MgTm9kZSBoYXMgbm90IHJ1biBvdXQgb2YgdW51c2VkIHByb2Nlc3MgSWRzCiNEIE5vZGUgaXMgcmVhZHk="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="107" refid="107">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="018108032f8c83e32a62f43de7f94a69" data-text-hash="37dcab66737f42266ce8a66ad7dc15cf" id="108" refid="108">
+<p> The <code>jq</code> tool is very handy if you want to see only a part of the object&#8217;s structure. For example, to display the node&#8217;s status conditions, you can run <code>kubectl get node &lt;name&gt; -o json | jq .status.conditions</code>. The equivalent tool for YAML is <code>yq</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a304cf56eedc4743db1a3d5708d5bfd2" data-text-hash="bbdb84b2592f643926c3167734fa84d4" id="109" refid="109">
+<p>There are four conditions that reveal the state of the node. Each condition has a <code>type</code> and a <code>status</code> field, which can be <code>True</code>, <code>False</code> or <code>Unknown</code>, as shown in the figure 4.6. A condition can also specify a machine-facing <code>reason</code> for the last transition of the condition and a human-facing <code>message</code> with details about the transition. The <code>lastTransitionTime</code> field indicates when the condition moved from one status to another, whereas the <code>lastHeartbeatTime</code> field reveals the last time the controller received an update on the given condition.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="0397e9a6401781383b0db0ca6217969d" data-text-hash="e86473fd7dee3702118648483c679b21" id="110" refid="110">
+<h5>Figure 4.6 The status conditions indicating the state of a Node object</h5>
+<img alt="" data-processed="true" height="374" id="Picture_6" loading="lazy" src="EPUB/images/04image007.png" width="843">
+</div>
+<div class="readable-text" data-hash="27f03060efbb22b33af5c7b3d088921a" data-text-hash="5160139c7edddf7afd7888bbf1b8cf1a" id="111" refid="111">
+<p>Although it&#8217;s the last condition in the list, the <code>Ready</code> condition is probably the most important, as it signals whether the node is ready to accept new workloads (pods). The other conditions (<code>MemoryPressure</code>, <code>DiskPressure</code> and <code>PIDPressure</code>) signal whether the node is running out of resources. Remember to check these conditions if a node starts to behave strangely - for example, if the applications running on it start running out of resources and/or crash.</p>
+</div>
+<div class="readable-text" data-hash="d07fa07488fccc892e49a0e19c9439e5" data-text-hash="de68402ac798ecb766a243d2dac4cee8" id="112" refid="112">
+<h4>Understanding conditions in other object kinds</h4>
+</div>
+<div class="readable-text" data-hash="309c38e125d41eb3c0af46208900b859" data-text-hash="ab42fbb0ccf41a6d9c2125a14ce783de" id="113" refid="113">
+<p>A condition list such as that in Node objects is also used in many other object kinds. The conditions explained earlier are a good example of why the state of most objects is represented by multiple conditions instead of a single field.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="114" refid="114">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5d171cb84ff1fbc77f0b3bcf4f0a92f6" data-text-hash="a48146a808a517b8d0c30d91028ff7e8" id="115" refid="115">
+<p> Conditions are usually orthogonal, meaning that they represent unrelated aspects of the object.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="df3e59a0500f0b847816c8d5e5bc9d0a" data-text-hash="88b261ba3285d2116f7970fbea228853" id="116" refid="116">
+<p>If the state of an object were represented as a single field, it would be very difficult to subsequently extend it with new values, as this would require updating all clients that monitor the state of the object and perform actions based on it. Some object kinds originally used such a single field, and some still do, but most now use a list of conditions instead.</p>
+</div>
+<div class="readable-text" data-hash="fc532482bc42651e1cec9cd6b6fd71f6" data-text-hash="915a509b7301532855fe4ad48afce171" id="117" refid="117">
+<p>Since the focus of this chapter is to introduce the common features of the Kubernetes API objects, we&#8217;ve focused only on the <code>conditions</code> field, but it is far from being the only field in the status of the Node object. To explore the others, use the <code>kubectl explain</code> command as described in the previous sidebar. The fields that are not immediately easy for you to understand should become clear to you after reading the remaining chapters in this part of the book.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="118" refid="118">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="927a171a0941478ab2983ce5b36efedc" data-text-hash="eb1ec28b9783c553b6fb600e6b05d779" id="119" refid="119">
+<p> As an exercise, use the command <code>kubectl get &lt;kind&gt; &lt;name&gt; -o yaml</code> to explore the other objects you&#8217;ve created so far (deployments, services, and pods).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="bc845bd35561550fa35676f3d20380e2" data-text-hash="5f65cc171151279658e60e83bde0c2fc" id="120" refid="120">
+<h3 id="sigil_toc_id_59">4.2.4&#160;Inspecting objects using the kubectl describe command</h3>
+</div>
+<div class="readable-text" data-hash="db33e2505bf826263632dc0e263c31e1" data-text-hash="6725ec6b377af75c4ddf282c765fecd5" id="121" refid="121">
+<p>To give you a correct impression of the entire structure of the Kubernetes API objects, it was necessary to show you the complete YAML manifest of an object. While I personally often use this method to inspect an object, a more user-friendly way to inspect an object is the <code>kubectl describe</code> command, which typically displays the same information or sometimes even more.</p>
+</div>
+<div class="readable-text" data-hash="a4e850ea80bff1776298ac6c23edfda0" data-text-hash="b0537ea6ce1b59b0b18d5e5229f5ef95" id="122" refid="122">
+<h4>Understanding the kubectl describe output for a Node object</h4>
+</div>
+<div class="readable-text" data-hash="185df9e9e4ff3f81b8ad456c775e9d64" data-text-hash="e0010954c0266c62ae80e80fb89d674a" id="123" refid="123">
+<p>Let&#8217;s try running the <code>kubectl describe</code> command on a Node object. To keep things interesting, let&#8217;s use it to describe one of the worker nodes instead of the master. This is the command and its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0c7d57d1ddd44a1dac0c927793cac800" data-text-hash="1a52d3dba21cc163101ae1f25321b2fd" id="124" refid="124">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe node kind-worker-2
+Name:               kind-worker2
+Roles:              &lt;none&gt;
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=kind-worker2
+                    kubernetes.io/os=linux
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: /run/contain...
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-deta...
+CreationTimestamp:  Sun, 03 May 2020 17:09:48 +0200
+Taints:             &lt;none&gt;
+Unschedulable:      false
+Lease:
+  HolderIdentity:  kind-worker2
+  AcquireTime:     &lt;unset&gt;
+  RenewTime:       Sun, 17 May 2020 16:15:03 +0200
+Conditions:
+  Type             Status  ...  Reason                       Message
+  ----             ------  ---  ------                       -------
+  MemoryPressure   False   ...  KubeletHasSufficientMemory   ...
+  DiskPressure     False   ...  KubeletHasNoDiskPressure     ...
+  PIDPressure      False   ...  KubeletHasSufficientPID      ...
+  Ready            True    ...  KubeletReady                 ...
+Addresses:
+  InternalIP:  172.18.0.4
+  Hostname:    kind-worker2
+Capacity:
+  cpu:                8
+  ephemeral-storage:  401520944Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             32720824Ki
+  pods:               110
+Allocatable:
+  ...
+System Info:
+  ...
+PodCIDR:                      10.244.1.0/24
+PodCIDRs:                     10.244.1.0/24
+Non-terminated Pods:          (2 in total)
+  Namespace     Name               CPU Requests  CPU Limits  ...  AGE
+  ---------     ----               ------------  ----------  ...  ---
+  kube-system   kindnet-4xmjh      100m (1%)     100m (1%)   ...  13d
+  kube-system   kube-proxy-dgkfm   0 (0%)        0 (0%)      ...  13d
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests   Limits
+  --------           --------   ------
+  cpu                100m (1%)  100m (1%)
+  memory             50Mi (0%)  50Mi (0%)
+  ephemeral-storage  0 (0%)     0 (0%)
+  hugepages-1Gi      0 (0%)     0 (0%)
+  hugepages-2Mi      0 (0%)     0 (0%)
+Events:
+  Type    Reason                   Age    From                      Message
+  ----    ------                   ----   ----                      -------
+  Normal  Starting                 3m50s  kubelet, kind-worker2     ...
+  Normal  NodeAllocatableEnforced  3m50s  kubelet, kind-worker2     ...
+  Normal  NodeHasSufficientMemory  3m50s  kubelet, kind-worker2     ...
+  Normal  NodeHasNoDiskPressure    3m50s  kubelet, kind-worker2     ...
+  Normal  NodeHasSufficientPID     3m50s  kubelet, kind-worker2     ...
+  Normal  Starting                 3m49s  kube-proxy, kind-worker2  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="044502ea197a6780b10ec57a2649352a" data-text-hash="367b4440a1867a039db7782f909e7334" id="125" refid="125">
+<p>As you can see, the <code>kubectl</code> <code>describe</code> command displays all the information you previously found in the YAML manifest of the Node object, but in a more readable form. You can see the name, IP address, and hostname, as well as the conditions and available capacity of the node.</p>
+</div>
+<div class="readable-text" data-hash="f3fd40b05c35b7f2861eaacb613d051e" data-text-hash="1af2e2264417be2cec0bf2ca126a8737" id="126" refid="126">
+<h4>Inspecting other objects related to the Node</h4>
+</div>
+<div class="readable-text" data-hash="7dd91ae3773eee5616b82e69cea56d35" data-text-hash="74c4bd544427ce5d8f841d77e8eca230" id="127" refid="127">
+<p>In addition to the information stored in the Node object itself, the <code>kubectl</code> <code>describe</code> command also displays the pods running on the node and the total amount of compute resources allocated to them. Below is also a list of events related to the node.</p>
+</div>
+<div class="readable-text" data-hash="421663aeab8a402a5ef742904a0d2d87" data-text-hash="38f80a1daf5af5898f8d0660149b2463" id="128" refid="128">
+<p>This additional information isn&#8217;t found in the Node object itself but is collected by the kubectl tool from other API objects. For example, the list of pods running on the node is obtained by retrieving Pod objects via the <code>pods</code> resource.</p>
+</div>
+<div class="readable-text" data-hash="0534e9229f8a702defce9b75f189e4a2" data-text-hash="98a94996d1ae89c99228816f233e3be6" id="129" refid="129">
+<p>If you run the <code>describe</code> command yourself, no events may be displayed. This is because only events that have occurred recently are shown. For Node objects, unless the node has resource capacity issues, you&#8217;ll only see events if you&#8217;ve recently (re)started the node.</p>
+</div>
+<div class="readable-text" data-hash="b93a2e338257414867465dc5b689be00" data-text-hash="b71c27beccfe8ac4f09f30a89c5ccdeb" id="130" refid="130">
+<p>Virtually every API object kind has events associated with it. Since they are crucial for debugging a cluster, they warrant a closer look before you start exploring other objects.</p>
+</div>
+<div class="readable-text" data-hash="9a56ccdaa9a5a2df2d2f990bed51ca25" data-text-hash="4a7bf5c2c6c0c45595802db53b28624f" id="131" refid="131">
+<h2 id="sigil_toc_id_60">4.3&#160;Observing cluster events via Event objects</h2>
+</div>
+<div class="readable-text" data-hash="d363efd115c5935ce1a2e4b7cc1b30e1" data-text-hash="5dff760b8f1483bf14a430c3ba2f0399" id="132" refid="132">
+<p>As controllers perform their task of reconciling the actual state of an object with the desired state, as specified in the object&#8217;s <code>spec</code> field, they generate events to reveal what they have done. Two types of events exist: Normal and Warning. Events of the latter type are usually generated by controllers when something prevents them from reconciling the object. By monitoring this type of events, you can be quickly informed of any problems that the cluster encounters.</p>
+</div>
+<div class="readable-text" data-hash="c2da4c58e43db59c105228414ce16103" data-text-hash="3f83e9455b2219f3a51ccf538a880ebb" id="133" refid="133">
+<h3 id="sigil_toc_id_61">4.3.1&#160;Introducing the Event object</h3>
+</div>
+<div class="readable-text" data-hash="639091dddf98622296801d2f775169cf" data-text-hash="daf48b5aff3e586e45447318d11424b6" id="134" refid="134">
+<p>Like everything else in Kubernetes, events are represented by Event objects that are created and read via the Kubernetes API. As the following figure shows, they contain information about what happened to the object and what the source of the event was. Unlike other objects, each Event object is deleted one hour after its creation to reduce the burden on etcd, the data store for Kubernetes API objects.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="12825c898242b47570614a2552fe9000" data-text-hash="592ec54dc543771de0f8d76a02756573" id="135" refid="135">
+<h5>Figure 4.7 The relationship between Event objects, controllers, and other API objects.</h5>
+<img alt="" data-processed="true" height="376" id="Picture_7" loading="lazy" src="EPUB/images/04image008.png" width="834">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="136" refid="136">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a4f408b7a76fa5a662df1edf6d6aebdd" data-text-hash="712d61b234c5bbc3711be012b2e9a7c8" id="137" refid="137">
+<p> The amount of time to retain events is configurable via the API server&#8217;s command-line options.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8ed5902a3a9938c2f6653d5aa37cffe1" data-text-hash="042b1a0037f478d3038d6a70ff41411a" id="138" refid="138">
+<h4>Listing events using kubectl get events</h4>
+</div>
+<div class="readable-text" data-hash="0c4205e8b0d2e9aec619beadbc29a55a" data-text-hash="783640c2f30df561e558b5add47efe39" id="139" refid="139">
+<p>The events displayed by <code>kubectl describe</code> refer to the object you specify as the argument to the command. Due to their nature and the fact that many events can be created for an object in a short time, they aren&#8217;t part of the object itself. You won&#8217;t find them in the object&#8217;s YAML manifest, as they exist on their own, just like Nodes and the other objects you&#8217;ve seen so far.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="140" refid="140">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="037daeeb7ec657268eb146208f296fc9" data-text-hash="bb088fbe18ada449bd9311a328636b23" id="141" refid="141">
+<p> If you want to follow the exercises in this section in your own cluster, you may need to restart one of the nodes to ensure that the events are recent enough to still be present in etcd. If you can&#8217;t do this, don&#8217;t worry, and just skip doing these exercises yourself, as you&#8217;ll also be generating and inspecting events in the exercises in the next chapter.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="49a7a33dd37edc4e7975ded45b090f3d" data-text-hash="a72dc7fdd1841b8d9be0cb3fc9263b3b" id="142" refid="142">
+<p>Because Events are standalone objects, you can list them using <code>kubectl get events</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e04a531fa1b3ff3595da8cef904cb6b5" data-text-hash="55868d40c2d3cd7600923a76acc40d8b" id="143" refid="143">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ev
+LAST 
+SEEN  TYPE    REASON                   OBJECT             MESSAGE
+48s   Normal  Starting                 node/kind-worker2  Starting kubelet.
+48s   Normal  NodeAllocatableEnforced  node/kind-worker2  Updated Node A...
+48s   Normal  NodeHasSufficientMemory  node/kind-worker2  Node kind-work... 
+48s   Normal  NodeHasNoDiskPressure    node/kind-worker2  Node kind-work...
+48s   Normal  NodeHasSufficientPID     node/kind-worker2  Node kind-work... 
+47s   Normal  Starting                 node/kind-worker2  Starting kube-...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="144" refid="144">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e22642caeaff2810bfbc1ce113cde88f" data-text-hash="4b044a85338d3b342fda596c111ddccc" id="145" refid="145">
+<p> The previous listing uses the short name <code>ev</code> in place of <code>events</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2c1bf49c5e9cfad9adc42404d3eebdcc" data-text-hash="eb12172bf555a46ba7fe2c9cc938b829" id="146" refid="146">
+<p>You&#8217;ll notice that some events displayed in the listing match the status conditions of the Node. This is often the case, but you&#8217;ll also find additional events. The two events with the reason <code>Starting</code> are two such examples. In the case at hand, they signal that the Kubelet and the Kube Proxy components have been started on the node. You don&#8217;t need to worry about these components yet. They are explained in the third part of the book.</p>
+</div>
+<div class="readable-text" data-hash="90eb54eaf867a7e79b16776a6756d399" data-text-hash="b3d1ab859ba9bc11dfe6f35565908811" id="147" refid="147">
+<h4>Understanding what&#8217;s in an Event object</h4>
+</div>
+<div class="readable-text" data-hash="901a36f61c92f8f4a449ab475f797307" data-text-hash="7eb0514e57ab65767750020aea803a6c" id="148" refid="148">
+<p>As with other objects, the <code>kubectl</code> <code>get</code> command only outputs the most important object data. To display additional information, you can enable additional columns by executing the command with the <code>-o wide</code> option:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e3353e349c68b63585ab533596abf3c1" data-text-hash="b46167ec6a9a09027a5a1210b4a3178f" id="149" refid="149">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ev -o wide</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="712b3dc410d0c4d921f76e94038af395" data-text-hash="e23b976d2338964d60d7fb3f9fda2c0c" id="150" refid="150">
+<p>The output of this command is extremely wide and is not listed here in the book. Instead, the information that is displayed is explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="0200368b13acb94f837d36651e2488d6" data-text-hash="f8c11d76f39488d61da5c513ee17bdc1" id="151" refid="151">
+<h5>Table 4.1 Properties of the Event object</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Property</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p>Name</p> </td>
+<td> <p>The name of this Event object instance. Useful only if you want to retrieve the given object from the API.</p> </td>
+</tr>
+<tr>
+<td> <p>Type</p> </td>
+<td> <p>The type of the event. Either <code>Normal</code> or <code>Warning</code>.</p> </td>
+</tr>
+<tr>
+<td> <p>Reason</p> </td>
+<td> <p>The machine-facing description why the event occurred.</p> </td>
+</tr>
+<tr>
+<td> <p>Source</p> </td>
+<td> <p>The component that reported this event. This is usually a controller.</p> </td>
+</tr>
+<tr>
+<td> <p>Object</p> </td>
+<td> <p>The object instance to which the event refers. For example, node/xyz.</p> </td>
+</tr>
+<tr>
+<td> <p>Sub-object</p> </td>
+<td> <p>The sub-object to which the event refers. For example, what container of the pod.</p> </td>
+</tr>
+<tr>
+<td> <p>Message</p> </td>
+<td> <p>The human-facing description of the event.</p> </td>
+</tr>
+<tr>
+<td> <p>First seen</p> </td>
+<td> <p>The first time this event occurred. Remember that each Event object is deleted after a while, so this may not be the first time that the event actually occurred.</p> </td>
+</tr>
+<tr>
+<td> <p>Last seen</p> </td>
+<td> <p>Events often occur repeatedly. This field indicates when this event last occurred.</p> </td>
+</tr>
+<tr>
+<td> <p>Count</p> </td>
+<td> <p>The number of times this event has occurred.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="152" refid="152">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="6a349376393211221f6c3a741bb5eb4b" data-text-hash="0b21ee68b5bd6795393edd81d5d3d1c0" id="153" refid="153">
+<p> As you complete the exercises throughout this book, you may find it useful to run the <code>kubectl get events</code> command each time you make changes to one of your objects. This will help you learn what happens beneath the surface.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f7f3fe164ab506660c86aedd1da6ab1b" data-text-hash="7fb319cf5bdd0dcb35b2f839e03f6c69" id="154" refid="154">
+<h4>Displaying only warning events</h4>
+</div>
+<div class="readable-text" data-hash="24eacb78190da759f2ad4daedcbbfe5a" data-text-hash="5129c634f246394f991fa65d834d85ee" id="155" refid="155">
+<p>Unlike the <code>kubectl describe</code> command, which only displays events related to the object you&#8217;re describing, the <code>kubectl get events</code> command displays all events. This is useful if you want to check if there are events that you should be concerned about. You may want to ignore events of type <code>Normal</code> and focus only on those of type <code>Warning</code>.</p>
+</div>
+<div class="readable-text" data-hash="59f035a723fcc6cf25fdd2bbd5d921f8" data-text-hash="850f0c8b7d0089b0f9d965b6e2a828f5" id="156" refid="156">
+<p>The API provides a way to filter objects through a mechanism called field selectors. Only objects where the specified field matches the specified selector value are returned. You can use this to display only Warning events. The <code>kubectl get</code> command allows you to specify the field selector with the <code>--field-selector</code> option. To list only events that represent warnings, you execute the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8d01478c32192d081db1f5110d894b58" data-text-hash="00ce8ecd69f90240690bb36b19664057" id="157" refid="157">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ev --field-selector type=Warning
+No resources found in default namespace.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cf4b4d9e09d94db109ec440f6846501f" data-text-hash="a95d89fad7f8db9992a8fcf103689978" id="158" refid="158">
+<p>If the command does not print any events, as in the above case, no warnings have been recorded in your cluster recently.</p>
+</div>
+<div class="readable-text" data-hash="3a1f7bde2af7ca493845eedc2e7232fd" data-text-hash="3b428b418267aa369ac646ba89ec768b" id="159" refid="159">
+<p>You may wonder how I knew the exact name of the field to be used in the field selector and what its exact value should be (perhaps it should have been lower case, for example). Hats off if you guessed that this information is provided by the <code>kubectl explain events</code> command. Since events are regular API objects, you can use it to look up documentation on the event objects&#8217; structure. There you&#8217;ll learn that the <code>type</code> field can have two values: either <code>Normal</code> or <code>Warning</code>.</p>
+</div>
+<div class="readable-text" data-hash="1e0fec206cbb7d16965c5640779400cb" data-text-hash="b941b6511b2070881168074441e457ad" id="160" refid="160">
+<h3 id="sigil_toc_id_62">4.3.2&#160;Examining the YAML of the Event object</h3>
+</div>
+<div class="readable-text" data-hash="de848c1dde44f12205b20d210af742a6" data-text-hash="bcb3604625d932a808bc811af12ec0c8" id="161" refid="161">
+<p>To inspect the events in your cluster, the commands <code>kubectl</code> <code>describe</code> and <code>kubectl get events</code> should be sufficient. Unlike other objects, you&#8217;ll probably never have to display the complete YAML of an Event object. But I&#8217;d like to take this opportunity to show you an annoying thing about Kubernetes object manifests that the API returns.</p>
+</div>
+<div class="readable-text" data-hash="84f40ed822dd2f9dc8978384e635ddff" data-text-hash="a54398cb2bd8b807bad7ebe138b96646" id="162" refid="162">
+<h4>Event objects have no spec and status sections</h4>
+</div>
+<div class="readable-text" data-hash="f142aee8df02f1ff063cc096f727521d" data-text-hash="169aa97e88ebcd891705fd0322523683" id="163" refid="163">
+<p>If you use the <code>kubectl explain</code> to explore the structure of the Event object, you&#8217;ll notice that it has no <code>spec</code> or <code>status</code> sections. Unfortunately, this means that its fields are not as nicely organized as in the Node object, for example.</p>
+</div>
+<div class="readable-text" data-hash="2cac3d93d577c72aeec2ebe10a8a3dc6" data-text-hash="0ade4e457423b52b9ac4c72a73dcf02a" id="164" refid="164">
+<p>Inspect the following YAML and see if you can easily find the object&#8217;s <code>kind</code>, <code>metadata,</code> and other fields.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d99054c799bed074f34fef89ba71e7e3" data-text-hash="f8543331b9d8388200124dc008942d6f" id="165" refid="165">
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1                                                      #A
+count: 1
+eventTime: null
+firstTimestamp: "2020-05-17T18:16:40Z"
+involvedObject:
+  kind: Node
+  name: kind-worker2
+  uid: kind-worker2
+kind: Event                                                         #B
+lastTimestamp: "2020-05-17T18:16:40Z"
+message: Starting kubelet.
+metadata:                                                           #C
+  creationTimestamp: "2020-05-17T18:16:40Z"
+  name: kind-worker2.160fe38fc0bc3703                               #D
+  namespace: default
+  resourceVersion: "3528471"
+  selfLink: /api/v1/namespaces/default/events/kind-worker2.160f...
+  uid: da97e812-d89e-4890-9663-091fd1ec5e2d
+reason: Starting
+reportingComponent: ""
+reportingInstance: ""
+source:
+  component: kubelet
+  host: kind-worker2
+type: Normal</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGFwaVZlcnNpb24gZmllbGQgaXMgZWFzeSB0byBzcG90CiNCIFRoZSBraW5kIGZpZWxkIGlzIGhhcmQgdG8gZmluZAojQyBUaGUgb2JqZWN04oCZcyBtZXRhZGF0YSBhcHBlYXJzIGluIHRoZSBtZXRhZGF0YSBzZWN0aW9uLCB3aGljaCBiZWdpbnMgaGVyZQojRCBUaGUgb2JqZWN04oCZcyBuYW1lIGlzIGhpZGRlbiBoZXJl"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9a6298862719c082a16d934140e9ba1c" data-text-hash="dbbadf614033869b5cbad19076c14460" id="166" refid="166">
+<p>You will surely agree that the YAML manifest in the listing is disorganized. The fields are listed alphabetically instead of being organized into coherent groups. This makes it difficult for us humans to read. It looks so chaotic that it&#8217;s no wonder that many people hate to deal with Kubernetes YAML or JSON manifests, since both suffer from this problem.</p>
+</div>
+<div class="readable-text" data-hash="d3ed8a830b23faade6a8a41eb3a46d1e" data-text-hash="38be0c4aafae30c5845df257587d5577" id="167" refid="167">
+<p>In contrast, the earlier YAML manifest of the Node object was relatively easy to read, because the order of the top-level fields is what one would expect: <code>apiVersion</code>, <code>kind</code>, <code>metadata</code>, <code>spec</code>, and <code>status</code>. You&#8217;ll notice that this is simply because the alphabetical order of the five fields just happens to make sense. But the fields under those fields suffer from the same problem, as they are also sorted alphabetically.</p>
+</div>
+<div class="readable-text" data-hash="16db001a71349f71dc1d9fd9498d6fc9" data-text-hash="dee3b5fc17b044423f451a34887eb2d9" id="168" refid="168">
+<p>YAML is supposed to be easy for people to read, but the alphabetical field order in Kubernetes YAML breaks this. Fortunately, most objects contain the <code>spec</code> and <code>status</code> sections, so at least the top-level fields in these objects are well organized. As for the rest, you&#8217;ll just have to accept this unfortunate aspect of dealing with Kubernetes manifests.</p>
+</div>
+<div class="readable-text" data-hash="dcfc2ef915c8a6a358dcd30e0b144fbe" data-text-hash="680ce92cd6bd5ad6c0fe1dd818320e91" id="169" refid="169">
+<h2 id="sigil_toc_id_63">4.4&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="dfdbc7a1410041b51c7283827030752f" data-text-hash="40caf5c915c6c11b47e1c99f898aba8f" id="170" refid="170">
+<p>In this chapter, you&#8217;ve learned:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="1e8b873a32a139231c2c9dbd762b1ccd" data-text-hash="1e8b873a32a139231c2c9dbd762b1ccd" id="171" refid="171">Kubernetes provides a RESTful API for interaction with a cluster. API Objects map to actual components that make up the cluster, including applications, load balancers, nodes, storage volumes, and many others.</li>
+<li class="readable-text" data-hash="c43a302939a0861bfafdcd7d82e98234" data-text-hash="c43a302939a0861bfafdcd7d82e98234" id="172" refid="172">An object instance can be represented by many resources. A single object type can be exposed through several resources that are just different representations of the same thing.</li>
+<li class="readable-text" data-hash="656520e84b40a4815cb259aaa20946f4" data-text-hash="e31f3842ce141ed5d243730f196fefc7" id="173" refid="173">Kubernetes API objects are described in YAML or JSON manifests. Objects are created by posting a manifest to the API. The status of the object is stored in the object itself and can be retrieved by requesting the object from the API with a <code>GET</code> request.</li>
+<li class="readable-text" data-hash="92924d3fe49ef956c27b8783fcaad148" data-text-hash="744259b1ff3108ea9f82cf8a70b5d72e" id="174" refid="174">All Kubernetes API objects contain Type and Object Metadata, and most have a <code>spec</code> and <code>status</code> sections. A few object types don&#8217;t have these two sections, because they only contain static data.</li>
+<li class="readable-text" data-hash="2cfffa741647804080cbe20fc157f4d3" data-text-hash="274aa0ccd21964a73fdc5b726027b768" id="175" refid="175">Controllers bring objects to life by constantly watching for changes in their <code>spec</code>, updating the cluster state and reporting the current state via the object&#8217;s <code>status</code> field.</li>
+<li class="readable-text" data-hash="0856de40bbc25b17ee7df3b4ceac17f3" data-text-hash="0856de40bbc25b17ee7df3b4ceac17f3" id="176" refid="176">As controllers manage Kubernetes API objects, they emit events to reveal what actions they have performed. Like everything else, events are represented by Event objects and can be retrieved through the API. Events signal what is happening to a Node or other object. They show what has recently happened to the object and can provide clues as to why it is broken.</li>
+<li class="readable-text" data-hash="aa82df255014f5bb7125e57b2a31f8e7" data-text-hash="c5834dff155909a2a416025d27201ae8" id="177" refid="177">The <code>kubectl explain</code> command provides a quick way to look up documentation on a specific object kind and its fields from the command line.</li>
+<li class="readable-text" data-hash="9cf85b3fdc1d79ccdebd9dee97959753" data-text-hash="139bbd8f33e14bf0a763fdf45978e0c2" id="178" refid="178">The status in a Node object contains information about the node&#8217;s IP address and hostname, its resource capacity, conditions, cached container images and other information about the node. Pods running on the node are not part of the node&#8217;s status, but the <code>kubectl</code> <code>describe</code> <code>node</code> commands gets this information from the <code>pods</code> resource.</li>
+<li class="readable-text" data-hash="b610db46f8c08e3398c33728d9ef4174" data-text-hash="2b5930b8fe58fa569c17b592f85ab6f2" id="179" refid="179">Many object types use status conditions to signal the state of the component that the object represents. For nodes, these conditions are <code>MemoryPressure</code>, <code>DiskPressure</code> and <code>PIDPressure</code>. Each condition is either <code>True</code>, <code>False,</code> or <code>Unknown</code> and has an associated <code>reason</code> and <code>message</code> that explain why the condition is in the specified state.</li>
+</ul>
+<div class="readable-text" data-hash="16da72d3ee3cee9480f7e9943e8c7c80" data-text-hash="eb1ed010fae4875bcc49a3c2786ee22a" id="180" refid="180">
+<p>You should now be familiar with the general structure of the Kubernetes API objects. In the next chapter, you&#8217;ll learn about the Pod object, the fundamental building block which represents one running instance of your application.</p>
+</div></div>
+
+        </body>
+        
+        

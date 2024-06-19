@@ -1,0 +1,1379 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="593fcd41f03d08f3866c79130d473e19" data-text-hash="9ae20e85be04240758a6385f6937d869" id="1" refid="1">
+<h1>12 Exposing Services with Ingress</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="ef06bebce07702764c6483cd3a3c42d8" data-text-hash="ef06bebce07702764c6483cd3a3c42d8" id="2" refid="2">Creating Ingress objects</li>
+<li class="readable-text" data-hash="36262d9344126fc20a0cf603e048d7ea" data-text-hash="36262d9344126fc20a0cf603e048d7ea" id="3" refid="3">Deploying and understanding Ingress controllers</li>
+<li class="readable-text" data-hash="e3b2b06761e649f348b9ed37459ee99c" data-text-hash="e3b2b06761e649f348b9ed37459ee99c" id="4" refid="4">Securing ingresses with TLS</li>
+<li class="readable-text" data-hash="2c984a41a3402f34039aded5a04b4b69" data-text-hash="2c984a41a3402f34039aded5a04b4b69" id="5" refid="5">Adding additional configuration to an Ingress</li>
+<li class="readable-text" data-hash="7850b667571ed222dc5fb9dfa3b363f4" data-text-hash="7850b667571ed222dc5fb9dfa3b363f4" id="6" refid="6">Using IngressClasses when multiple controllers are installed</li>
+<li class="readable-text" data-hash="8e266af4855d31681c0f54555f94dda7" data-text-hash="8e266af4855d31681c0f54555f94dda7" id="7" refid="7">Using Ingresses with non-service backends</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="7a71bb62ec72a4a2999df8a05c5cfbc6" data-text-hash="1b8c94de3c6caf9a4f8518db7b717351" id="8" refid="8">
+<p>In the previous chapter, you learned how to use the Service object to expose a group of pods at a stable IP address. If you use the LoadBalancer service type, the service is made available to clients outside the cluster through a load balancer. This approach is fine if you only need to expose a single service externally, but it becomes problematic with large numbers of services, since each service needs its own public IP address.</p>
+</div>
+<div class="readable-text" data-hash="ef9f502a46131cfaf6387dedc4c3b952" data-text-hash="0fb2f7ff38635e0ee6c8a430061a90a1" id="9" refid="9">
+<p>Fortunately, by exposing these services through an <i>Ingress</i> object instead, you only need a single IP address. Additionally, the Ingress provides other features such as HTTP authentication, cookie-based session affinity, URL rewriting, and others that Service objects can&#8217;t.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="10" refid="10">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="ae1239b9c1e988ede03d642d32427fff" data-text-hash="4d2848dd4e2c9aa720fd6d054b9644b1" id="11" refid="11">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter12</a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c4252d542c160e42267d06bdff5b8911" data-text-hash="211b053412ec23b62810c6eb63726b5b" id="12" refid="12">
+<h2 id="sigil_toc_id_213">12.1&#160;Introducing Ingresses</h2>
+</div>
+<div class="readable-text" data-hash="6261ec964accd29c57a073bb214ca723" data-text-hash="265acbe0e011da9afdd11ad0e11ecd58" id="13" refid="13">
+<p>Before I explain what an Ingress is in the context of Kubernetes, it may help readers for whom English isn&#8217;t their first language to define what the term <i>ingress</i> means.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="079b754eeb5041e4c4cbe9936322a95c" data-text-hash="0b890b1926b90387673882e6ccae7fdc" id="14" refid="14">
+<h5>Definition</h5>
+</div>
+<div class="readable-text" data-hash="a6ed8371d57adf1ef68b7d87334836c5" data-text-hash="c7524ff72a9406ce0702ec9d691e39f0" id="15" refid="15">
+<p>&#8195;<i>Ingress</i> (noun)&#8212;The act of going in or entering; the right to enter; a means or place of entering; entryway.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f83ce2a2467de7dd289f9c6d442f06e0" data-text-hash="ad9a0d08dcdab49a1271dad5de320feb" id="16" refid="16">
+<p>In Kubernetes, an Ingress is a way for external clients to access the services of applications running in the cluster. The Ingress function consists of the following three components:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="62b3207660bfef61edcd6811a0ccd083" data-text-hash="5f0a4ff8722dc5fa34407869cd814ef2" id="17" refid="17">The <i>Ingress API object</i>, which is used to define and configure an ingress.</li>
+<li class="readable-text" data-hash="d0013cc92e2d247aa2c4b5fe7c7190f1" data-text-hash="208e6e815ef6385c18498bd247ca962a" id="18" refid="18">An <i>L7</i> <i>load balancer</i> or <i>reverse proxy</i> that routes traffic to the backend services.</li>
+<li class="readable-text" data-hash="3edca00e9be57809865d607593516a90" data-text-hash="446e12a29408e29ce595df3549db51c7" id="19" refid="19">The <i>ingress</i> <i>controller</i>, which monitors the Kubernetes API for Ingress objects and deploys and configures the load balancer or reverse proxy.</li>
+</ul>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="20" refid="20">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="549f08371fbbf6a6be90b9ac5a5834be" data-text-hash="1c2e8eed15ef978f1dc2add683f53745" id="21" refid="21">
+<p> <i>L4 and L7 refer to layer 4 (Transport Layer; TCP, UDP) and layer 7 (Application Layer; HTTP) of the Open Systems Interconnection Model (OSI Model).</i></p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="22" refid="22">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="32517eedc61184d633362c91682ea244" data-text-hash="d39c069b965596f55e36c48bc96f415b" id="23" refid="23">
+<p> Unlike a forward proxy, which routes and filters outgoing traffic and is typically located in the same location as the clients it serves, a reverse proxy handles incoming traffic and routes it to one or more backend servers. A reverse proxy is located near those servers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="83b27ee2544eb016f06cc8426bd9f0be" data-text-hash="fcb6f991279236d3b41c1792989d1c80" id="24" refid="24">
+<p>In most online content, the term <i>ingress controller</i> is often used to refer to the load balancer/reverse proxy and the actual controller as one entity, but they&#8217;re two different components. For this reason, I refer to them separately in this chapter.</p>
+</div>
+<div class="readable-text" data-hash="487ae70e2182e4ddf680a77b8ad5dfa8" data-text-hash="47a0e87c2259ea2a9f3adad07eebeea8" id="25" refid="25">
+<p>I also use the term <i>proxy</i> for the L7 load balancer, so you don&#8217;t confuse it with the L4 load balancer that handles the traffic for LoadBalancer-type services.</p>
+</div>
+<div class="readable-text" data-hash="542fb09c1b3053f9f5128b597ad57cad" data-text-hash="571ae093a5ff167c539bda3049f6bb44" id="26" refid="26">
+<h3 id="sigil_toc_id_214">12.1.1&#160;Introducing the Ingress object kind</h3>
+</div>
+<div class="readable-text" data-hash="bb091447a91f8d1a55f725930f455666" data-text-hash="3ceb9584c74fd6314cd5ffcc6fe77b7a" id="27" refid="27">
+<p>When you want to expose a set of services externally, you create an Ingress object and reference the Service objects in it. Kubernetes uses this Ingress object to configure an L7 load balancer (an HTTP reverse proxy) that makes the services accessible to external clients through a common entrypoint.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="28" refid="28">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d77b9774ad2cc75ed12af2ca077b4860" data-text-hash="f24f8987077adbe2d451f5a0b354c38a" id="29" refid="29">
+<p> If you expose a Service through an Ingress, you can usually leave the Service <code>type</code> set to <code>ClusterIP</code>. However, some ingress implementations require the Service type to be <code>NodePort</code>. Refer to the ingress controller&#8217;s documentation to see if this is the case.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="98c549f88785b54d6ce7e322f7b88621" data-text-hash="fb1bba9d841b2705c8968bd3474cd00e" id="30" refid="30">
+<h4>Exposing services through an Ingress object</h4>
+</div>
+<div class="readable-text" data-hash="2c78b82887262ed195ec15eb8e4764fb" data-text-hash="9cad33895cc104aa7b5575ebd1270622" id="31" refid="31">
+<p>While an Ingress object can be used to expose a single Service, it&#8217;s typically used in combination with multiple Service objects, as shown in the following figure. The figure shows how a single Ingress object makes all three services in the Kiada suite accessible to external clients.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d07b6dc3e27352e6eb085139428bb513" data-text-hash="cc3888db9e20c896ed82c48cbc9bc259" id="32" refid="32">
+<h5>Figure 12.1 An Ingress forwards external traffic to multiple services</h5>
+<img alt="" data-processed="true" height="381" id="Picture_1" loading="lazy" src="EPUB/images/12image001.png" width="874">
+</div>
+<div class="readable-text" data-hash="be6329c3b72085cb2e493f97427528f0" data-text-hash="610c4d9d903e1a32baad0e295e5e336a" id="33" refid="33">
+<p>The Ingress object contains rules for routing traffic to the three services based on the information in the HTTP request. The public DNS entries for the services all point to the same Ingress. The Ingress determines which service should receive the request from the request itself. If the client request specifies the host <code>kiada.example.com</code>, the Ingress forwards it to the pods that belong to the <code>kiada</code> service, whereas requests that specify the host <code>api.example.com</code> are forwarded to the <code>quote</code> or <code>quiz</code> services, depending on which path is requested.</p>
+</div>
+<div class="readable-text" data-hash="fdeed77695710736bf204bbfb87cffba" data-text-hash="ef2d42d23a5539f858f479f9851fcdb7" id="34" refid="34">
+<h4>Using multiple Ingress objects in a cluster</h4>
+</div>
+<div class="readable-text" data-hash="2b12a098ff9c8497074609fa19c98f56" data-text-hash="af58301dcbaa7c77ad5f42c7847a1d89" id="35" refid="35">
+<p>An Ingress object typically handles traffic for all Service objects in a particular Kubernetes namespace, but multiple Ingresses are also an option. Normally, each Ingress object gets its own IP address, but some ingress implementations use a shared entrypoint for all Ingress objects you create in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="1b39b865d759b96c27c83eed4387e654" data-text-hash="25129feac17a19fb86818d1e7ba3586e" id="36" refid="36">
+<h3 id="sigil_toc_id_215">12.1.2&#160;Introducing the Ingress controller and the reverse proxy</h3>
+</div>
+<div class="readable-text" data-hash="bd13720fad2756ecd67e750c02d1ebb7" data-text-hash="6dbd4e2623e381ced22d133ffb76e7ae" id="37" refid="37">
+<p>Not all Kubernetes clusters support Ingresses out of the box. This functionality is provided by a cluster add-on component called Ingress controller. This controller is the link between the Ingress object and the actual physical ingress (the reverse proxy). Often the controller and the proxy run as two processes in the same container or as two containers in the same pod. That&#8217;s why people use the term ingress controller to mean both.</p>
+</div>
+<div class="readable-text" data-hash="9e12c682e84e83d4fcc2290959a0a9c5" data-text-hash="eaca62eb8982bd896229585ab3a133bd" id="38" refid="38">
+<p>Sometimes the controller or the proxy is located outside the cluster. For example, the Google Kubernetes Engine provides its own Ingress controller that uses Google Cloud Platform&#8217;s L7 load balancer to provide the Ingress functionality to the cluster.</p>
+</div>
+<div class="readable-text" data-hash="dbe7223b9453eb0fceab01138634efd4" data-text-hash="de8fe4feae07b798917ee00b2a864c83" id="39" refid="39">
+<p>If your cluster is deployed in multiple availability zones, a single ingress can handle traffic for all of them. It forwards each HTTP request to the best zone depending on where the client is located, for example.</p>
+</div>
+<div class="readable-text" data-hash="275c641e02f448e6eb0e45c97d6823f1" data-text-hash="645115d323337a799cf343f8003483d6" id="40" refid="40">
+<p>There&#8217;s a wide range of ingress controllers to choose from. The Kubernetes community maintains a list at <a href="ingress-controllers.html">https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/</a>. Among the most popular are the Nginx ingress controller, Ambassador, Contour, and Traefik. Most of these ingress controllers use Nginx, HAProxy, or Envoy as the reverse proxy, but some use their own proxy implementation.</p>
+</div>
+<div class="readable-text" data-hash="73efabc46ffca4b10e3aab49cc8c86de" data-text-hash="0afa8f5ec6aca6c1710bccc154070e64" id="41" refid="41">
+<h4>Understanding the role of the ingress controller</h4>
+</div>
+<div class="readable-text" data-hash="70b958f6995f7bb0e188ad8733823d60" data-text-hash="b7814ae3879baf71e45a25abab7d1325" id="42" refid="42">
+<p>The ingress controller is the software component that brings the Ingress object to life. As shown in the following figure, the controller connects to the Kubernetes API server and monitors the Ingress, Service, and Endpoints or EndpointSlice objects. Whenever you create, modify, or delete these objects, the controller is notified. It uses the information in these objects to provision and configure the reverse proxy for the ingress, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="a01bcc16af7497ef3f65e1e6dcd0e58c" data-text-hash="204c982f96880c314bded7118b7df73f" id="43" refid="43">
+<h5>Figure 12.2 The role of an ingress controller</h5>
+<img alt="" data-processed="true" height="267" id="Picture_2" loading="lazy" src="EPUB/images/12image002.png" width="837">
+</div>
+<div class="readable-text" data-hash="3784aa58fa8b4aebc115259974945495" data-text-hash="6bf2759c5946074fdff534c9a99b594d" id="44" refid="44">
+<p>When you create the Ingress object, the controller reads its <code>spec</code> section and combines it with the information in the Service and EndpointSlice objects it references. The controller converts this information into the configuration for the reverse proxy. It then sets up a new proxy with this configuration and performs additional steps to ensure that the proxy is reachable from outside the cluster. If the proxy is running in a pod inside the cluster, this usually means that a <code>LoadBalancer</code> type service is created to expose the proxy externally.</p>
+</div>
+<div class="readable-text" data-hash="2796b3e437aff535c904863690c86c5f" data-text-hash="1de2022117408601784f067cfd283a4e" id="45" refid="45">
+<p>When you make changes to the Ingress object, the controller updates the configuration of the proxy, and when you delete it, the controller stops and removes the proxy and any other objects it created alongside it.</p>
+</div>
+<div class="readable-text" data-hash="e75cdcf32e41661b52fe0f210f52a2ec" data-text-hash="e26e3f434fe3a29d3620725ef07c2dbc" id="46" refid="46">
+<h4>Understanding how the proxy forwards traffic to the services</h4>
+</div>
+<div class="readable-text" data-hash="3c3e4868e54b6b75f3a50c37ef8388a0" data-text-hash="305c2981b55952d75d7eef3eec4bd0a1" id="47" refid="47">
+<p>The reverse proxy (or L7 load balancer) is the component that handles incoming HTTP requests and forwards it to the services. The proxy configuration typically contains a list of virtual hosts and, for each, a list of endpoint IPs. This information is obtained from the Ingress, Service, and Endpoints/EndpointSlice objects. When clients connect to the proxy, the proxy uses this information to route the request to an endpoint such as a pod based on the request path and headers.</p>
+</div>
+<div class="readable-text" data-hash="507863f89b2429684e0efa30161cab99" data-text-hash="b00deffb6be4f3433a7e7219f491169f" id="48" refid="48">
+<p>The following figure shows how a client accesses the Kiada service through the proxy. The client first performs a DNS lookup of <code>kiada.example.com</code>. The DNS server returns the public IP address of the reverse proxy. Then the client sends an HTTP request to the proxy where the <code>Host</code> header contains the value <code>kiada.example.com</code>. The proxy maps this host to the IP address of one of the Kiada pods and forwards the HTTP request to it. Note that the proxy doesn&#8217;t send the request to the service IP, but directly to the pod. This is how most ingress implementations work.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="2e95a9a0d5fb5895d2702a1f0bbc0a85" data-text-hash="6283083a9b13365a8fa7df9f994ae2b1" id="49" refid="49">
+<h5>Figure 12.3 Accessing pods through an Ingress</h5>
+<img alt="" data-processed="true" height="337" id="Picture_3" loading="lazy" src="EPUB/images/12image003.png" width="863">
+</div>
+<div class="readable-text" data-hash="544c0a5fd433776705423725e90ee6aa" data-text-hash="3866a09931bb44bb75d616fa3191a64f" id="50" refid="50">
+<h3 id="sigil_toc_id_216">12.1.3&#160;Installing an ingress controller</h3>
+</div>
+<div class="readable-text" data-hash="46fb861b78ee202fac4195f6b8dcaa44" data-text-hash="24442dddbe880703aad1ecf48002836b" id="51" refid="51">
+<p>Before you start creating Ingresses, you need to make sure that an ingress controller runs in your cluster. As you learned in the previous section, not all Kubernetes clusters have one.</p>
+</div>
+<div class="readable-text" data-hash="9c181ac50093942f7f0a2bde82e27527" data-text-hash="e65b45f50ecbf7b6ef35615d2b15048f" id="52" refid="52">
+<p>If you&#8217;re using a managed cluster with one of the major cloud providers, an ingress controller is already in place. In Google Kubernetes Engine, the ingress controller is GLBC (GCE L7 Load Balancer), in AWS the Ingress functionality is provided by the AWS Load Balancer Controller, while Azure provides AGIC (Application Gateway Ingress Controller). Check your cloud provider&#8217;s documentation to see if an ingress controller is provided and whether you need to enable it. Alternatively, you can install the ingress controller yourself.</p>
+</div>
+<div class="readable-text" data-hash="9d9843fbf623d9be961b1426be07df78" data-text-hash="2f93043e037542bfd29a28559d642b33" id="53" refid="53">
+<p>As you already know, there are many different ingress implementations to choose from. They all provide the type of traffic routing explained in the previous section, but each provides different additional features. In all the examples in this chapter, I used the Nginx ingress controller. I suggest that you use it as well unless your cluster provides a different one. To install the Nginx ingress controller in your cluster, see the sidebar.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="54" refid="54">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5443d366c0b9c47b5854d2134650d0fa" data-text-hash="28929ed613ee6dbbd63df7c779786423" id="55" refid="55">
+<p> There are two implementations of the Nginx ingress controller. One is provided by the Kubernetes maintainers and the other is provided by the authors of Nginx itself. If you&#8217;re new to Kubernetes, you should start with the former. That&#8217;s the one I used.</p>
+</div>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="f780565c57481905fea432707db61623" data-text-hash="3c30627a86d16815c495f703e8e034fb" id="56" refid="56">
+<h5>Installing the Nginx ingress controller</h5>
+</div>
+<div class="readable-text" data-hash="8e040ab5d490751e28bd29db9ee79d86" data-text-hash="57fb58b81c930831e7091fcf027cedb8" id="57" refid="57">
+<p>Regardless of how you run your Kubernetes cluster, you should be able to install the Nginx ingress controller by following the instructions at <a href="deploy.html">https://kubernetes.github.io/ingress-nginx/deploy/</a>.</p>
+</div>
+<div class="readable-text" data-hash="e3bc32868963a0b067adc8d126a32c9d" data-text-hash="2fe58a48c96fb0a544246620e223a5e2" id="58" refid="58">
+<p>If you created your cluster using the kind tool, you can install the controller by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0e49c0e2edb0e46a8ca02a5fd66ae9db" data-text-hash="d5aedcdad3dd7c22c84efdb89691111f" id="59" refid="59">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9ce7838d64d7c6afc3040eeb480c64c7" data-text-hash="9d3ea84b63110bda73ff013451264034" id="60" refid="60">
+<p>If you run your cluster with Minikube, you can install the controller as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="13506fbbb05f9df2d68ee94f5bfc5a6b" data-text-hash="18a87eb5031788f635b9ce6e1bd23976" id="61" refid="61">
+<div class="code-area-container">
+<pre class="code-area">$ minikube addons enable ingress</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+</div>
+<div class="readable-text" data-hash="75c18eb8c2a2c0604839135b96c46947" data-text-hash="67bcfad35de703ae523621d47e810b4b" id="62" refid="62">
+<h2 id="sigil_toc_id_217">12.2&#160;Creating and using Ingress objects</h2>
+</div>
+<div class="readable-text" data-hash="e8e73287fb23de21b293cdde698818b6" data-text-hash="95ecbd227c4e0f290f9666d0f0290890" id="63" refid="63">
+<p>The previous section explained the basics of Ingress objects and controllers, and how to install the Nginx ingress controller. In this section, you&#8217;ll learn how to use an Ingress to expose the services of the Kiada suite.</p>
+</div>
+<div class="readable-text" data-hash="a3a4a458b48cb0e420aeedffda252cc1" data-text-hash="894b09730f46f77fdd65aef4b5a8c5c1" id="64" refid="64">
+<p>Before you create your first Ingress object, you must deploy the pods and services of the Kiada suite. If you followed the exercises in the previous chapter, they should already be there. If not, you can create them by creating the <code>kiada</code> namespace and then applying all manifests in the the <code>Chapter12/SETUP/</code> directory with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c32e5a827c708eda95613eeec5e54baf" data-text-hash="0909cdf0b48cb49c0c152c081e5a6b63" id="65" refid="65">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f SETUP/ --recursive</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c36f70a1c65bf8c0205489aede2dd5a8" data-text-hash="8381efcb002fa69fad022102cff22984" id="66" refid="66">
+<h3 id="sigil_toc_id_218">12.2.1&#160;Exposing a service through an Ingress</h3>
+</div>
+<div class="readable-text" data-hash="2f6d24990332564de6bcba4765d5b83e" data-text-hash="f2bede2b14198a5832a9bc0b9d7ed46b" id="67" refid="67">
+<p>An Ingress object references one or more Service objects. Your first Ingress object exposes the <code>kiada</code> service, which you created in the previous chapter. Before you create the Ingress, refresh your memory by looking at the service manifest in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="09fc8025409607a8ea44999719bc0172" data-text-hash="b55ef6bdc8c38f82b6efafaccf7e3917" id="68" refid="68">
+<h5>Listing 12.1 The kiada service manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Service
+metadata:
+  name: kiada    #A
+spec:
+  type: ClusterIP    #B
+  selector:
+    app: kiada
+  ports:
+  - name: http    #C
+    port: 80    #C
+    targetPort: 8080    #C
+  - name: https
+    port: 443
+    targetPort: 8443</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTm90ZSB0aGUgc2VydmljZSBuYW1lLCBhcyB0aGUgSW5ncmVzcyBvYmplY3Qgd2lsbCByZWZlcmVuY2UgdGhlIHNlcnZpY2UgYnkgbmFtZS4KI0IgVGhpcyBpcyBhIENsdXN0ZXJJUCBzZXJ2aWNlLCBzbyBpdOKAmXMgb25seSBhY2Nlc3NpYmxlIGZyb20gd2l0aGluIHRoZSBjbHVzdGVyLgojQyBUaGUgSW5ncmVzcyB3aWxsIGV4cG9zZSBwb3J0IDgwIG9mIHRoaXMgc2VydmljZS4gQ29ubmVjdGlvbnMgYWNjZXB0ZWQgb24gdGhpcyBwb3J0IGFyZSBmb3J3YXJkZWQgdG8gcG9ydCA4MDgwIG9mIHRoZSBtYXRjaGluZyBwb2RzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c9a043ef5d9f3ec4e162d2fb5802fa60" data-text-hash="90e91a3b756926b3a1cb086172954fd6" id="69" refid="69">
+<p>The Service type is <code>ClusterIP</code> because the service itself doesn&#8217;t need to be directly accessible to clients outside the cluster, since the Ingress will take care of that. Although the service exposes ports <code>80</code> and <code>443</code>, the Ingress will forward traffic only to port 80.</p>
+</div>
+<div class="readable-text" data-hash="5e203c37d4d18d8340b5fe8039aebd57" data-text-hash="a351351d4c06409d5635dc4dad426c23" id="70" refid="70">
+<h4>Creating the Ingress object</h4>
+</div>
+<div class="readable-text" data-hash="e90f2617c27cc7eb2ec25f996869a55b" data-text-hash="464eec574201960207cdcb5eaef6ad9d" id="71" refid="71">
+<p>The Ingress object manifest is shown in the following listing. You can find it in the file <code>Chapter12/ing.kiada-example-com.yaml</code> in the book&#8217;s code repository.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9b4e5f456c2daa71699f2abe3561fb9f" data-text-hash="eb9728f7b1c1064e06e7a7171f682949" id="72" refid="72">
+<h5>Listing 12.2 An Ingress object exposing the kiada service at kiada.example.com</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada-example-com    #A
+spec:
+  rules:
+  - host: kiada.example.com    #B
+    http:
+      paths:
+      - path: /    #C
+        pathType: Prefix    #C
+        backend:    #D
+          service:    #D
+            name: kiada    #D
+            port:    #D
+              number: 80    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWx0aG91Z2ggdGhlIG5hbWUgb2YgdGhpcyBvYmplY3QgbWF0Y2hlcyB0aGUgaG9zdCwgaXQgZG9lc27igJl0IGhhdmUgdG8uIFlvdSBjYW4gbmFtZSB0aGUgb2JqZWN0IHdoYXRldmVyIHlvdSB3YW50LgojQiBUaGlzIEluZ3Jlc3MgcnVsZSBtYXRjaGVzIGFsbCBIVFRQIHJlcXVlc3RzIHdoZXJlIHRoZSBIb3N0IGhlYWRlciBpcyBzZXQgdG8gPGEgaHJlZj0iaHR0cDovL2t1YmlhLmV4YW1wbGUuY29tIj5raWFkYS5leGFtcGxlLmNvbTwvYT4uCiNDIFRoZSBydWxlIG1hdGNoZXMgYWxsIHJlcXVlc3RzLCByZWdhcmRsZXNzIG9mIHRoZSBwYXRoIGluIHRoZSByZXF1ZXN0LgojRCBUaGUgcmVxdWVzdHMgYXJlIGZvcndhcmRlZCB0byBwb3J0IDgwIG9mIHRoZSBraWFkYSBzZXJ2aWNlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="968a86070667a8055adabf1b84ddfc19" data-text-hash="3b873f3f6f7baedd75d0d5fd74aa672e" id="73" refid="73">
+<p>The manifest in the listing defines an Ingress object named <code>kiada-example-com</code>. While you can give the object any name you want, it&#8217;s recommended that the name reflect the host and/or path(s) specified in the ingress rules.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="74" refid="74">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="c1812a3477a0da95bdbc1195507cf889" data-text-hash="5588d2d55f9e2ea10b954c7b388b73bb" id="75" refid="75">
+<p> In Google Kubernetes Engine, the Ingress name mustn&#8217;t contain dots, otherwise the following error message will be displayed in the events associated with the Ingress object: <code>Error syncing to GCP: error running load balancer syncing routine: invalid loadbalancer name</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b8e1be9e58acfae0b57a085cf79ce301" data-text-hash="45edab7be244b631b7ef900aa8ff4309" id="76" refid="76">
+<p>The Ingress object in the listing defines a single rule. The rule states that all requests for the host <code>kiada.example.com</code> should be forwarded to port <code>80</code> of the <code>kiada</code> service, regardless of the requested path (as indicated by the <code>path</code> and <code>pathType</code> fields). This is illustrated in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="3e8d80de9030ba6cc69e661430e663e8" data-text-hash="9e48ecec77b9c5de0bd5a072af8404d1" id="77" refid="77">
+<h5>Figure 12.4 How the kiada-example-com Ingress object configures external traffic routing</h5>
+<img alt="" data-processed="true" height="169" id="Picture_4" loading="lazy" src="EPUB/images/12image004.png" width="833">
+</div>
+<div class="readable-text" data-hash="9e6c8878797ffa3b443e7b792b10e0ca" data-text-hash="2f7fb4388f1cd576d315e6c0a4543995" id="78" refid="78">
+<h4>Inspecting an Ingress object to get its public IP address</h4>
+</div>
+<div class="readable-text" data-hash="b3625f4b0cde4f773abc6de2759c0acc" data-text-hash="b5068392ebda5eb4b96d861eae7b5e95" id="79" refid="79">
+<p>After creating the Ingress object with <code>kubectl apply</code>, you can see its basic information by listing Ingress objects in the current namespace with <code>kubectl get ingresses</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ff4f427184dbc58d8a7956c05d22c4c5" data-text-hash="bbd69545bf6ccabe8bc30798380ac873" id="80" refid="80">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ingresses
+NAME                CLASS   HOSTS               ADDRESS       PORTS   AGE
+kiada-example-com   nginx   kiada.example.com   11.22.33.44   80      30s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="81" refid="81">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="1af5b3ae5cdb60b94ff4d772574fc431" data-text-hash="50a3f6628927672322b54e52dbdbc81d" id="82" refid="82">
+<p> You can use <code>ing</code> as a shorthand for <code>ingress</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c546bdc3988af3e3873bf77437bd6cce" data-text-hash="6772d37fb0946f4b1d0a1213354c2b2b" id="83" refid="83">
+<p>To see the Ingress object in detail, use the <code>kubectl describe</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="959ef7ad81a80d2e3604c67846bdfc22" data-text-hash="0b83f5e74a17e8934b311685da48af95" id="84" refid="84">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe ing kiada-example-com
+Name:             kiada-example-com    #A
+Namespace:        default    #A
+Address:          11.22.33.44    #B
+Default backend:  default-http-backend:80 (172.17.0.15:8080)    #C
+Rules:    #D
+  Host               Path  Backends    #D
+  ----               ----  --------    #D
+  kiada.example.com    #D
+                     /   kiada:80 (172.17.0.4:8080,172.17.0.5:8080,172.17.0.9:8080)    #D
+Annotations:         &lt;none&gt;
+Events:
+  Type    Reason  Age                   From                      Message
+  ----    ------  ----                  ----                      -------
+  Normal  Sync    5m6s (x2 over 5m28s)  nginx-ingress-controller  Scheduled for sync</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgYW5kIG5hbWVzcGFjZSBvZiB0aGUgSW5ncmVzcyBvYmplY3QuCiNCIFRoZSBJUCBhZGRyZXNzIG9mIHRoZSBsb2FkIGJhbGFuY2VyIHRoYXQgaGFuZGxlcyByZXF1ZXN0cyBmb3IgdGhpcyBpbmdyZXNzLgojQyBJZiB0aGUgcmVxdWVzdCBkb2VzbuKAmXQgbWF0Y2ggYW55IHJ1bGVzLCBpdOKAmXMgZm9yd2FyZGVkIHRvIHRoaXMgc2VydmljZS4gRXhwbGFpbmVkIGluIHNlY3Rpb24gMTIuMi40LgojRCBGb3IgZWFjaCBydWxlLCB0aGUgaG9zdCwgcGF0aCwgdGFyZ2V0IHNlcnZpY2UsIGFuZCBpdHMgZW5kcG9pbnRzIGFyZSBkaXNwbGF5ZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2beecf5ccdf2119a0fb40a87777d14d3" data-text-hash="d551dffa692653c1ae04a7d9eb6836b5" id="85" refid="85">
+<p>As you can see, the <code>kubectl describe</code> command lists all the rules in the Ingress object. For each rule, not only is the name of the target service shown, but also its endpoints. If you see an error message related to the default backend, ignore it for now. You&#8217;ll fix it later.</p>
+</div>
+<div class="readable-text" data-hash="3e2ff33206fb61a3a37b0cfe1d55ec95" data-text-hash="028c44789d5a27940beda7c999bfc0e9" id="86" refid="86">
+<p>Both <code>kubectl get</code> and <code>kubectl describe</code> display the IP address of the ingress. This is the IP address of the L7 load balancer or reverse proxy to which clients should send requests. In the example output, the IP address is <code>11.22.33.44</code> and the port is <code>80</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="87" refid="87">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="7e538e7dfe6ff63e46066b1e9a1f9405" data-text-hash="7096c5e32e88618562cc6fc6ecfed34c" id="88" refid="88">
+<p>&#8195;The address may not be displayed immediately. This is very common when the cluster is running in the cloud. If the address isn&#8217;t displayed after several minutes, it means that no ingress controller has processed the Ingress object. Check if the controller is running. Since a cluster can run multiple ingress controllers, it&#8217;s possible that they&#8217;ll all ignore your Ingress object if you don&#8217;t specify which of them should process it. Check the documentation of your chosen ingress controller to find out if you need to add the <code>kubernetes.io/ingress.class</code> annotation or set the <code>spec.ingressClassName</code> field in the Ingress object. You&#8217;ll learn more about this field later.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="12382e7f3c3a0cf016f01821d530e552" data-text-hash="63a765e1d878e8020c7549412c55efd7" id="89" refid="89">
+<p>You can also find the IP address in the Ingress object&#8217;s <code>status</code> field as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f9a01141aa078f8bddd98ab58333feeb" data-text-hash="7bfa975cc2175698a5975e62ad568ae3" id="90" refid="90">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ing kiada -o yaml
+...
+status:
+  loadBalancer:
+    ingress:
+    - ip: 11.22.33.44    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGFkZHJlc3Mgb2YgdGhlIGluZ3Jlc3MgaXMgZWl0aGVyIGEgaG9zdG5hbWUgb3IgYW4gSVAgYWRkcmVzcy4="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="91" refid="91">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4d9aeb506ad7a3281fca8ee7411debd8" data-text-hash="d766bc0cf79946c66e407036c8ee2c77" id="92" refid="92">
+<p> Sometimes the displayed address can be misleading. For example, if you use Minikube and start the cluster in a VM, the ingress address will show up as <code>localhost</code>, but that&#8217;s only true from the VM&#8217;s perspective. The actual ingress address is the IP address of the VM, which you can get with the <code>minikube ip</code> command.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="bd3b4fe8cc8ede36ad22ad133db70908" data-text-hash="eafe66d3b4052146aad028fd69751448" id="93" refid="93">
+<h4>Adding the ingress IP to the DNS</h4>
+</div>
+<div class="readable-text" data-hash="c7b80accacafa61b2ee0f1066794b8c9" data-text-hash="778cbc80e77e4ccd95837b96c12ef286" id="94" refid="94">
+<p>After you add an Ingress to a production cluster, the next step is to add a record to your Internet domain&#8217;s DNS server. In these examples, we assume that you own the domain <code>example.com</code>. To allow external clients to access your service through the ingress, you configure the DNS server to resolve the domain name <code>kiada.example.com</code> to the ingress IP <code>11.22.33.44</code>.</p>
+</div>
+<div class="readable-text" data-hash="7d6ccb64e188cb8a535abd0fa43c6965" data-text-hash="4b88dbafa6a3f0fa14512cd00959ae3b" id="95" refid="95">
+<p>In a local development cluster, you don&#8217;t have to deal with DNS servers. Since you&#8217;re only accessing the service from your own computer, you can get it to resolve the address by other means. This is explained next, along with instructions on how to access the service through the ingress.</p>
+</div>
+<div class="readable-text" data-hash="a1113e23a6b9d7797e82572515e687d4" data-text-hash="d19f83138b36ff099de89670e31ef614" id="96" refid="96">
+<h4>Accessing services through the ingress</h4>
+</div>
+<div class="readable-text" data-hash="fbfe91d0cef7bcbd3b5894f9af542ab9" data-text-hash="02433ffa6cbab80c0ab46c4f702fa1c4" id="97" refid="97">
+<p>Since ingresses use virtual hosting to figure out where to forward the request, you won&#8217;t get the desired result by simply sending an HTTP request to the Ingress&#8217; IP address and port. You need to make sure that the <code>Host</code> header in the HTTP request matches one of the rules in the Ingress object.</p>
+</div>
+<div class="readable-text" data-hash="fd82c7173a5bbfc9071f2e68142eeb25" data-text-hash="2f205c508fd95c17841780974abfab5c" id="98" refid="98">
+<p>To achieve this, you must tell the HTTP client to send the request to the host <code>kiada.example.com</code>. However, this requires resolving the host to the Ingress IP. If you use <code>curl</code>, you can do this without having to configure your DNS server or your local <code>/etc/hosts</code> file. Let&#8217;s take <code>11.22.33.44</code> as the ingress IP. You can access the <code>kiada</code> service through the ingress with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f48dfcd787e28f0123cf1faa4b7ae701" data-text-hash="f675b9aab8f7bcc32fe3e8dd88146adb" id="99" refid="99">
+<div class="code-area-container">
+<pre class="code-area">$ curl --resolve kiada.example.com:80:11.22.33.44 http://kiada.example.com -v
+* Added kiada.example.com:80:11.22.33.44 to DNS cache    #A
+* Hostname kiada.example.com was found in DNS cache    #B
+*   Trying 11.22.33.44:80...    #B
+* Connected to kiada.example.com (11.22.33.44) port 80 (#0)    #B
+&gt; GET / HTTP/1.1
+&gt; Host: kiada.example.com    #C
+&gt; User-Agent: curl/7.76.1
+&gt; Accept: */*
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIC0tcmVzb2x2ZSBvcHRpb24gYWRkcyB0aGUgaG9zdG5hbWUgdG8gdGhlIEROUyBjYWNoZS4KI0IgQ3VybCBjb25uZWN0cyB0byB0aGUgSVAgYWRkcmVzcyBvZiB0aGUgaW5ncmVzcy4KI0MgVGhlIEhvc3QgaGVhZGVyIGFsbG93cyB0aGUgaW5ncmVzcyB0byBmb3J3YXJkIHRoZSByZXF1ZXN0IHRvIHRoZSBjb3JyZWN0IHNlcnZpY2Uu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="21d3cc0f2dae5961ba4bbf474fd2190e" data-text-hash="386a49f3acec77547b8eb5a085010466" id="100" refid="100">
+<p>The <code>--resolve</code> option adds the hostname <code>kiada.example.com</code> to the DNS cache. This ensures that <code>kiada.example.com</code> resolves to the ingress IP. Curl then opens the connection to the ingress and sends the HTTP request. The <code>Host</code> header in the request is set to <code>kiada.example.com</code> and this allows the ingress to forward the request to the correct service.</p>
+</div>
+<div class="readable-text" data-hash="3c25bad5cf40ca7f657df065b1e71e02" data-text-hash="4a5a5dab935b00afe6fb39b694d28b76" id="101" refid="101">
+<p>Of course, if you want to use your web browser instead, you can&#8217;t use the <code>--resolve</code> option. Instead, you can add the following entry to your <code>/etc/hosts</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="029ef56194bf7b3a4dac3ecea3aa7b31" data-text-hash="6934b4fd05e1ed262794e989fe74781a" id="102" refid="102">
+<div class="code-area-container">
+<pre class="code-area">11.22.33.44    kiada.example.com    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGFjZSAxMS4yMi4zMy40NCB3aXRoIHlvdXIgaW5ncmVzcyBJUCBhZGRyZXNzLg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="103" refid="103">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="6d23c52f5ab1005579e200b82e1daadf" data-text-hash="37c8575f37ed400d56f991040f9199b7" id="104" refid="104">
+<p> On Windows, the hosts file is usually located at <code>C:\Windows\System32\Drivers\etc\hosts</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="82ddb6a3488d00f0be6d776988dbe2f9" data-text-hash="b7f7054e5c650c94854b84d02b31e54e" id="105" refid="105">
+<p>You can now access the service at <a href=".html">http://kiada.example.com</a> with your web browser or <code>curl</code> without having to use the <code>--resolve</code> option to map the hostname to the IP.</p>
+</div>
+<div class="readable-text" data-hash="f360fe7b66a81700fbaf7e55f8deb913" data-text-hash="2a59316793e936f139d075196cd707d7" id="106" refid="106">
+<h3 id="sigil_toc_id_219">12.2.2&#160;Path-based ingress traffic routing</h3>
+</div>
+<div class="readable-text" data-hash="01f4e659824c5460a1bd40bfccb03c5e" data-text-hash="918f35c937c2321e053b7d41b9b3f28c" id="107" refid="107">
+<p>An Ingress object can contain many rules and therefore map multiple hosts and paths to multiple services. You&#8217;ve already created an Ingress for the <code>kiada</code> service. Now you&#8217;ll create one for the <code>quote</code> and <code>quiz</code> services.</p>
+</div>
+<div class="readable-text" data-hash="856cd021223dfa902e6101b7ea050fc5" data-text-hash="1dcc7873fbd041da5212506e0a1038ab" id="108" refid="108">
+<p>The Ingress object for these two services makes them available through the same host: <code>api.example.com</code>. The path in the HTTP request determines which service receives each request. As you can see in the following figure, all requests with the path <code>/quote</code> are forwarded to the <code>quote</code> service, and all requests whose path starts with <code>/questions</code> are forwarded to the <code>quiz</code> service.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ad3d5af8f23e1be5b542d43b013958d6" data-text-hash="ea9a0209f83116084c8fba0824a61574" id="109" refid="109">
+<h5>Figure 12.5 Path-based ingress traffic routing</h5>
+<img alt="" data-processed="true" height="222" id="Picture_5" loading="lazy" src="EPUB/images/12image005.png" width="865">
+</div>
+<div class="readable-text" data-hash="4a3a601cf9395b24750233b2f95000fc" data-text-hash="503c513f2da062eb9a0682bdb1854679" id="110" refid="110">
+<p>The following listing shows the Ingress manifest.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="95d043bad68f0dcd2dd0a5d22622e363" data-text-hash="3dff178790be2a929e1129bbd7206baf" id="111" refid="111">
+<h5>Listing 12.3 Ingress mapping request paths to different services</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-example-com
+spec:
+  rules:
+  - host: api.example.com    #A
+    http:
+      paths:
+      - path: /quote    #B
+        pathType: Exact    #B
+        backend:    #B
+          service:    #B
+            name: quote    #B
+            port:    #B
+              name: http    #B
+      - path: /questions    #C
+        pathType: Prefix    #C
+        backend:    #C
+          service:    #C
+            name: quiz    #C
+            port:    #C
+              name: http    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQm90aCBzZXJ2aWNlcyBhcmUgZXhwb3NlZCB0aHJvdWdoIHRoZSBob3N0IGFwaS5leGFtcGxlLmNvbS4KI0IgUmVxdWVzdHMgd2l0aCB0aGUgcGF0aCAvcXVvdGUgYXJlIGZvcndhcmRlZCB0byB0aGUgcXVvdGUgc2VydmljZS4KI0MgUmVxdWVzdHMgd2hvc2UgcGF0aCBzdGFydHMgd2l0aCAvcXVlc3Rpb25zIGFyZSBmb3J3YXJkZWQgdG8gdGhlIHF1aXogc2VydmljZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ea3ac5317845d0a85bc81492de8c8005" data-text-hash="9db899dd2c36a9a4697b1d6d8e4b288f" id="112" refid="112">
+<p>In the Ingress object shown in the listing, a single rule with two paths is defined. The rule matches HTTP requests with the host <code>api.example.com</code>. In this rule, the <code>paths</code> array contains two entries. The first matches requests that ask for the <code>/quote</code> path and forwards them to the port named <code>http</code> in the <code>quote</code> Service object. The second entry matches all requests whose first path element is <code>/questions</code> and forwards them to the port <code>http</code> of the <code>quiz</code> service.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="113" refid="113">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b8ca436b9385b1fe35bbcba6dee87e90" data-text-hash="235a86aaca9861bbd0041cff1ceaea5f" id="114" refid="114">
+<p> By default, no URL rewriting is performed by the ingress proxy. If the client requests the path <code>/quote</code>, the path in the request that the proxy makes to the backend service is also <code>/quote</code>. In some ingress implementations, you can change this by specifying a URL rewrite rule in the Ingress object.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="aa6d4892281ecf2c87f5de95d90ec4a2" data-text-hash="b3e59fb6d00d70864e868bd83566727f" id="115" refid="115">
+<p>After you create the Ingress object from the manifest in the previous listing, you can access the two services it exposes as follows (replace the IP with that of your ingress):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c38962993ad2703e6f68ee389cb71bb3" data-text-hash="c94161c32781a9b4ad79acdf34e1f72c" id="116" refid="116">
+<div class="code-area-container">
+<pre class="code-area">$ curl --resolve api.example.com:80:11.22.33.44 api.example.com/quote    #A
+$ curl --resolve api.example.com:80:11.22.33.44 api.example.com/questions/random    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQ2FsbHMgdGhlIHF1b3RlIHNlcnZpY2UuCiNCIENhbGxzIHRoZSBxdWl6IHNlcnZpY2Uu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2d6d4dfa07cfb9ce150a2b60d33eca38" data-text-hash="df18ea915a81978f3e7262538136eeaa" id="117" refid="117">
+<p>If you want to access these services with your web browser, add <code>api.example.com</code> to the line you added earlier to your <code>/etc/hosts</code> file. It should now look like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f0673ad62f0f241abfdd43fc2fe692fc" data-text-hash="ac55ac4bcd907c1f0076d31c98fdfcba" id="118" refid="118">
+<div class="code-area-container">
+<pre class="code-area">11.22.33.44    kiada.example.com api.example.com    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGFjZSAxMS4yMi4zMy40NCB3aXRoIHlvdXIgaW5ncmVzcyBJUCBhZGRyZXNzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="86d805235f84e2794e306071a1a38155" data-text-hash="959de75a8c46ef4716fd36d7268d41f0" id="119" refid="119">
+<h4>Understanding how the path is matched</h4>
+</div>
+<div class="readable-text" data-hash="47a97523288a59360941efb058996e55" data-text-hash="cb7fb603837bb407f636dec0a6cfe026" id="120" refid="120">
+<p>Did you notice the difference between the <code>pathType</code> fields in the two entries in the previous listing? The <code>pathType</code> field specifies how the path in the request is matched with the paths in the ingress rule. The three supported values are summarized in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="eddd4b76f8da89906e13ee561389b592" data-text-hash="a095c475055dc79ba354581d8428a5ed" id="121" refid="121">
+<h5>Table 12.1 Supported values in the pathType field</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>PathType</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Exact
+</pre> </td>
+<td> <p>The requested URL path must exactly match the path specified in the ingress rule.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Prefix
+</pre> </td>
+<td> <p>The requested URL path must begin with the path specified in the ingress rule, element by element.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ImplementationSpecific
+</pre> </td>
+<td> <p>Path matching depends on the implementation of the ingress controller.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="989344afddede7578fe053bfe5791490" data-text-hash="1cecd9bad66fd24933c39b81445aead3" id="122" refid="122">
+<p>If multiple paths are specified in the ingress rule and the path in the request matches more than one path in the rule, priority is given to paths with the <code>Exact</code> path type.</p>
+</div>
+<div class="readable-text" data-hash="014d59afd8db7b01f26c56fc1dd17e89" data-text-hash="cc6aa0a4f7a4293ac2f5269a00997b89" id="123" refid="123">
+<h4>Matching paths using the Exact path type</h4>
+</div>
+<div class="readable-text" data-hash="54d979e2e8bd4b0dbabd4474f36fb10e" data-text-hash="b25f09b5e644bbeb66cc120081a5135d" id="124" refid="124">
+<p>The following table shows examples of how matching works when <code>pathType</code> is set to <code>Exact</code>.</p>
+</div>
+<div class="browsable-container" data-hash="1ddc36c4a1cd69f3ab9cd40e8b458407" data-text-hash="237db8eaa7988b3e494d98a544d3e39b" id="125" refid="125">
+<h5>Table 12.2 Request paths matched when pathType is Exact</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Path in rule</p> </td>
+<td> <p>Matches request path</p> </td>
+<td> <p>Doesn&#8217;t match</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/
+</pre> </td>
+<td> <p></p><pre>/
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> <p></p><pre>/bar
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/foo
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> </td>
+<td> <p></p><pre>/foo/
+</pre> <p></p><pre>/bar
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/foo/
+</pre> </td>
+<td> <p></p><pre>/foo/
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> <p></p><pre>/foo/bar
+</pre> <p></p><pre>/bar
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/FOO
+</pre> </td>
+<td> <p></p><pre>/FOO
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="e755ccdb50112325f085b2d63cacc558" data-text-hash="540334c781c52e19c54311fefd039dcb" id="126" refid="126">
+<p>As you can see from the examples in the table, the matching works as you&#8217;d expect. It&#8217;s case sensitive, and the path in the request must exactly match the <code>path</code> specified in the ingress rule.</p>
+</div>
+<div class="readable-text" data-hash="e6d1054974037689b8d6cb21e5c66cc7" data-text-hash="054fa2b48edcbf14e07dfd9343426719" id="127" refid="127">
+<h4>Matching paths using the Prefix path type</h4>
+</div>
+<div class="readable-text" data-hash="6c0fd56c14856cedfda13b703bee4f15" data-text-hash="7e7283dbba9619097a63bfd1793579c1" id="128" refid="128">
+<p>When <code>pathType</code> is set to <code>Prefix</code>, things aren&#8217;t as you might expect. Consider the examples in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="1e548d031ee0a5081515463a8ed289f0" data-text-hash="b4941064aa66514a6ad9e6964ea941a4" id="129" refid="129">
+<h5>Table 12.3 Request paths matched when pathType is Prefix</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Path in rule</p> </td>
+<td> <p>Matches request paths</p> </td>
+<td> <p>Doesn&#8217;t match</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/
+</pre> </td>
+<td> <p>All paths; for example:</p> <p></p><pre>/
+</pre> <p></p><pre>/foo
+</pre> <p></p><pre>/foo/
+</pre> </td>
+<td> <p></p><pre>&#160;
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/foo
+</pre> <p>or</p> <p></p><pre>/foo/
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> <p></p><pre>/foo/
+</pre> <p></p><pre>/foo/bar
+</pre> </td>
+<td> <p></p><pre>/foobar
+</pre> <p></p><pre>/bar
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>/FOO
+</pre> </td>
+<td> <p></p><pre>/FOO
+</pre> </td>
+<td> <p></p><pre>/foo
+</pre> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="9e7f89b55b5dda0e56e8aa69b249e278" data-text-hash="ea82d96d1d5a7d9210dbd8913e72c152" id="130" refid="130">
+<p>The request path isn&#8217;t treated as a string and checked to see if it begins with the specified prefix. Instead, both the path in the rule and the request path are split by <code>/</code> and then each element of the request path is compared to the corresponding element of the prefix. Take the path <code>/foo</code>, for example. It matches the request path <code>/foo/bar</code>, but not <code>/foobar</code>. It also doesn&#8217;t match the request path <code>/fooxyz/bar</code>.</p>
+</div>
+<div class="readable-text" data-hash="ee8bc5474d35ed7109075fe40175af2d" data-text-hash="4b8374ad21a1b7ea42e6ac280f521126" id="131" refid="131">
+<p>When matching, it doesn&#8217;t matter if the path in the rule or the one in the request ends with a forward slash. As with the <code>Exact</code> path type, matching is case sensitive.</p>
+</div>
+<div class="readable-text" data-hash="480c90a624cf65680f0cf214512b7118" data-text-hash="9b8c9e02242eb589bcc25312fb6a090f" id="132" refid="132">
+<h4>Matching paths using the ImplementationSpecific path type</h4>
+</div>
+<div class="readable-text" data-hash="1f9173c237dbeb9579f8a59f9a111dd5" data-text-hash="6535e3476e9d7aaa3fa81942b0feeb35" id="133" refid="133">
+<p>The <code>ImplementationSpecific</code> path type is, as the name implies, dependent on the implementation of the ingress controller. With this path type, each controller can set its own rules for matching the request path. For example, in GKE you can use wildcards in the path. Instead of using the <code>Prefix</code> type and setting the path to <code>/foo</code>, you can set the type to <code>ImplementationSpecific</code> and the path to <code>/foo/*</code>.</p>
+</div>
+<div class="readable-text" data-hash="02acc72dbae0ac4f923bbf5697c3c7e6" data-text-hash="87a4f75bf7b2d735aecc22a00ffa1925" id="134" refid="134">
+<h3 id="sigil_toc_id_220">12.2.3&#160;Using multiple rules in an Ingress object</h3>
+</div>
+<div class="readable-text" data-hash="701eb9138fbd75caffcd02fe9c978862" data-text-hash="9ac39126c2d37a585a9b260d893b8337" id="135" refid="135">
+<p>In the previous sections you created two Ingress objects to access the Kiada suite services. In most Ingress implementations, each Ingress object requires its own public IP address, so you&#8217;re now probably using two public IP addresses. Since this is potentially costly, it&#8217;s better to consolidate the Ingress objects into one.</p>
+</div>
+<div class="readable-text" data-hash="f237ab6d66947e01fbd198f70014ea0f" data-text-hash="254b510f8649a58b6759825bcf6aa993" id="136" refid="136">
+<h4>Creating an Ingress object with multiple rules</h4>
+</div>
+<div class="readable-text" data-hash="03ec594f91fea148b103ba8d65bba422" data-text-hash="0add05b4b0b230e1814f9dd66fb49d9a" id="137" refid="137">
+<p>Because an Ingress object can contain multiple rules, it&#8217;s trivial to combine multiple objects into one. All you have to do is take the rules and put them into the same Ingress object, as shown in the following listing. You can find the manifest in the file <code>ing.kiada.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f2a779dce56dc3c2e1ddc0d868e8e9a1" data-text-hash="7f0d39155a9590e3ece583f9fc229f15" id="138" refid="138">
+<h5>Listing 12.4 Ingress exposing multiple services on different hosts</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada
+spec:
+  rules:
+  - host: kiada.example.com    #A
+    http:    #A
+      paths:    #A
+      - path: /    #A
+        pathType: Prefix    #A
+        backend:    #A
+          service:    #A
+            name: kiada    #A
+            port:    #A
+              name: http    #A
+  - host: api.example.com    #B
+    http:    #B
+      paths:    #B
+      - path: /quote    #B
+        pathType: Exact    #B
+        backend:    #B
+          service:    #B
+            name: quote    #B
+            port:    #B
+              name: http    #B
+      - path: /questions    #B
+        pathType: Prefix    #B
+        backend:    #B
+          service:    #B
+            name: quiz    #B
+            port:    #B
+              name: http    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGZpcnN0IHJ1bGUgbWF0Y2hlcyB0aGUgaG9zdCBraWFkYS5leGFtcGxlLmNvbS4gVGhpcyBydWxlIHdhcyBjb3BpZWQgZnJvbSB0aGUga2lhZGEtZXhhbXBsZS1jb20gSW5ncmVzcyBvYmplY3QuCiNCIFRoZSBzZWNvbmQgcnVsZSBtYXRjaGVzIHRoZSBob3N0IGFwaS5leGFtcGxlLmNvbS4gSXQgd2FzIGNvcGllZCBmcm9tIHRoZSBhcGktZXhhbXBsZS1jb20gSW5ncmVzcyBvYmplY3Qu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7a93415f2a659ce11204cb772efe9d68" data-text-hash="3b879a98f06da89be8281291a6191b9c" id="139" refid="139">
+<p>This single Ingress object handles all traffic for all services in the Kiada suite yet only requires a single public IP address.</p>
+</div>
+<div class="readable-text" data-hash="4fae131ad55a5c157122986264e96831" data-text-hash="9f74e01c53fcfd10c9a085f359a73ca6" id="140" refid="140">
+<p>The Ingress object uses virtual hosts to route traffic to the backend services. If the value of the <code>Host</code> header in the request is <code>kiada.example.com</code>, the request is forwarded to the <code>kiada</code> service. If the header value is <code>api.example.com</code>, the request is routed to one of the other two services, depending on the requested path. The Ingress and the associated Service objects are shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="974c35408fa9bf69b2ce30535156ec97" data-text-hash="2d53932b95227f138fba751be3db35ef" id="141" refid="141">
+<h5>Figure 12.6 An Ingress object covering all services of the Kiada suite</h5>
+<img alt="" data-processed="true" height="304" id="Picture_6" loading="lazy" src="EPUB/images/12image006.png" width="878">
+</div>
+<div class="readable-text" data-hash="128589eb6dde237c69d931cf5ba1f246" data-text-hash="0f6139843a1b90012070d6f0ff896003" id="142" refid="142">
+<p>You can delete the two Ingress objects you created earlier and replace them with the one in the previous listing. Then you can try to access all three services through this ingress. Since this is a new Ingress object, its IP address is most likely not the same as before. So you need to update the DNS, the <code>/etc/hosts</code> file, or the <code>--resolve</code> option when you run the <code>curl</code> command again.</p>
+</div>
+<div class="readable-text" data-hash="bba862c02801b8861d0d2225440d4a2c" data-text-hash="5ff475b9e443fb374ad1a2774673c32a" id="143" refid="143">
+<h4>Using wildcards in the host field</h4>
+</div>
+<div class="readable-text" data-hash="9a2cd96086bd220059d2c1c54bd69deb" data-text-hash="f74d3a3414d3ce75f0e82807dd429b6f" id="144" refid="144">
+<p>The <code>host</code> field in the ingress rules supports the use of wildcards. This allows you to capture all requests sent to a host that matches <code>*.example.com</code> and forward them to your services. The following table shows how wildcard matching works.</p>
+</div>
+<div class="browsable-container" data-hash="8644e9b4561e243ae6d2a07dc10173ee" data-text-hash="b8bd76bf3a573433dfe0341086b1223a" id="145" refid="145">
+<h5>Table 12.4 Examples of using wildcards in the ingress rule&#8217;s host field</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Host</p> </td>
+<td> <p>Matches request hosts</p> </td>
+<td> <p>Doesn&#8217;t match</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>kiada.example.com
+</pre> </td>
+<td> <p></p><pre>kiada.example.com
+</pre> </td>
+<td> <p></p><pre>example.com
+</pre> <p></p><pre>api.example.com
+</pre> <p></p><pre>foo.kiada.example.com
+</pre> </td>
+</tr>
+<tr>
+<td> <p></p><pre>*.example.com
+</pre> </td>
+<td> <p></p><pre>kiada.example.com
+</pre> <p></p><pre>api.example.com
+</pre> <p></p><pre>foo.example.com
+</pre> </td>
+<td> <p></p><pre>example.com
+</pre> <p></p><pre>foo.kiada.example.com
+</pre> <p></p><pre>&#160;
+</pre> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="7e0d57e16d3e3cced5ffb7c436628c97" data-text-hash="9b35b2ce8f1a63fe67f15b6363f708b7" id="146" refid="146">
+<p>Look at the example with the wildcard. As you can see, <code>*.example.com</code> matches <code>kiada.example.com</code>, but it doesn&#8217;t match <code>foo.kiada.example.com</code> or <code>example.com</code>. This is because a wildcard only covers a single element of the DNS name.</p>
+</div>
+<div class="readable-text" data-hash="107c9053132ae7d96ca26c934e306d70" data-text-hash="bef347c4fb96d925fbee4b8e83f1739b" id="147" refid="147">
+<p>As with rule paths, a rule that exactly matches the host in the request takes precedence over rules with host wildcards.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="148" refid="148">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5889b8c6ece30dca297f6161949a0108" data-text-hash="2435289420115f1171bb56d51b8e12f1" id="149" refid="149">
+<p> You can also omit the <code>host</code> field altogether to make the rule match any host.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="966173b3ff2fb2527ec90500b55847dc" data-text-hash="58e5b7613bfa1c01d7a1da00e41a1c9c" id="150" refid="150">
+<h3 id="sigil_toc_id_221">12.2.4&#160;Setting the default backend</h3>
+</div>
+<div class="readable-text" data-hash="ec4d66694b005529245f4b9706ec8ef7" data-text-hash="a25e3c6e4bb0e8d03f04ae7e4a72ba21" id="151" refid="151">
+<p>If the client request doesn&#8217;t match any rules defined in the Ingress object, the response <code>404 Not Found</code> is normally returned. However, you can also define a default backend to which the ingress should forward the request if no rules are matched. The default backend serves as a catch-all rule.</p>
+</div>
+<div class="readable-text" data-hash="df8f193ab833154a5ede536fcae6dbbb" data-text-hash="161091202298eac2603724ddd8eea8b0" id="152" refid="152">
+<p>The following figure shows the default backend in the context of the other rules in the Ingress object.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="5ecdd594c06799d01eeb7d358b5dc032" data-text-hash="4269e0291236030cae8c5f229ddaf2f1" id="153" refid="153">
+<h5>Figure 12.7 The default backend handles requests that match no Ingress rule</h5>
+<img alt="" data-processed="true" height="253" id="Picture_7" loading="lazy" src="EPUB/images/12image007.png" width="845">
+</div>
+<div class="readable-text" data-hash="dc31665720272c48971c9b4f92297c8d" data-text-hash="f76db4f779ce021d8b97d14cc585d2fd" id="154" refid="154">
+<p>As you can see in the figure, a service named <code>fun404</code> is used as the default backend. Let&#8217;s add it to the <code>kiada</code> Ingress object.</p>
+</div>
+<div class="readable-text" data-hash="7e25779ee7ec2f2762503e86fffc99a0" data-text-hash="d891a6e3c6995215859e632d89b45eba" id="155" refid="155">
+<h4>Specifying the default backend in an Ingress object</h4>
+</div>
+<div class="readable-text" data-hash="7a6b23b1e4a9692e1e9a0db9ec7a8a92" data-text-hash="d8c6749a22b71b2fb156c088c402b4c4" id="156" refid="156">
+<p>You specify the default backend in the <code>spec.defaultBackend</code> field, as shown in the following listing (the full manifest can be found in the <code>ing.kiada.defaultBackend.yaml</code> file).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8649b285aed7b09bf9cd06eb2d36d7c0" data-text-hash="775d0d8918c73d571ae3b7e0ffc6b9b2" id="157" refid="157">
+<h5>Listing 12.5 Specifying the default backend in the Ingress object</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada
+spec:
+  defaultBackend:    #A
+    service:    #A
+      name: fun404    #A
+      port:    #A
+        name: http    #A
+  rules:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHJlcXVlc3QgaXMgZm9yd2FyZGVkIHRvIHRoZSBkZWZhdWx0IGJhY2tlbmQgaWYgaXQgZG9lc27igJl0IG1hdGNoIGFueSBydWxlcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8d8c93d2f9b8dc963d06bfea31457d86" data-text-hash="21f944c49987ed103cdb8b7d13a4e5db" id="158" refid="158">
+<p>In the listing, you can see that setting the default backend isn&#8217;t much different from setting the backend in the rules. Just as you specify the name and port of the backend service in each rule, you also specify the <code>name</code> and <code>port</code> of the default backend service in the <code>service</code> field under <code>spec.defaultBackend</code>.</p>
+</div>
+<div class="readable-text" data-hash="75d4edf5131ab73b7a235726f7ca235b" data-text-hash="940c9214df94cdde7ee7a1a4289227b1" id="159" refid="159">
+<h4>Creating the service and pod for the default backend</h4>
+</div>
+<div class="readable-text" data-hash="7df49d0ef5ade8e6aded9ab6037f4ba2" data-text-hash="58571485cf0c86870a2710fb4c3edf08" id="160" refid="160">
+<p>The <code>kiada</code> Ingress object is configured to forward requests that don&#8217;t match any rules to a service called <code>fun404</code>. You need to create this service and the underlying pod. You can find an object manifest with both object definitions in the file <code>all.my-default-backend.yaml</code>. The contents of the file are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="980a6ea1df40e50d2d5c71754512a752" data-text-hash="2667b5ed5b523af73b2df4ccd285fa01" id="161" refid="161">
+<h5>Listing 12.6 The Pod and Service object manifests for the default ingress backend</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: fun404    #A
+  labels:
+    app: fun404    #B
+spec:
+  containers:
+  - name: server
+    image: luksa/static-http-server    #C
+    args:    #D
+    - --listen-port=8080    #D
+    - --response-code=404    #D
+    - --text=This isn't the URL you're looking for.    #D
+    ports:
+    - name: http    #E
+      containerPort: 8080    #E
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fun404    #F
+  labels:
+    app: fun404
+spec:
+  selector:    #G
+    app: fun404    #G
+  ports:
+  - name: http    #H
+    port: 80    #H
+    targetPort: http    #I</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFBvZOKAmXMgbmFtZSBpcyBmdW40MDQuCiNCIFRoaXMgbGFiZWwgbXVzdCBtYXRjaCB0aGUgU2VydmljZSBvYmplY3TigJlzIGxhYmVsIHNlbGVjdG9yLgojQyBUaGUgY29udGFpbmVyIHJ1bnMgYW4gSFRUUCBzZXJ2ZXIgdGhhdCBhbHdheXMgcmV0dXJucyB0aGUgc2FtZSByZXNwb25zZS4KI0QgVGhlIEhUVFAgcmVzcG9uc2UgaXMgY29uZmlndXJlZCB2aWEgY29tbWFuZC1saW5lIGFyZ3VtZW50cy4KI0UgVGhlIGNvbnRhaW5lciBsaXN0ZW5zIG9uIHBvcnQgODA4MC4KI0YgVGhlIFNlcnZpY2UgaXMgYWxzbyBjYWxsZWQgZnVuNDA0LgojRyBUaGUgbGFiZWwgc2VsZWN0b3IgZGVmaW5lcyB0aGUgcG9kcyB0aGF0IGJlbG9uZyB0byB0aGlzIHNlcnZpY2UuCiNIIFRoZSBzZXJ2aWNlIHBvcnQgbmFtZSBpcyBodHRwLiBUaGUgcG9ydCBudW1iZXIgaXMgODAuCiNJIFRoZSBzZXJ2aWNlIGZvcndhcmRzIGNvbm5lY3Rpb25zIHRvIHRoZSBwb3J0IG5hbWVkIGh0dHAgb24gdGhlIHBvZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="25374118d13c46e285baceedc21b96ca" data-text-hash="88cb9df8dcc44b269f444b4ed50144c9" id="162" refid="162">
+<p>After applying both the Ingress object manifest and the Pod and Service object manifest, you can test the default backend by sending a request that doesn&#8217;t match any of the rules in the ingress. For example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4aa1ec29566301ff52f8b65de7c4bc6b" data-text-hash="60e24adedae95dc82146d0f7e9d97404" id="163" refid="163">
+<div class="code-area-container">
+<pre class="code-area">$ curl api.example.com/unknown-path --resolve api.example.com:80:11.22.33.44    #A
+This isn't the URL you're looking for.    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyByZXF1ZXN0IGRvZXNu4oCZdCBtYXRjaCBhbnkgaG9zdC9wYXRoIGNvbWJpbmF0aW9ucyBpbiB0aGUgSW5ncmVzcyBvYmplY3QuCiNCIFRoaXMgcmVzcG9uc2UgY2FtZSBmcm9tIHRoZSBmdW40MDQgcG9kLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ca1fd1b2b9337cd47638e4d2942f31b4" data-text-hash="1137b75cf9eaab78e72dbf0ca6942151" id="164" refid="164">
+<p>As expected, the response text matches what you configured in the <code>fun404</code> pod. Of course, instead of using the default backend to return a custom <code>404</code> status, you can use it to forward all requests to default to a service of your choice.</p>
+</div>
+<div class="readable-text" data-hash="4a5f239180dbeed8d222949882b545ff" data-text-hash="0eb691ecec633d20fb23cd2f93ce802e" id="165" refid="165">
+<p>You can even create an Ingress object with only a default backend and no rules to forward all external traffic to a single service. If you&#8217;re wondering why you&#8217;d do this using an Ingress object and not by simply setting the service type to LoadBalancer, it&#8217;s because ingresses can provide additional HTTP features that services can&#8217;t. One example is securing the communication between the client and the service with Transport Layer Security (TLS), which is explained next.</p>
+</div>
+<div class="readable-text" data-hash="bdb15c94a2f65f8a598d76a91610fbd2" data-text-hash="77aceed8bef5528403847e5c0a92c477" id="166" refid="166">
+<h2 id="sigil_toc_id_222">12.3&#160;Configuring TLS for an Ingress</h2>
+</div>
+<div class="readable-text" data-hash="07929fa0037f9e3fe5c4fe0e61d01bcb" data-text-hash="10680ba54676dbab921927635a35f2cd" id="167" refid="167">
+<p>So far in this chapter, you&#8217;ve used the Ingress object to allow external HTTP traffic to your services. These days, however, you usually want to secure at least all external traffic with SSL/TLS.</p>
+</div>
+<div class="readable-text" data-hash="5997d64de33f590f9d2da8eeb198a319" data-text-hash="bbdf442e09b6fc80bc536c539c45cf52" id="168" refid="168">
+<p>You may recall that the <code>kiada</code> service provides both an HTTP and an HTTPS port. When you created the Ingress, you only configured it to forward HTTP traffic to the service, but not HTTPS. You&#8217;ll do this now.</p>
+</div>
+<div class="readable-text" data-hash="c6cddb5afdb00c2773fc19fd5308b202" data-text-hash="a1513679322c5d47013ed3034b77b52f" id="169" refid="169">
+<p>There are two ways to add HTTPS support. You can either allow HTTPS to pass through the ingress proxy and have the backend pod terminate the TLS connection, or have the proxy terminate and connect to the backend pod through HTTP.</p>
+</div>
+<div class="readable-text" data-hash="7915f8caab2f091413619dc9d79f591c" data-text-hash="ea25f76abfeb746250400861f7dd0bfb" id="170" refid="170">
+<h3 id="sigil_toc_id_223">12.3.1&#160;Configuring the Ingress for TLS passthrough</h3>
+</div>
+<div class="readable-text" data-hash="44892c22860a2cac3ee512d96fb1a355" data-text-hash="a78f55965c6362ef091d47335a20c6b1" id="171" refid="171">
+<p>You may be surprised to learn that Kubernetes doesn&#8217;t provide a standard way to configure TLS passthrough in Ingress objects. If the ingress controller supports TLS passthrough, you can usually configure it by adding annotations to the Ingress object. In the case of the Nginx ingress controller, you add the annotation shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e60317435b6318b6cdf4ee7faeda8b9d" data-text-hash="37eb1ecf1dd7544a74d9e6453a40aa92" id="172" refid="172">
+<h5>Listing 12.7 Enabling SSL passthrough in an Ingress when using the Nginx Ingress Controller</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada-ssl-passthrough
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"    #A
+spec:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRW5hYmxlcyBTU0wgcGFzc3Rocm91Z2ggZm9yIHRoaXMgSW5ncmVzcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b9a57671da17648804916f3963508dcb" data-text-hash="8e0f190b8a57ecea23598be4d33946d8" id="173" refid="173">
+<p>SSL passthrough support in the Nginx ingress controller isn&#8217;t enabled by default. To enable it, the controller must be started with the <code>--enable-ssl-passthrough</code> flag.</p>
+</div>
+<div class="readable-text" data-hash="307c92b6bdf8ebea313103f36ef58018" data-text-hash="aa51d139d12d581f2b70b96712f56def" id="174" refid="174">
+<p>Since this is a non-standard feature that depends heavily on which ingress controller you&#8217;re using, let&#8217;s not delve into it any further. For more information on how to enable passthrough in your case, see the documentation of the controller you&#8217;re using.</p>
+</div>
+<div class="readable-text" data-hash="d5d08cc60d75ebad72597c863dd8a5ab" data-text-hash="d5cbd0d6af138810a4b112dc8a226898" id="175" refid="175">
+<p>Instead, let&#8217;s focus on terminating the TLS connection at the ingress proxy. This is a standard feature provided by most Ingress controllers and therefore deserves a closer look.</p>
+</div>
+<div class="readable-text" data-hash="998fbe08e3e5e792e3cb9ca8a2d70d54" data-text-hash="85950d953b8aa4bfbb2f311d29bbbf3b" id="176" refid="176">
+<h3 id="sigil_toc_id_224">12.3.2&#160;Terminating TLS at the ingress</h3>
+</div>
+<div class="readable-text" data-hash="ca03d0f7b588e3dab9163be5dc74daa5" data-text-hash="96cd73f1d5a255a8d5f7571bb9fd5227" id="177" refid="177">
+<p>Most, if not all, ingress controller implementations support TLS termination at the ingress proxy. The proxy terminates the TLS connection between the client and itself and forwards the HTTP request unencrypted to the backend pod, as shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d715f41978f66690ea31aca84ac1d9da" data-text-hash="f66036cd2dcf39f9a2f74b3f18bad5d6" id="178" refid="178">
+<h5>Figure 12.8 Securing connections to the ingress using TLS</h5>
+<img alt="" data-processed="true" height="280" id="Picture_8" loading="lazy" src="EPUB/images/12image008.png" width="851">
+</div>
+<div class="readable-text" data-hash="742c3490fbb9f2a7613706f6c11120bb" data-text-hash="854b0e45392c3de5f282a75cc328617e" id="179" refid="179">
+<p>To terminate the TLS connection, the proxy needs a TLS certificate and a private key. You provide them via a Secret that you reference in the Ingress object.</p>
+</div>
+<div class="readable-text" data-hash="32d445aae6bc08fad7211b61a6a228ac" data-text-hash="b3cfa84b45ffd3a31ff5cd187c2ee9ec" id="180" refid="180">
+<h4>Creating a TLS secret for the Ingress</h4>
+</div>
+<div class="readable-text" data-hash="d4c219ff4dc71648683c786ffb20cee4" data-text-hash="547524aed276a5a88169517ded6739a0" id="181" refid="181">
+<p>For the <code>kiada</code> Ingress, you can either create the Secret from the manifest file <code>secret.tls-example-com.yaml</code> in the book&#8217;s code repository or generate the private key, certificate, and Secret with the following commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9d6b4ddc9c52294629f04e4296debb42" data-text-hash="9d28e39731896d1f729415477c5d3e04" id="182" refid="182">
+<div class="code-area-container">
+<pre class="code-area">$ openssl req -x509 -newkey rsa:4096 -keyout example.key -out example.crt \    #A
+  -sha256 -days 7300 -nodes \    #A
+  -subj '/CN=*.example.com' \    #A
+  -addext 'subjectAltName = DNS:*.example.com'    #A
+ 
+$ kubectl create secret tls tls-example-com --cert=example.crt --key=example.key    #B
+secret/tls-example-com created  #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgR2VuZXJhdGVzIHRoZSBwcml2YXRlIGtleSBhbmQgY2VydGlmaWNhdGUuCiNCIENyZWF0ZXMgdGhlIHNlY3JldCBmcm9tIHRoZSBrZXkgYW5kIGNlcnRpZmljYXRlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f560b50f1dc38c865e97c93ca468208b" data-text-hash="ab7bdde410ced4a37bf166f806fb2009" id="183" refid="183">
+<p>The certificate and the private key are now stored in a Secret named <code>tls-example-com</code> under the keys <code>tls.crt</code> and <code>tls.key</code>, respectively.</p>
+</div>
+<div class="readable-text" data-hash="46bf44b7cb67eb6834320a6bb2646d1c" data-text-hash="c6e2fed7c2d43dac42e00eceac34e791" id="184" refid="184">
+<h4>Adding the TLS secret to the Ingress</h4>
+</div>
+<div class="readable-text" data-hash="e26394b6c5a9ea1868a0a6fd417b8e74" data-text-hash="e0c98c6fc2def2a0c6e05d3a45906fed" id="185" refid="185">
+<p>To add the Secret to the Ingress object, either edit the object with <code>kubectl edit</code> and add the lines highlighted in the next listing or apply the <code>ing.kiada.tls.yaml</code> file with <code>kubectl apply</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2bc4db716f166f4b20aeae9f56ed57ec" data-text-hash="d917c182968f593909953a90d4a9a76e" id="186" refid="186">
+<h5>Listing 12.8 Adding a TLS secret to an Ingress</h5>
+<div class="code-area-container">
+<pre class="code-area">on: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada
+spec:
+  tls:    #A
+  - secretName: tls-example-com    #B
+    hosts:    #C
+    - "*.example.com"    #C
+  rules:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHRscyBmaWVsZCBpcyBhbiBhcnJheSwgc28geW91IGNhbiBhZGQgbXVsdGlwbGUgVExTIHNlY3JldHMgdG8gdGhlIEluZ3Jlc3MuCiNCIFRoZSBuYW1lIG9mIHRoZSBzZWNyZXQgY29udGFpbmluZyB0aGUgVExTIGNlcnRpZmljYXRlIGFuZCBwcml2YXRlIGtleS4KI0MgVGhlIGxpc3Qgb2YgaG9zdHMgY29udGFpbmVkIGluIHRoZSBUTFMgY2VydGlmaWNhdGUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="feee8dfcf84bee76a492f6ecbfc60093" data-text-hash="3c1dc40a86bf435d2c7e1b550e8b7e8e" id="187" refid="187">
+<p>As you can see in the listing, the <code>tls</code> field can contain one or more entries. Each entry specifies the <code>secretName</code> where the TLS certificate/key pair is stored and a list of <code>hosts</code> to which the pair applies.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="188" refid="188">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="1c10473cecab8297398d3fa704f42a62" data-text-hash="6b2caae3553359245ed13a963cf45d89" id="189" refid="189">
+<p> The hosts specified in <code>tls.hosts</code> must match the names used in the certificate in the secret.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9bb6fd4413427b8b159a8c862e3d5502" data-text-hash="ed302c8e7c546b6e07679fca8ecf0547" id="190" refid="190">
+<h4>Accessing the Ingress through TLS</h4>
+</div>
+<div class="readable-text" data-hash="7ccedc963e63d83e6bd0f9e89291aca5" data-text-hash="ba244c3c8a219d690d63d89e208b049d" id="191" refid="191">
+<p>After you update the Ingress object, you can access the service via HTTPS as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="65e0e390e8b2502d2958effc8f8be8cb" data-text-hash="6e042db09b0c782b950a33dab9a782ee" id="192" refid="192">
+<div class="code-area-container">
+<pre class="code-area">$ curl https://kiada.example.com --resolve kiada.example.com:443:11.22.33.44 -k -v
+* Added kiada.example.com:443:11.22.33.44 to DNS cache
+* Hostname kiada.example.com was found in DNS cache
+*   Trying 11.22.33.44:443...
+* Connected to kiada.example.com (11.22.33.44) port 443 (#0)
+...
+* Server certificate:    #A
+*  subject: CN=*.example.com    #A
+*  start date: Dec  5 09:48:10 2021 GMT    #A
+*  expire date: Nov 30 09:48:10 2041 GMT    #A
+*  issuer: CN=*.example.com    #A
+...
+&gt; GET / HTTP/2
+&gt; Host: kiada.example.com
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGluZ3Jlc3MgdXNlcyB0aGUgVExTIGNlcnRpZmljYXRlIHRoYXQgeW91IGNvbmZpZ3VyZWQgaW4gdGhlIEluZ3Jlc3Mgb2JqZWN0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d71884c988db5dd3fc47d30ca4cfb356" data-text-hash="0279a5f1100883874b83d4c1b511fbb4" id="193" refid="193">
+<p>The command&#8217;s output shows that the server certificate matches the one you configured the Ingress with.</p>
+</div>
+<div class="readable-text" data-hash="0de2536c1e8eb9f586d31a91f7a27ae4" data-text-hash="2a1d5f0fd0a9a7bc7ceeb724c126eca5" id="194" refid="194">
+<p>By adding the TLS secret to the Ingress, you&#8217;ve not only secured the <code>kiada</code> service, but also the <code>quote</code> and <code>quiz</code> services, since they&#8217;re all included in the Ingress object. Try to access them through the Ingress using HTTPS. Remember that the pods that provide these two services don&#8217;t provide HTTPS themselves. The Ingress does that for them.</p>
+</div>
+<div class="readable-text" data-hash="61c624e025b418661cdf30651920de96" data-text-hash="97760e6d384cefc1ce5a07d9fc59d117" id="195" refid="195">
+<h2 id="sigil_toc_id_225">12.4&#160;Additional Ingress configuration options</h2>
+</div>
+<div class="readable-text" data-hash="af4a0b743a1fec18c7d2ff189c05b837" data-text-hash="d9cfbb6e20aeef4891842fb269e9c2d0" id="196" refid="196">
+<p>I hope you haven&#8217;t forgotten that you can use the <code>kubectl explain</code> command to learn more about a particular API object type, and that you use it regularly. If not, now is a good time to use it to see what else you can configure in an Ingress object&#8217;s <code>spec</code> field. Inspect the output of the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="58b7d8837415072ea8e104f3c69f9467" data-text-hash="2a3f9b7b4ebfe80ae3e534ccc32a8063" id="197" refid="197">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl explain ingress.spec</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b759b3a6f26932d39f0d97dd20b1c4ec" data-text-hash="6984efcc90dc5d65c750d84b2cc88cab" id="198" refid="198">
+<p>Look at the list of fields displayed by this command. You may be surprised to see that in addition to the <code>defaultBackend</code>, <code>rules</code>, and <code>tls</code> fields explained in the previous sections, only one other field is supported, namely <code>ingressClassName</code>. This field is used to specify which ingress controller should process the Ingress object. You&#8217;ll learn more about it later. For now, I want to focus on the lack of additional configuration options that HTTP proxies normally provide.</p>
+</div>
+<div class="readable-text" data-hash="704800160524d2e370e70e53edf15982" data-text-hash="cb6ac0943e8db30501b5c9173b1814a8" id="199" refid="199">
+<p>The reason you don&#8217;t see any other fields for specifying these options is that it would be nearly impossible to include all possible configuration options for every possible ingress implementation in the Ingress object&#8217;s schema. Instead, these custom options are configured via annotations or in separate custom Kubernetes API objects.</p>
+</div>
+<div class="readable-text" data-hash="8b8328fb205231e4751143ed67a6b919" data-text-hash="9326862016c1f963cc2d20c9012dd45c" id="200" refid="200">
+<p>Each ingress controller implementation supports its own set of annotations or objects. I mentioned earlier that the Nginx ingress controller uses annotations to configure TLS passthrough. Annotations are also used to configure HTTP authentication, session affinity, URL rewriting, redirects, Cross-Origin Resource Sharing (CORS), and more. The list of supported annotations can be found at <a href="annotations.html">https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/</a>.</p>
+</div>
+<div class="readable-text" data-hash="1a35dc9e72637e30663401dbd2605de8" data-text-hash="89a2eeed2dd74a79fbbd531f6bc6d976" id="201" refid="201">
+<p>I don&#8217;t want to go into each of these annotations, since they&#8217;re implementation specific, but I do want to show you an example of how you can use them.</p>
+</div>
+<div class="readable-text" data-hash="76aac5d53b72f03284758dbdf4e2a9ab" data-text-hash="c98f64381c04a413ad75bd6fadf2c057" id="202" refid="202">
+<h3 id="sigil_toc_id_226">12.4.1&#160;Configuring the Ingress using annotations</h3>
+</div>
+<div class="readable-text" data-hash="69500033af2946625c38d1e700e8338b" data-text-hash="77d70392927a2751e7fa40e3dd851b91" id="203" refid="203">
+<p>You learned in the previous chapter that Kubernetes services only support client IP-based session affinity. Cookie-based session affinity isn&#8217;t supported because services operate at Layer 4 of the OSI network model, whereas cookies are part of Layer 7 (HTTP). However, because Ingresses operate at L7, they can support cookie-based session affinity. This is the case with the Nginx ingress controller that I use in the following example.</p>
+</div>
+<div class="readable-text" data-hash="69e4646c65df3eec1f47f3d205d479c6" data-text-hash="84b2797711c6f4d38a332383c1ed15ce" id="204" refid="204">
+<h4>Using annotations to enable cookie-based session affinity in Nginx ingresses</h4>
+</div>
+<div class="readable-text" data-hash="70867c9561c12383d524446462860922" data-text-hash="e21e78ff917621018e3a1d2bfaf39539" id="205" refid="205">
+<p>The following listing shows an example of using Nginx-ingress-specific annotations to enable cookie-based session affinity and configure the session cookie name. The manifest shown in the listing can be found in the <code>ing.kiada.nginx-affinity.yaml</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b0fbcda8988d2f2a7a50c0e7bb8b42a2" data-text-hash="9f689bce679ff62189a2945f895d5d9e" id="206" refid="206">
+<h5>Listing 12.9 Using annotations to configure session affinity in an Nginx ingress</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: cookie    #A
+    nginx.ingress.kubernetes.io/session-cookie-name: SESSION_COOKIE    #B
+spec:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBhbm5vdGF0aW9uIGVuYWJsZXMgdGhlIGNvb2tpZS1iYXNlZCBzZXNzaW9uIGFmZmluaXR5LgojQiBUaGlzIG92ZXJyaWRlcyB0aGUgZGVmYXVsdCBIVFRQIGNvb2tpZSBuYW1lLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dd6cded8b63e8668c42a1be07f50e0a2" data-text-hash="9621fbc71ef14d75f967b1561c69c2d2" id="207" refid="207">
+<p>In the listing, you can see the annotations <code>nginx.ingress.kubernetes.io/affinity</code> and <code>nginx.ingress.kubernetes.io/session-cookie-name</code>. The first annotation enables cookie-based session affinity, and the second sets the cookie name. The annotation key prefix indicates that these annotations are specific to the Nginx ingress controller and are ignored by other implementations.</p>
+</div>
+<div class="readable-text" data-hash="42728ab562e186585ba1ab391cd1836f" data-text-hash="c5ba2044edcbbd9250e4bad5743b5b40" id="208" refid="208">
+<h4>Testing the cookie-based session affinity</h4>
+</div>
+<div class="readable-text" data-hash="8b956434d72a5361da26cc4049285971" data-text-hash="1f4704c99d04cab898a6f2d56b43293e" id="209" refid="209">
+<p>If you want to see session affinity in action, first apply the manifest file, wait until the Nginx configuration is updated, and then retrieve the cookie as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="918524fabba49cb20f675e9a7a0ef3e9" data-text-hash="56a847d0aed9bdcf5cde880587c97faa" id="210" refid="210">
+<div class="code-area-container">
+<pre class="code-area">$ curl -I http://kiada.example.com --resolve kiada.example.com:80:11.22.33.44
+HTTP/1.1 200 OK
+Date: Mon, 06 Dec 2021 08:58:10 GMT
+Content-Type: text/plain
+Connection: keep-alive
+Set-Cookie: SESSION_COOKIE=1638781091; Path=/; HttpOnly    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB0aGUgc2Vzc2lvbiBjb29raWUgdGhhdCBOZ2lueCBhZGRzIHRvIHRoZSBIVFRQIHJlc3BvbnNlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0a7b6ddd6dc97f77875e0ed8df61eb03" data-text-hash="e83c8164cd9bfc86c6d406ea841e98d9" id="211" refid="211">
+<p>You can now include this cookie in your request by specifying the <code>Cookie</code> header:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2c285e1d0c55076f39b82cf0328449cc" data-text-hash="00f79951a68ac27fa5234580aab6fc81" id="212" refid="212">
+<div class="code-area-container">
+<pre class="code-area">$ curl -H "Cookie: SESSION_COOKIE=1638781091" http://kiada.example.com \
+  --resolve kiada.example.com:80:11.22.33.44</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e188cef4feafb73162e4317bbbac8a9e" data-text-hash="e06381a4beb1a622b251dc8883fea280" id="213" refid="213">
+<p>If you run this command several times, you&#8217;ll notice that the HTTP request is always forwarded to the same pod, which indicates that the session affinity is using the cookie.</p>
+</div>
+<div class="readable-text" data-hash="7a6138a8611ffd4ac8b82f45d8f45a53" data-text-hash="e0edf50b04131b384cba2bde4ee1b764" id="214" refid="214">
+<h3 id="sigil_toc_id_227">12.4.2&#160;Configuring the Ingress using additional API objects</h3>
+</div>
+<div class="readable-text" data-hash="9baf6fe2a8591615da645a8ab091cb63" data-text-hash="45357d74ca47bc5a7420d36130191011" id="215" refid="215">
+<p>Some ingress implementations don&#8217;t use annotations for additional ingress configuration, but instead provide their own object kinds. In the previous section, you saw how to use annotations to configure session affinity when using the Nginx ingress controller. In the current section, you&#8217;ll learn how to do the same in Google Kubernetes Engine.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="216" refid="216">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9e0dbe8944b061a81bdd04c413faefc0" data-text-hash="0592422ac2f0698d2803d30cfbc36353" id="217" refid="217">
+<p> You&#8217;ll learn how to create your own custom object kinds via the CustomResourceDefinition object in chapter 29.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="048e3dccaa0e73d3e0eb1859c448a7eb" data-text-hash="c8dee60bcde40e5dbbd5d1aac3375cac" id="218" refid="218">
+<h4>Using the BackendConfig object type to enable cookie-based session affinity in GKE</h4>
+</div>
+<div class="readable-text" data-hash="7733eb995eba58e973f2aebbeb2f1744" data-text-hash="7adb3c0947e96c55ec48b8dc5e9cd401" id="219" refid="219">
+<p>In clusters running on GKE, a custom object of type BackendConfig can be found in the Kubernetes API. You create an instance of this object and reference it by name in the Service object to which you want to apply the object. You reference the object using the <code>cloud.google.com/backend-config</code> annotations, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5a7b47dca7c94a7ecd0b26683ebcaf79" data-text-hash="7a0c87c8109fd6a264d0791ebd2b9775" id="220" refid="220">
+<h5>Listing 12.10 Referring to a BackendConfig in a Service object in GKE</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Service
+metadata:
+  name: kiada
+  annotations:
+    cloud.google.com/backend-config: '{"default": "kiada-backend-config"}'    #A
+spec:</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBhbm5vdGF0aW9uIHNwZWNpZmllcyB0aGUgbmFtZSBvZiB0aGUgQmFja2VuZENvbmZpZyBvYmplY3QgdGhhdCBhcHBsaWVzIHRvIHRoaXMgc2VydmljZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="956d9b0a3169036c9ef6b6bd9e5a04da" data-text-hash="2f8c8da9f2ded08e255a7604cfea2c32" id="221" refid="221">
+<p>You can use the BackendConfig object to configure many things. Since this object is beyond the scope of this book, use <code>kubectl explain backendconfig.spec</code> to learn more about it, or see the GKE documentation.</p>
+</div>
+<div class="readable-text" data-hash="27424f5939284366e976a52eaaeb9bf7" data-text-hash="2621e83e531f70152f01350befca09f7" id="222" refid="222">
+<p>As a quick example of how custom objects are used to configure ingresses, I&#8217;ll show you how to configure cookie-based session affinity using the BackendConfig object. You can see the object manifest in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ac0cd60075a8bc81ea565956a71f2c12" data-text-hash="ad0771739b208dc3107fcd4877e4b400" id="223" refid="223">
+<h5>Listing 12.11 Using GKE-specific BackendConfig object to configure session affinity</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: cloud.google.com/v1    #A
+kind: BackendConfig    #A
+metadata:
+  name: kiada-backend-config
+spec:
+  sessionAffinity:    #B
+    affinityType: GENERATED_COOKIE    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBhIGN1c3RvbSBLdWJlcm5ldGVzIEFQSSBvYmplY3QgdGhhdOKAmXMgb25seSBhdmFpbGFibGUgaW4gR29vZ2xlIEt1YmVybmV0ZXMgRW5naW5lLgojQiBUaGlzIGVuYWJsZXMgY29va2llLWJhc2VkIHNlc3Npb24gYWZmaW5pdHkgZm9yIHRoZSBzZXJ2aWNlIHRoYXQgcmVmZXJlbmNlcyB0aGlzIEJhY2tlbmRDb25maWcu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ce79ad786c6e4f4d8d9195bc1216435d" data-text-hash="328bc22c3d0a5672a7f918dd42b789f1" id="224" refid="224">
+<p>In the listing, the session affinity type is set to <code>GENERATED_COOKIE</code>. Since this object is referenced in the <code>kiada</code> service, whenever a client accesses the service through the ingress, the request is always routed to the same backend pod.</p>
+</div>
+<div class="readable-text" data-hash="8bf9a772c2609000e6aa04b135c9b7aa" data-text-hash="1bdd69030f1b28de5d051f5079ec2973" id="225" refid="225">
+<p>In this and the previous section, you saw two ways to add custom configuration to an Ingress object. Since the method depends on which ingress controller you&#8217;re using, see its documentation for more information.</p>
+</div>
+<div class="readable-text" data-hash="92796204f5b3cd0ccbcf18e55b0992a7" data-text-hash="b486c2b19d89b806f27c603b1d8359ab" id="226" refid="226">
+<h2 id="sigil_toc_id_228">12.5&#160;Using multiple ingress controllers</h2>
+</div>
+<div class="readable-text" data-hash="4fc44d1b20f5446e665faadca51c6410" data-text-hash="0ab6abc01b9d4610a1c6873454ce6352" id="227" refid="227">
+<p>Since different ingress implementations provide different additional functionality, you may want to install multiple ingress controllers in a cluster. In this case, each Ingress object needs to indicate which ingress controller should process it. Originally, this was accomplished by specifying the controller name in the <code>kubernetes.io/ingress.class</code> annotation of the Ingress object. This method is now deprecated, but some controllers still use it.</p>
+</div>
+<div class="readable-text" data-hash="276d223700cfb8b2d73c502c9198c625" data-text-hash="944126d11133aaa314eac4edbfde2065" id="228" refid="228">
+<p>Instead of using the annotation, the correct way to specify the controller to use is through IngressClass objects. One or more IngressClass objects are usually created when you install an ingress controller.</p>
+</div>
+<div class="readable-text" data-hash="87f5b55a649b966ceec93296e9c99fc5" data-text-hash="e57fa8f373fd2da8db368eb834b650ee" id="229" refid="229">
+<p>When you create an Ingress object, you specify the ingress class by specifying the name of the IngressClass object in the Ingress object&#8217;s <code>spec</code> field. Each IngressClass specifies the name of the controller and optional parameters. Thus, the class you reference in your Ingress object determines which ingress proxy is provisioned and how it&#8217;s configured. As you can see in the next figure, different Ingress objects can reference different IngressClasses, which in turn reference different ingress controllers.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="0beacada55b32c879b71b2d04e83c5e9" data-text-hash="1c52220c3bbb1d7af11009131e8d8c33" id="230" refid="230">
+<h5>Figure 12.9 The relationship between Ingresses, IngressClasses, and Ingress controllers</h5>
+<img alt="" data-processed="true" height="337" id="Picture_9" loading="lazy" src="EPUB/images/12image009.png" width="774">
+</div>
+<div class="readable-text" data-hash="b2c0bc249d102c2991759c89d039eb3e" data-text-hash="010190b3d47116bbd87ae30dc738090b" id="231" refid="231">
+<h3 id="sigil_toc_id_229">12.5.1&#160;Introducing the IngressClass object kind</h3>
+</div>
+<div class="readable-text" data-hash="4ef7e6471c38d13d757ba7010fb17997" data-text-hash="2db29370c083a8237a617896d8923f45" id="232" refid="232">
+<p>If the Nginx ingress controller is running in your cluster, an IngressClass object named <code>nginx</code> was created when you installed the controller. If other ingress controllers are deployed in your cluster, you may also find other IngressClasses.</p>
+</div>
+<div class="readable-text" data-hash="304a8dbed6c3a2a9f1f00c5566b2cf56" data-text-hash="882d963434c097bfb43efa0c4b5a8425" id="233" refid="233">
+<h4>Finding IngressClasses in your cluster</h4>
+</div>
+<div class="readable-text" data-hash="88a8ee7bb8a9a336f34192511b5fde37" data-text-hash="bc85efcedd7ff888f2e0afe0734533d5" id="234" refid="234">
+<p>To see which ingress classes your cluster offers, you can list them with <code>kubectl get</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="32c1d05c2e0c268da60211a436b10778" data-text-hash="17004647022d089d8aaeb342b5b1e297" id="235" refid="235">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ingressclasses
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx   k8s.io/ingress-nginx   &lt;none&gt;       10h    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEluZ3Jlc3NDbGFzcyBzcGVjaWZpZXMgdGhlIGluZ3Jlc3MgY29udHJvbGxlciBhbmQgdGhlIHBhcmFtZXRlcnMgcGFzc2VkIHRvIGl0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d2c952871d3a9af3ef4356860c12d626" data-text-hash="cdaecceacce857c0ca796f8097675104" id="236" refid="236">
+<p>The output of the command shows that a single IngressClass named <code>nginx</code> exists in the cluster. Ingresses that use this class are processed by the <code>k8s.io/ingress-nginx</code> controller. You can also see that this class doesn&#8217;t specify any controller parameters.</p>
+</div>
+<div class="readable-text" data-hash="54e929ccc75bda74841988935a44cbf7" data-text-hash="0a557c9ed7f931b960c8b937bf732218" id="237" refid="237">
+<h4>Inspecting the YAML manifest of an IngressClass object</h4>
+</div>
+<div class="readable-text" data-hash="bca74143de4b17c2271635b5aceb6dfd" data-text-hash="01a0ccd10a0d8b4779b99bfeab3ef6e4" id="238" refid="238">
+<p>Let&#8217;s take a closer look at the <code>nginx</code> IngressClass object by examining its YAML definition:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7d9f445c68534bf3909d918173a61b9f" data-text-hash="d8fb672b033615434796185181c3af69" id="239" refid="239">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ingressclasses nginx -o yaml
+apiVersion: networking.k8s.io/v1    #A
+kind: IngressClass    #A
+metadata:
+  name: nginx    #B
+spec:
+  controller: k8s.io/ingress-nginx    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5ncmVzc0NsYXNzIG9iamVjdHMgYmVsb25nIHRvIHRoaXMgQVBJIGdyb3VwIGFuZCB2ZXJzaW9uLgojQiBUaGUgY2xhc3MgbmFtZS4KI0MgVGhlIGNvbnRyb2xsZXIgdGhhdCBzaG91bGQgcHJvY2VzcyBpbmdyZXNzZXMgb2YgdGhpcyBjbGFzcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="70cb824bafcd429c7a43d6dec2eabb71" data-text-hash="56d6ce1305f0190640202342e15f5994" id="240" refid="240">
+<p>As you can see, this IngressClass object specifies nothing more than the name of the controller. Later you&#8217;ll see how you can also add parameters for the controller to the object.</p>
+</div>
+<div class="readable-text" data-hash="c89ff33801e3566f112fea217a281572" data-text-hash="dabd72a8015261de2e090c7e5e7396a7" id="241" refid="241">
+<h3 id="sigil_toc_id_230">12.5.2&#160;Specifying the IngressClass in the Ingress object</h3>
+</div>
+<div class="readable-text" data-hash="696f1eff5b31831e676c201534456f67" data-text-hash="4740714d0133634d22aa7f289c7e9400" id="242" refid="242">
+<p>When you create an Ingress object, you can specify the class of the ingress using the <code>ingressClassName</code> field in the <code>spec</code> section of the Ingress object, as in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cfeb2282bb4d99b1b152805600c68c9d" data-text-hash="b993d067f8c2fd26cf7cc86edd4fd33a" id="243" refid="243">
+<h5>Listing 12.12 Ingress object referencing a specific IngressClass</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kiada
+spec:
+  ingressClassName: nginx    #A
+  rules:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB3aGVyZSB0aGUgY2xhc3Mgb2YgdGhpcyBJbmdyZXNzIG9iamVjdCBpcyBzcGVjaWZpZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="afaa2849c8a3f70e0239bc9ea1b57ede" data-text-hash="de7c160bc5d433f6f976a03fb09ccd90" id="244" refid="244">
+<p>The Ingress object in the listing indicates that its class should be <code>nginx</code>. Since this IngressClass specifies <code>k8s.io/ingress-nginx</code> as the controller, the Ingress from this listing is processed by the Nginx ingress controller.</p>
+</div>
+<div class="readable-text" data-hash="debb258aac8e9e303ae1ccaf893f9e0b" data-text-hash="948995f28bb132a2ce8dc17c6c54c7ce" id="245" refid="245">
+<h4>Setting the default IngressClass</h4>
+</div>
+<div class="readable-text" data-hash="1f5530951d9cbc6516255108d71dd6f5" data-text-hash="4852ab131c774e11020023c5845e9f1d" id="246" refid="246">
+<p>If multiple ingress controllers are installed in the cluster, there should be multiple IngressClass objects. If an Ingress object doesn&#8217;t specify the class, Kubernetes applies the default IngressClass, marked as such by setting the <code>ingressclass.kubernetes.io/is-default-class</code> annotation to <code>"true"</code>.</p>
+</div>
+<div class="readable-text" data-hash="14bdd7ce36c03684440a86268310eab7" data-text-hash="6084a6bd4339344090b6ba8296c31ea7" id="247" refid="247">
+<h3 id="sigil_toc_id_231">12.5.3&#160;Adding parameters to an IngressClass</h3>
+</div>
+<div class="readable-text" data-hash="d21567e5c7dfbf79b4a37feff4413b3f" data-text-hash="7bd1000da15d2fc4c30af8029366f183" id="248" refid="248">
+<p>In addition to using IngressClasses to specify which ingress controller to use for a particular Ingress object, IngressClasses can also be used with a single ingress controller if it can provide different ingress flavors. This is achieved by specifying different parameters in each IngressClass.</p>
+</div>
+<div class="readable-text" data-hash="282fc8182f5f4642da3f41f8d59bb12f" data-text-hash="dad5314bd09a202714fb25b60d8da5d3" id="249" refid="249">
+<h4>Specifying parameters in the IngressClass object</h4>
+</div>
+<div class="readable-text" data-hash="73c20e84d91deb0ce7153950890e5def" data-text-hash="2674178e1a80c06221d7da00f65b09a3" id="250" refid="250">
+<p>The IngressClass object doesn&#8217;t provide any fields for you to set the parameters within the object itself, as each ingress controller has its own specifics and would require a different set of fields. Instead, the custom configuration of an IngressClass is typically stored in a separate custom Kubernetes object type that&#8217;s specific to each ingress controller implementation. You create an instance of this custom object type and reference it in the IngressClass object.</p>
+</div>
+<div class="readable-text" data-hash="9cb0afa1f6730fe112863d5f29a76d48" data-text-hash="72c454b648bba8251cb5bb278c90be17" id="251" refid="251">
+<p>For example, AWS provides an object with kind <code>IngressClassParams</code> in API group <code>elbv2.k8s.aws</code>, version <code>v1beta1</code>. To configure the parameters in an IngressClass object, you reference the IngressClassParams object instance as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5c0808fd46c97c6d62e5b9ae3bb7a7d8" data-text-hash="08c55ee15b025e79e5262a221314bba1" id="252" refid="252">
+<h5>Listing 12.13 Referring to a custom parameters object in the IngressClass</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: IngressClass    #A
+metadata:
+  name: custom-ingress-class
+spec:
+  controller: ingress.k8s.aws/alb    #B
+  parameters:    #C
+    apiGroup: elbv2.k8s.aws    #C
+    kind: IngressClassParams    #C
+    name: custom-ingress-params    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBhIHN0YW5kYXJkIEluZ3Jlc3NDbGFzcyBvYmplY3QuCiNCIFRoZSBBV1MgTG9hZCBCYWxhbmNlciBjb250cm9sbGVyIGlzIHVzZWQgdG8gcHJvdmlzaW9uIGluZ3Jlc3NlcyBvZiB0aGlzIGNsYXNzLgojQyBUaGUgcGFyYW1ldGVycyB0byBiZSB1c2VkIHdoZW4gZGVwbG95aW5nIGFuIGluZ3Jlc3Mgb2YgdGhpcyBjbGFzcyBhcmUgc3RvcmVkIGluIHRoZSBJbmdyZXNzQ2xhc3NQYXJhbXMgb2JqZWN0IG5hbWVkIGN1c3RvbS1pbmdyZXNzLXBhcmFtcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="619d0dc8fec724fa5d4fe34e16f51051" data-text-hash="82a175c088ea12bdeefff0fb255361dc" id="253" refid="253">
+<p>In the listing, the IngressClassParams object instance that contains the parameters for this IngressClass is named <code>custom-ingress-params</code>. The object <code>kind</code> and <code>apiGroup</code> are also specified.</p>
+</div>
+<div class="readable-text" data-hash="d8a70bebc3e09c156a51f0151ff70ec3" data-text-hash="4e5ab48691350576ceeab215241d5f34" id="254" refid="254">
+<h4>Example of a custom API object type used to hold parameters for the IngressClass</h4>
+</div>
+<div class="readable-text" data-hash="06fa31f526f40a3660a1f56231a82768" data-text-hash="5700a354b0dfba83846fd9166c596fd5" id="255" refid="255">
+<p>The following listing shows an example of an IngressClassParams object.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1726fb79a29b6b3770630f846b18123a" data-text-hash="0dbd598bd049481e09f9e942a64ae81a" id="256" refid="256">
+<h5>Listing 12.14 Example IngressClassParams object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: elbv2.k8s.aws/v1beta1    #A
+kind: IngressClassParams    #A
+metadata:
+  name: custom-ingress-params    #B
+spec:
+  scheme: internal    #C
+  ipAddressType: dualstack    #C
+  tags:    #C
+  - key: org    #C
+    value: my-org    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBhIGN1c3RvbSBvYmplY3Qga2luZCB0aGF04oCZcyBhdmFpbGFibGUgaW4gQVdTLgojQiBUaGUgb2JqZWN0IG5hbWUgY29ycmVzcG9uZHMgdG8gdGhlIG5hbWUgcmVmZXJlbmNlZCBpbiB0aGUgcGFyYW1ldGVyIGZpZWxkIG9mIHRoZSBJbmdyZXNzQ2xhc3Mgb2JqZWN0LgojQyBUaGVzZSBmaWVsZHMgY29udGFpbiB0aGUgY29uZmlndXJhdGlvbiBmb3IgdGhlIGluZ3Jlc3Mu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d3f454e54b7e6e1bcb2c8ccfe21ea1b7" data-text-hash="b634cb30ee23b65d9bcce3788e978598" id="257" refid="257">
+<p>With the IngressClass and IngressClassParams objects in place, cluster users can create Ingress objects with the <code>ingressClassName</code> set to <code>custom-ingress-class</code>. The objects are processed by the <code>ingress.k8s.aws/alb</code> controller (the AWS Load Balancer controller). The controller reads the parameters from the IngressClassParams object and uses them to configure the load balancer.</p>
+</div>
+<div class="readable-text" data-hash="1db05510930b20249eba25111c4908e7" data-text-hash="60e69ce2ffe4e422fd251950e64c1a26" id="258" refid="258">
+<p>Kubernetes doesn&#8217;t care about the contents of the IngressClassParams object. They&#8217;re only used by the ingress controller. Since each implementation uses its own object type, you should refer to the controller&#8217;s documentation or use <code>kubectl explain</code> to learn more about each type.</p>
+</div>
+<div class="readable-text" data-hash="5b604b97c086e936a0630ac0d6447110" data-text-hash="1389767d9ffc0a88da0888af116ee8d7" id="259" refid="259">
+<h2 id="sigil_toc_id_232">12.6&#160;Using custom resources instead of services as backends</h2>
+</div>
+<div class="readable-text" data-hash="115f4bff8096f9a6833408f8d7d550e5" data-text-hash="0266b910b5909e3d276014444b2c7457" id="260" refid="260">
+<p>In this chapter, the backends referenced in the Ingress have always been Service objects. However, some ingress controllers allow you to use other resources as backends.</p>
+</div>
+<div class="readable-text" data-hash="ce2adb275f78ba9cbb2e326b716d5049" data-text-hash="27500074a91d1a1fca4d04216c5b3efe" id="261" refid="261">
+<p>Theoretically, an ingress controller could allow using an Ingress object to expose the contents of a ConfigMap or PersistentVolume, but it&#8217;s more typical for controllers to use resource backends to provide an option for configuring advanced Ingress routing rules through a custom resource.</p>
+</div>
+<div class="readable-text" data-hash="e53ea9319efe9b32791f5ac21cda7cfb" data-text-hash="649d4ce1bdbfeba77e62c0f0db81df77" id="262" refid="262">
+<h3 id="sigil_toc_id_233">12.6.1&#160;Using a custom object to configure Ingress routing</h3>
+</div>
+<div class="readable-text" data-hash="3792efacdc29362ba5beb80522e617b3" data-text-hash="5e2dbbd2399b8c795ebc2a785f11e9d5" id="263" refid="263">
+<p>The Citrix ingress controller provides the HTTPRoute custom object type, which allows you to configure where the ingress should route HTTP requests. As you can see in the following manifest, you don&#8217;t specify a Service object as the backend, but you instead specify the <code>kind</code>, <code>apiGroup</code>, and <code>name</code> of the HTTPRoute object that contains the routing rules.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="73401b86d9c18b5aeae302ee667ef984" data-text-hash="ec7b59e030fab7bfcc7a0ee611b57236" id="264" refid="264">
+<h5>Listing 12.15 Example Ingress object using a resource backend</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-ingress
+spec:
+  ingressClassName: citrix
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        backend:    #A
+          resource:    #A
+            apiGroup: citrix.com    #B
+            kind: HTTPRoute    #B
+            name: my-example-route    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGluZ3Jlc3MgYmFja2VuZCBmb3IgdGhpcyBydWxlIGlzbuKAmXQgYSBTZXJ2aWNlLCBidXQgYSBjdXN0b20gS3ViZXJuZXRlcyByZXNvdXJjZS4KI0IgVGhlIHJlc291cmNlIGtpbmQgYW5kIEFQSSBncm91cCBhcmUgc3BlY2lmaWVkIGhlcmUuCiNDIFRoaXMgaXMgdGhlIG5hbWUgb2YgdGhlIEhUVFBSb3V0ZSBvYmplY3QgaW5zdGFuY2UgdGhhdCBjb250YWlucyB0aGUgSFRUUCByb3V0aW5nIHJ1bGVzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3943c506e708d111909de704cb981e5d" data-text-hash="e04f95e619e758e4e51ea11018abe4bd" id="265" refid="265">
+<p>The Ingress object in the listing specifies a single rule. It states that the ingress controller should forward traffic destined for the host <code>example.com</code> according to the configuration specified in the object of the kind <code>HTTPRoute</code> (from the API group <code>citrix.com</code>) named <code>my-example-route</code>. Since the HTTPRoute object isn&#8217;t part of the Kubernetes API, its contents are beyond the scope of this book, but you can probably guess that it contains rules like those in the Ingress object but specified differently and with additional configuration options.</p>
+</div>
+<div class="readable-text" data-hash="39a8232f83d9301a34d3e084fd8e0b9f" data-text-hash="00f739dd77b0f13d24d5966b465149d8" id="266" refid="266">
+<p>At the time of writing, ingress controllers that support custom resource backends are rare, but maybe you might want to implement one yourself. By the time you finish reading this book, you&#8217;ll know how.</p>
+</div>
+<div class="readable-text" data-hash="7cf9336dd0b00574cb61584157129b17" data-text-hash="aac30cf4bf2e3b1bda4936e369f4086b" id="267" refid="267">
+<h2 id="sigil_toc_id_234">12.7&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="4392e60ac1535ab02b24940bc1139963" data-text-hash="7f49fdb88459d49b8b20a792c058f019" id="268" refid="268">
+<p>In this chapter, you learned how to create Ingress objects to make one or more services accessible to external clients. You learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="26feedc8a84dccd03c5d732373009987" data-text-hash="26feedc8a84dccd03c5d732373009987" id="269" refid="269">An Ingress controller configures an L7 load balancer or reverse proxy based on the configuration in the Ingress object.</li>
+<li class="readable-text" data-hash="7ef854c421e13d23a7626c720f0bc71d" data-text-hash="7ef854c421e13d23a7626c720f0bc71d" id="270" refid="270">While a Service is an abstraction over a set of Pods, an Ingress is an abstraction over a set of Services.</li>
+<li class="readable-text" data-hash="8646e6d12a9ca40609039b5971a03096" data-text-hash="8646e6d12a9ca40609039b5971a03096" id="271" refid="271">An Ingress requires a single public IP regardless of the number of services it exposes, whereas each LoadBalancer service requires its own public IP.</li>
+<li class="readable-text" data-hash="96c2a980468743e6674e6853fdbee5b4" data-text-hash="2543999e80f95bf83466b357c7748cb7" id="272" refid="272">External clients must resolve the hostnames specified in the Ingress object to the IP address of the ingress proxy. To accomplish this, you must add the necessary records to the DNS server responsible for the domain to which the host belongs. Alternatively, for development purposes, you can modify the <code>/etc/hosts</code> file on your local machine.</li>
+<li class="readable-text" data-hash="4ba85ddcf31c72b01bb6e846ffdef593" data-text-hash="4ba85ddcf31c72b01bb6e846ffdef593" id="273" refid="273">An Ingress operates at Layer 7 of the OSI model and can therefore provide HTTP-related functionality that Services operating at Layer 4 cannot.</li>
+<li class="readable-text" data-hash="951a7f9d561f6a490294dc81c11fe577" data-text-hash="951a7f9d561f6a490294dc81c11fe577" id="274" refid="274">An Ingress proxy usually forwards HTTP requests directly to the backend pod without going through the service IP, but this depends on the ingress implementation.</li>
+<li class="readable-text" data-hash="d5efbb8fe39b330119dd6505b5cbb885" data-text-hash="d5efbb8fe39b330119dd6505b5cbb885" id="275" refid="275">The Ingress object contains rules that specify to which service the HTTP request received by the ingress proxy should be forwarded based on the host and path in the request. Each rule can specify an exact host or one with a wildcard and either an exact path or path prefix.</li>
+<li class="readable-text" data-hash="9e1b8a5005d20c81e4e739e321f651c4" data-text-hash="9e1b8a5005d20c81e4e739e321f651c4" id="276" refid="276">The default backend is a catch-all rule that determines which service should handle requests that don&#8217;t match any rule.</li>
+<li class="readable-text" data-hash="1f61b25f4e66441d3fcffddb66138e75" data-text-hash="1f61b25f4e66441d3fcffddb66138e75" id="277" refid="277">An Ingress can be configured to expose services over TLS. The Ingress proxy can terminate the TLS connection and forward the HTTP request to the backend pod unencrypted. Some ingress implementations support TLS passthrough.</li>
+<li class="readable-text" data-hash="f4e5250c92d0356774ddb8ed6b0d2d6e" data-text-hash="f4e5250c92d0356774ddb8ed6b0d2d6e" id="278" refid="278">Ingress configuration options that are specific to a particular ingress implementation are set via annotations of the Ingress object or through custom Kubernetes object kinds that the controller provides.</li>
+<li class="readable-text" data-hash="2e9553c1c27755536001ce14699621d7" data-text-hash="2e9553c1c27755536001ce14699621d7" id="279" refid="279">A Kubernetes cluster can run multiple ingress controller implementations simultaneously. When you create an Ingress object, you specify the IngressClass. The IngressClass object specifies which controller should process the Ingress object. Optionally, the IngressClass can also specify parameters for the controller.</li>
+</ul>
+<div class="readable-text" data-hash="cd8325a55a052cb9e7b509e57dcfc085" data-text-hash="1dec0d4247e67a746ccae8a3d3a3e10b" id="280" refid="280">
+<p>You now understand how to expose groups of pods both internally and externally. In the next chapter, you&#8217;ll learn how to manage these pods as a unit and replicate them via a Deployment object.</p>
+</div></div>
+
+        </body>
+        
+        

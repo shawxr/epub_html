@@ -1,0 +1,1739 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="b220746c74a646998c83e38e638bac64" data-text-hash="f7284f29a5947880cb588cf9eedde00f" id="1" refid="1">
+<h1>10 Organizing objects using Namespaces and Labels</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="4aceb7adde0b98b34c165df1dcc12427" data-text-hash="4aceb7adde0b98b34c165df1dcc12427" id="2" refid="2">Using namespaces to split a physical cluster into virtual clusters</li>
+<li class="readable-text" data-hash="929a50919ec1ca459011c37bd35930f5" data-text-hash="929a50919ec1ca459011c37bd35930f5" id="3" refid="3">Organizing objects using labels</li>
+<li class="readable-text" data-hash="225c218b41732117d43bb97f753aed0e" data-text-hash="225c218b41732117d43bb97f753aed0e" id="4" refid="4">Using label selectors to perform operations on subsets of objects</li>
+<li class="readable-text" data-hash="e6c3c596071891ba96363b59e2e1aa7f" data-text-hash="e6c3c596071891ba96363b59e2e1aa7f" id="5" refid="5">Using label selectors to schedule pods onto specific nodes</li>
+<li class="readable-text" data-hash="d8899d72ed02f5b89667d393c41d3537" data-text-hash="d8899d72ed02f5b89667d393c41d3537" id="6" refid="6">Using field selectors to filter objects based on their properties</li>
+<li class="readable-text" data-hash="4207c3d3d96fd7e060254afc28177aab" data-text-hash="4207c3d3d96fd7e060254afc28177aab" id="7" refid="7">Annotating objects with additional non-identifying information</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="b0b3a83a16f79d16e894531f5b333c88" data-text-hash="793f978ed7accfc16a33cdd863a8b5a9" id="8" refid="8">
+<p>A Kubernetes cluster is usually used by many teams. How should these teams deploy objects to the same cluster and organize them so that one team doesn&#8217;t accidentally modify the objects created by other teams?</p>
+</div>
+<div class="readable-text" data-hash="c79a39ac25ba587c06e413ef604bc01b" data-text-hash="e9bd08f3a6cad71086facf3ce1b3110d" id="9" refid="9">
+<p>And how can a large team deploying hundreds of microservices organize them so that each team member, even if new to the team, can quickly see where each object belongs and what its role in the system is? For example, to which application does a config map or a secret belong.</p>
+</div>
+<div class="readable-text" data-hash="51890e38a8bdb6dad973508b0a70a9aa" data-text-hash="fd3c9ceb2e74ee44e984b0b480cc22f4" id="10" refid="10">
+<p>These are two different problems. Kubernetes solves the first with object namespaces, and the other with object labels. In this chapter, you will learn about both.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="11" refid="11">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="feea4e23aa586816eaab836613159bcf" data-text-hash="ae863d6d739c4e2ef111a8912b4a52bb" id="12" refid="12">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter10</a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9185de45ca9183b8d2e45906ffe270c3" data-text-hash="d566701827c596e164f41cf2834a6938" id="13" refid="13">
+<h2 id="sigil_toc_id_169">10.1&#160;Organizing objects into Namespaces</h2>
+</div>
+<div class="readable-text" data-hash="f0bc080d2db5cca12fe41b2de0c689a8" data-text-hash="e8e0cf26fa42a1c07874459b252d05a4" id="14" refid="14">
+<p>Imagine that your organization is running a single Kubernetes cluster that&#8217;s used by multiple engineering teams. Each of these teams deploys the entire Kiada application suite to develop and test it. You want each team to only deal with their own instance of the application suite - each team only wants to see the objects they&#8217;ve created and not those created by the other teams. This is achieved by creating objects in separate Kubernetes namespaces.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="15" refid="15">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e522518a6052abfb628ddc79bb743643" data-text-hash="40533aa29a86af226f5f06f47cfebe72" id="16" refid="16">
+<p> Namespaces in Kubernetes help organize Kubernetes API objects into non-overlapping groups. They have nothing to do with Linux namespaces, which help isolate processes running in one container from those in another, as you learned in chapter 2.</p>
+</div>
+</div>
+<div class="browsable-container figure-container" data-hash="0e63a21b2b6acdbabaf3a2072ac5fd29" data-text-hash="39511f23bf3f9ecd6be14c281af8c7b5" id="17" refid="17">
+<h5>Figure 10.1 Splitting a physical cluster into several virtual clusters by utilizing Kubernetes Namespaces</h5>
+<img alt="" data-processed="true" height="313" id="Picture_1" loading="lazy" src="EPUB/images/10image002.png" width="851">
+</div>
+<div class="readable-text" data-hash="9782367267e03fcc91e5562db3ee266c" data-text-hash="d1701edc816bd642cb9538966413bc90" id="18" refid="18">
+<p>As shown in the previous figure, you can use namespaces to divide a single physical Kubernetes cluster into many virtual clusters. Instead of everyone creating their objects in a single location, each team gets access to one or more namespaces in which to create their objects. Because namespaces provide a scope for object names, different teams can use the same names for their objects when they create them in their respective namespaces. Some namespaces can be shared between different teams or individual users.</p>
+</div>
+<div class="readable-text" data-hash="542e0edc6bee8fd84c19caa91285550c" data-text-hash="559183654452569db810626a3e8f042a" id="19" refid="19">
+<h4>Understanding when to organize objects into namespaces</h4>
+</div>
+<div class="readable-text" data-hash="27dc7818852feeba594f6088c5ed3a38" data-text-hash="3798c236546453d5b60c35dac7640dd2" id="20" refid="20">
+<p>Using multiple namespaces allows you to divide complex systems with numerous components into smaller groups that are managed by different teams. They can also be used to separate objects in a multitenant environment. For example, you can create a separate namespace (or a group of namespaces) for each client and deploy the entire application suite for that client in that namespace (or group).</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="21" refid="21">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4628a10067c59ed8d1329acbbf43fdaf" data-text-hash="abb2b561d640e5f383e067853b857590" id="22" refid="22">
+<p> Most Kubernetes API object types are namespaced, but a few are not. Pods, ConfigMaps, Secrets, PersistentVolumeClaims, and Events are all namespaced. Nodes, PersistentVolumes, StorageClasses, and Namespaces themselves are not. To see if a resource is namespaced or cluster-scoped, check the <code>NAMESPACED</code> column when running <code>kubectl api-resources</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ca225870491162cb08933d4afe77f58c" data-text-hash="d7db1db8e24e5cb523301dfc501638ad" id="23" refid="23">
+<p>Without namespaces, each user of the cluster would have to prefix their object names with a unique prefix or each user would have to use their own Kubernetes cluster.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c766014b3328e63748696575ca8f20aa" data-text-hash="bfabe3a345051d85d5955a89ee06f297" id="24" refid="24">
+<h5>Figure 10.2 Some Kubernetes API types are namespaced, whereas others are cluster-scoped.</h5>
+<img alt="" data-processed="true" height="339" id="Picture_2" loading="lazy" src="EPUB/images/10image003.png" width="862">
+</div>
+<div class="readable-text" data-hash="96fdbf6ef528f40e97ff92147c8cf50e" data-text-hash="a5bd74c5cc616e25f56a28a0d01d3ef6" id="25" refid="25">
+<p>As you&#8217;ll learn in chapter 23, namespaces also provide a scope for user privileges. A user may have permission to manage objects in one namespace but not in others. Similarly, resource quotas, which are also tied to namespaces, are explained in chapter 20.</p>
+</div>
+<div class="readable-text" data-hash="57795c1502f32d0a227a4a274c27ac0d" data-text-hash="632c5a1d38ee545767afbcbcc0bc03dc" id="26" refid="26">
+<h3 id="sigil_toc_id_170">10.1.1&#160;Listing namespaces and the objects they contain</h3>
+</div>
+<div class="readable-text" data-hash="c8427acdeb7a5ee10e43ab9450862a40" data-text-hash="004458f73121c4fb03cc3e6e0252b579" id="27" refid="27">
+<p>Every Kubernetes cluster you create contains a few common namespaces. Let&#8217;s see what they are.</p>
+</div>
+<div class="readable-text" data-hash="036f675fd7ca0cf9b749c6ba3b6cd47c" data-text-hash="5655b5a72053f9087e40a9136c0f9faa" id="28" refid="28">
+<h4>Listing namespaces</h4>
+</div>
+<div class="readable-text" data-hash="7f98dbc3ad26a522a5e2fd0214d5bbe9" data-text-hash="625190f2ec8b6e2cf3927f34450c26f3" id="29" refid="29">
+<p>Since each namespace is represented by the <i>Namespace</i> object, you can display them with the <code>kubectl get</code> command, as you would any other Kubernetes API object. To see the namespaces in your cluster, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b75c98d51c25b224f691b8dc296c09f7" data-text-hash="afbef8723ac67823531ce8f5059395b2" id="30" refid="30">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get namespaces
+NAME                 STATUS   AGE
+default              Active   1h
+kube-node-lease      Active   1h
+kube-public          Active   1h
+kube-system          Active   1h
+local-path-storage   Active   1h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="31" refid="31">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="382ea8b9bd075bf70e249a6c67b9552a" data-text-hash="0bb7adae8613cd93022b58027128aaa7" id="32" refid="32">
+<p> The short form for <code>namespace</code> is <code>ns</code>. You can also list namespaces with <code>kubectl get ns</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="1a34ca547a0949caeedab11951e2a11c" data-text-hash="b7337098ff6b120c2c8002e6c019cf02" id="33" refid="33">
+<p>Up to this point, you&#8217;ve been working in the <code>default</code> namespace. Every time you created an object, it was created in that namespace. Similarly, when you listed objects, such as pods, with the <code>kubectl</code> <code>get</code> command, the command only displayed the objects in that namespace. You may be wondering if there are pods in the other namespaces. Let&#8217;s take a look.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="34" refid="34">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8e5eb8a76cb573a852e018a42abd3ead" data-text-hash="7171ff8a99862bfcc243fa51de894454" id="35" refid="35">
+<p> Namespaces prefixed with <code>kube-</code> are reserved for Kubernetes system namespaces.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2c4e57471decb1393d9a544838b3d2dc" data-text-hash="fdf83b8124446464e537b608d6b6e6bf" id="36" refid="36">
+<h4>Listing objects in a specific namespace</h4>
+</div>
+<div class="readable-text" data-hash="db9bd17382afa532875c8664c9bf008e" data-text-hash="9737ec36c902c62548a67e174945554b" id="37" refid="37">
+<p>To list the pods in the <code>kube-system</code> namespace, run <code>kubectl get</code> with the <code>--namespace</code> option as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="28982b1b2328ef6432948b34413971fc" data-text-hash="bc78b91a3b18606c29aaf6a7dc153f35" id="38" refid="38">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods --namespace kube-system
+NAME                        READY   STATUS    RESTARTS   AGE
+coredns-558bd4d5db-4n5zg    1/1     Running   0          1h
+coredns-558bd4d5db-tnfws    1/1     Running   0          1h
+etcd-kind-control-plane     1/1     Running   0          1h
+kindnet-54ks9               1/1     Running   0          1h
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f9348d840c981aad06a66cb36f2e7f4f" data-text-hash="5692a0d3aa531dfa6d177799c7422f28" id="39" refid="39">
+<h5>Tip&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="410ec136a71f52e2e2c1029651ac46e0" data-text-hash="7746162288f1e8d6f6b01ce465b76a90" id="40" refid="40">
+<p>You can also use <code>-n</code> instead of <code>--namespace</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="12a8f6bcd6e93b587e97c54b2d715803" data-text-hash="18eaab223f3236e60a693fcfeb46b40b" id="41" refid="41">
+<p>You&#8217;ll learn more about these pods later in this book. Don&#8217;t worry if the pods shown here don&#8217;t exactly match the ones in your cluster. As the namespace name implies, these are the Kubernetes system pods. By having them in this separate namespace, everything stays neatly nice and clear. If they were all in the default namespace, mixed in with the pods you create yourself, it would be hard to tell what belongs where, and you could accidentally delete system objects.</p>
+</div>
+<div class="readable-text" data-hash="03aa010c37c535846c3366c0d8bc0469" data-text-hash="a1ce6f0955e02155805566d6c0d324a3" id="42" refid="42">
+<h4>Listing objects across all namespaces</h4>
+</div>
+<div class="readable-text" data-hash="bccc5edec5d331be106b9d1354f46c20" data-text-hash="7c469021a842ce5b6af5d84c5b996726" id="43" refid="43">
+<p>Instead of listing objects in each namespace individually, you can also tell kubectl to list objects in all namespaces. This time, instead of listing pods, let&#8217;s list all config maps in the cluster:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ed19475ffb58177c8b562f11cdfc8e49" data-text-hash="a4c2342772553d095f815829c039ae6a" id="44" refid="44">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cm --all-namespaces
+NAMESPACE            NAME                                 DATA   AGE
+default              kiada-envoy-config                   2      1h
+default              kube-root-ca.crt                     1      1h
+kube-node-lease      kube-root-ca.crt                     1      1h
+kube-public          cluster-info                         1      1h
+kube-public          kube-root-ca.crt                     1      1h
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f9348d840c981aad06a66cb36f2e7f4f" data-text-hash="5692a0d3aa531dfa6d177799c7422f28" id="45" refid="45">
+<h5>Tip&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="085b045dbe4f720446556447d7dc5e32" data-text-hash="8ee95be063d9e35949a773bf1cfa51a4" id="46" refid="46">
+<p>You can also type <code>-A</code> instead of <code>--all-namespaces</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8e0c712e22833a6768e250abf5380437" data-text-hash="6edd0f2372f0c496ca86e2427a5051f9" id="47" refid="47">
+<p>The <code>--all-namespaces</code> option is handy when you want to see all objects in the cluster, regardless of namespace, or when you can&#8217;t remember which namespace an object is in.</p>
+</div>
+<div class="readable-text" data-hash="a0b2b30bcde07fe82dac9de4d745a8d0" data-text-hash="565f7efd2a00182bcfbb4f4a81c5a92f" id="48" refid="48">
+<h3 id="sigil_toc_id_171">10.1.2&#160;Creating namespaces</h3>
+</div>
+<div class="readable-text" data-hash="69ce0a9e0c98a8c62c954c326e13df6c" data-text-hash="d1be93df62b38a61acf94b072d1652db" id="49" refid="49">
+<p>Now that you know the other namespaces in your cluster, you&#8217;ll create two new namespaces.</p>
+</div>
+<div class="readable-text" data-hash="b832e503b359da691f5e18f50acd0618" data-text-hash="95d8143e6bbb9e1bbcb16562d9ecf215" id="50" refid="50">
+<h4>Creating a namespace with kubectl create namespace</h4>
+</div>
+<div class="readable-text" data-hash="19270ab1c20442385b34d7aabf3952b6" data-text-hash="52894029e4b7810262e8c20081b9f547" id="51" refid="51">
+<p>The fastest way to create a namespace is to use the <code>kubectl</code> <code>create</code> <code>namespace</code> command. Create a namespace named <code>kiada-test</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="65c3bef7619e1a3ba2be11ddd9aa6174" data-text-hash="7e50c8341a49bf7e45e848806c7852a4" id="52" refid="52">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create namespace kiada-test1
+namespace/kiada-test1 created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="444b115d6e9c337892ff242bd23e058d" data-text-hash="ffaa47ddd6cbbbe2406eb8b5da8f7a2a" id="53" refid="53">
+<h5>Note&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="03741c52211586b05149d8532af8f840" data-text-hash="b4cfd12b82668e31459d609998fcd84c" id="54" refid="54">
+<p>The names of most objects must conform to the naming conventions for DNS subdomain names, as specified in RFC 1123, that is, they may contain only lowercase alphanumeric characters, hyphens, and dots, and must start and end with an alphanumeric character. The same applies to namespaces, but they may not contain dots.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ed383a34143605ec1f00e6ce411fe9ec" data-text-hash="727a26fd8aebd59295f93cfd9c57633c" id="55" refid="55">
+<p>You&#8217;ve just created the namespace <code>kiada-test1</code>. You&#8217;ll now create another one using a different method.</p>
+</div>
+<div class="readable-text" data-hash="47119f6af9b0601bc07f7c6651546157" data-text-hash="b839d2a2e54dd82ac35da7f1b09a875c" id="56" refid="56">
+<h4>Creating a namespace from a manifest file</h4>
+</div>
+<div class="readable-text" data-hash="aaf329ea50edb1d4d003d5994611f0d9" data-text-hash="a574002efb5b90a268628430d8a418db" id="57" refid="57">
+<p>As mentioned earlier, Kubernetes namespaces are represented by Namespace objects. As such, you can list them with the <code>kubectl get</code> command, as you&#8217;ve already done, but you can also create them from a YAML or JSON manifest file that you post to the Kubernetes API.</p>
+</div>
+<div class="readable-text" data-hash="9c21db99d69ab73766c630633d21fadf" data-text-hash="94165dea4073078b5b5202996e6faa8e" id="58" refid="58">
+<p>Use this method to create another namespace called <code>kiada-test2</code>. First, create a file named <code>ns.kiada-test.yaml</code> with the contents of the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="561d052f55a40133c8d6a4e0fa35cf44" data-text-hash="1fd2ab50351922b22ea2b07631df8c51" id="59" refid="59">
+<h5>Listing 10.1 A YAML definition of a Namespace object</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Namespace   #A
+metadata:
+  name: kiada-test2   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCBjb250YWlucyBhIE5hbWVzcGFjZSBvYmplY3QuCiNCIFRoaXMgaXMgdGhlIG5hbWUgb2YgdGhlIG5hbWVzcGFjZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4b0371d56f6ed1d79cce79eae6fb2de5" data-text-hash="f4ecc7aa2aa6fa29d7b4c4d59e99fc9c" id="60" refid="60">
+<p>Now, use <code>kubectl apply</code> to post the file to the Kubernetes API:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e403b3506d920d7e75d70b309deb415f" data-text-hash="3345b1b188c3d206d4fe10df95f90197" id="61" refid="61">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f ns.kiada-test.yaml
+namespace/kiada-test2 created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="87f888506568698c5988d782ca794a26" data-text-hash="6eaabcb6790ebe14b1bfe74b27c56778" id="62" refid="62">
+<p>Developers don&#8217;t usually create namespaces this way, but operators do. For example, if you want to create a set of manifest files for a suite of applications will be distributed across multiple namespaces, you can add the necessary Namespace objects to those manifests so that everything can be deployed without having to first create the namespaces with <code>kubectl create</code> and then apply the manifests.</p>
+</div>
+<div class="readable-text" data-hash="fb6d01631c9c0161476daf39ca92add2" data-text-hash="d0fb31c63d3679a82897dfe01ec49248" id="63" refid="63">
+<p>Before you continue, you should run <code>kubectl get ns</code> to list all namespaces again to see that your cluster now contains the two namespaces you created.</p>
+</div>
+<div class="readable-text" data-hash="a287ac22e861c927b375c59905481658" data-text-hash="690fae20407de63a0f8e8097b4ee49c9" id="64" refid="64">
+<h3 id="sigil_toc_id_172">10.1.3&#160;Managing objects in other namespaces</h3>
+</div>
+<div class="readable-text" data-hash="13cdec8b347196d594c0898e2ba513b5" data-text-hash="c05f84ad53ade1bd63300e691f323975" id="65" refid="65">
+<p>You&#8217;ve now created two new namespaces: <code>kiada-test1</code> and <code>kiada-test2</code>, but as mentioned earlier, you&#8217;re still in the <code>default</code> namespace. If you create an object such as a pod without explicitly specifying the namespace, the object is created in the <code>default</code> namespace.</p>
+</div>
+<div class="readable-text" data-hash="a6f895f76e1efca9ee3d525d6ee0ea6c" data-text-hash="29871e346bd08a5abd7ccfe658aded03" id="66" refid="66">
+<h4>Creating objects in a specific namespace</h4>
+</div>
+<div class="readable-text" data-hash="61812899ddfdc5ed6d4b24bb903d574f" data-text-hash="f47527303dacdced8026b1506e3716fa" id="67" refid="67">
+<p>In section 10.1.1, you learned that you can specify the <code>--namespace</code> argument (or the shorter <code>-n</code> option) to list objects in a particular namespace. You can use the same argument when applying an object manifest to the API.</p>
+</div>
+<div class="readable-text" data-hash="8fcb58ada5643c61150899a4516dd0ff" data-text-hash="dc0ee3e064d4611946fdcdeeea49f458" id="68" refid="68">
+<p>To create the kiada-ssl pod and its associated config map and secret in the <code>kiada-test1</code> namespace, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c00e84c4d8886bb36fa31e8933331a2b" data-text-hash="e5f6c83fc7a1d175fdc3df8afca732ae" id="69" refid="69">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f kiada-ssl.yaml -n kiada-test1
+pod/kiada-ssl created
+configmap/kiada-envoy-config created
+secret/kiada-tls created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6fc1fe96ace6edaab3e770fc5c7451c1" data-text-hash="5d010ec73e8ce6f94f3c253bab1e316d" id="70" refid="70">
+<p>You can now list pods, config maps and secrets in the <code>kiada-test1</code> namespace to confirm that these objects were created there and not in the <code>default</code> namespace:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="84bace01e4c5a975d0e2a4c6aea3b5cb" data-text-hash="0abe25ca373b9adfcc4f870f8fd76c1a" id="71" refid="71">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kiada-test1 get pods
+NAME        READY   STATUS    RESTARTS   AGE
+kiada-ssl   2/2     Running   0          1m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1c3b67e501281e1c10bfdd75c931302a" data-text-hash="0d51fc7d1f589d4f3519ffda0ed9ebe8" id="72" refid="72">
+<h4>Specifying the namespace in the object manifest</h4>
+</div>
+<div class="readable-text" data-hash="e54398ce0fbdcee672b0a12fc9e88695" data-text-hash="ad7db2ef0d08e49128b221a26ba62959" id="73" refid="73">
+<p>The object manifest can specify the namespace of the object in the <code>namespace</code> field in the manifest&#8217;s <code>metadata</code> section. When you apply the manifest with the <code>kubectl apply</code> command, the object is created in the specified namespace. You don&#8217;t need to specify the namespace with the <code>--namespace</code> option.</p>
+</div>
+<div class="readable-text" data-hash="ff0e5e715458839203fb96a7679df43b" data-text-hash="26da5c44506ecb0190efb98c7e23d520" id="74" refid="74">
+<p>The manifest shown in the following listing contains the same three objects as before, but with the namespace specified in the manifest.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="566187ecd237d42d2c98d3423ee068da" data-text-hash="ebd76d16f24de18c321ff89cb1099449" id="75" refid="75">
+<h5>Listing 10.2 Specifying the namespace in the object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl
+  namespace: kiada-test2    #A
+spec:
+  volumes: ...
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBQb2Qgb2JqZWN0IHNwZWNpZmllcyB0aGUgbmFtZXNwYWNlLiBXaGVuIHlvdSBhcHBseSB0aGUgbWFuaWZlc3QsIHRoaXMgUG9kIGlzIGNyZWF0ZWQgaW4gdGhlIGtpYWRhLXRlc3QyIG5hbWVzcGFjZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d25711e2806632a2a82068186b3698fd" data-text-hash="0f157f0908ade1af8d10da86e88e0238" id="76" refid="76">
+<p>When you apply this manifest with the following command, the pod, config map, and secret are created in the <code>kiada-test2</code> namespace:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="476f3d0d9f96337a740336838b818b96" data-text-hash="69d6147cd91ac266dcbee36666504af6" id="77" refid="77">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada-ssl.kiada-test2-namespace.yaml
+pod/kiada-ssl created
+configmap/kiada-envoy-config created
+secret/kiada-tls created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8a66a33a8be536d6344e3e7ad86d3793" data-text-hash="e56eed3e28f5067e6a79e2d2d972c652" id="78" refid="78">
+<p>Notice that you didn&#8217;t specify the <code>--namespace</code> option this time. If you did, the namespace would have to match the namespace specified in the object manifest, or kubectl would display an error like in the following example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="75f125e845f54f6e85091a59a26114bf" data-text-hash="e669b172967869ec862398191aa9bd55" id="79" refid="79">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f kiada-ssl.kiada-test2-namespace.yaml -n kiada-test1
+the namespace from the provided object "kiada-test2" does not match the namespace "kiada-test1". You must pass '--namespace=kiada-test2' to perform this operation.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="808b83cb0fa1f97673f8474e0d830cc2" data-text-hash="a8ab52506fa27e41bc8aa8b96e374e7b" id="80" refid="80">
+<h4>Making kubectl default to a different namespace</h4>
+</div>
+<div class="readable-text" data-hash="f0da2d269960d8290b807711ac88c945" data-text-hash="3d48aa080b2865333122a156ecad3358" id="81" refid="81">
+<p>In the previous two examples you learned how to create and manage objects in namespaces other than the namespace that kubectl is currently using as the default. You&#8217;ll use the --namespace option frequently - especially when you want to quickly check what&#8217;s in another namespace. However, you&#8217;ll do most of your work in the current namespace.</p>
+</div>
+<div class="readable-text" data-hash="626ebc58ef41e1011b8b89aba4c3ba86" data-text-hash="6e360d2976b9097ea0aa33811f29e588" id="82" refid="82">
+<p>After you create a new namespace, you&#8217;ll usually run many commands in it. To make your life easier, you can tell kubectl to switch to that namespace. The current namespace is a property of the current kubectl context, which is configured in the kubeconfig file.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="83" refid="83">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="145a4f233a4bf69c93c281046da8a515" data-text-hash="d48b080bc3afc6ae2b790ff33dfc93f7" id="84" refid="84">
+<p> You learned about the kubeconfig file in chapter 3.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="87764039834cd6a090ab90888c4f9d86" data-text-hash="24f979f9253c17f6407d5615981fbf4f" id="85" refid="85">
+<p>To switch to a different namespace, update the current context. For example, to switch to the <code>kiada-test1</code> namespace, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b666cceb9199e6cd0593fa5835867f13" data-text-hash="5f7492043a1bcb1c4a57cbad1e37b5ed" id="86" refid="86">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl config set-context --current --namespace kiada-test1
+Context "kind-kind" modified.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d6ee2379f60a4c850bb70bf5752540da" data-text-hash="84f8768040912e8ae556bcdf4fe74a17" id="87" refid="87">
+<p>Every kubectl command you run from now on will use the <code>kiada-test1</code> namespace. For example, you can now list the pods in this namespace by simply typing <code>kubectl get pods</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="9e3ad3d257975290240a1a7dd3b8e42b" data-text-hash="54ccfa48e0d0d385ab4343d2eac46406" id="88" refid="88">
+<h5>TIP&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="49d44f94a8af6e69cdb0721d0542ba96" data-text-hash="0a6ff6d186f039d350d0c595d8b0cbdd" id="89" refid="89">
+<p>To quickly switch to a different namespace, you can set up the following alias: <code>alias kns='kubectl config set-context --current --namespace '</code>. You can then switch between namespaces with <code>kns</code> <code>some-namespace</code>. Alternatively, you can install a kubectl plugin that does the same thing. You can find it at <a href="ahmetb.html">https://github.com/ahmetb/kubectx</a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="d637fee78b10be973bac214c0b1f94c5" data-text-hash="9b3f403c6cbfefec764ea616abe2c651" id="90" refid="90">
+<p>There&#8217;s not much more to learn about creating and managing objects in different namespaces. But before you wrap up this section, I need to explain how well Kubernetes isolates workloads running in different namespaces.</p>
+</div>
+<div class="readable-text" data-hash="eb161c004628bd0badc33f684ab5d66c" data-text-hash="a889aa79616e9833df449bc53716aaf2" id="91" refid="91">
+<h3 id="sigil_toc_id_173">10.1.4&#160;Understanding the (lack of) isolation between namespaces</h3>
+</div>
+<div class="readable-text" data-hash="a5bad8a82ad9bf92802f37adc15d8676" data-text-hash="d949dfb6543ba1ceaec419973d848f0c" id="92" refid="92">
+<p>You created several pods in different namespaces so far. You already know how to use the <code>--all-namespaces</code> option (or <code>-A</code> for short) to list pods across all namespaces, so please do so now:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="912016bf9db40a8c31b468457be79f69" data-text-hash="795ae817eb95e9e936d76cb9a37c0439" id="93" refid="93">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -A
+NAMESPACE     NAME        READY   STATUS    RESTARTS   AGE
+default       kiada-ssl   2/2     Running   0          8h    #A
+default       quiz        2/2     Running   0          8h
+default       quote       2/2     Running   0          8h
+kiada-test1   kiada-ssl   2/2     Running   0          2m    #A
+kiada-test2   kiada-ssl   2/2     Running   0          1m    #A
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhyZWUgcG9kcyBuYW1lZCBraWFkYS1zc2wgZXhpc3QgaW4gZGlmZmVyZW50IG5hbWVzcGFjZXM="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="87812d99f2eb4a742ad134553f0cf265" data-text-hash="4dff4a05602b15b19920bb5348dec745" id="94" refid="94">
+<p>In the output of the command, you should see at least two pods named <code>kiada-ssl</code>. One in the <code>kiada-test1</code> namespace and the other in the <code>kiada-test2</code> namespace. You may also have another pod named <code>kiada-ssl</code> in the <code>default</code> namespace from the exercises in the previous chapters. In this case, there are three pods in your cluster with the same name, all of which you were able to create without issue thanks to namespaces. Other users of the same cluster could deploy many more of these pods without stepping on each other&#8217;s toes.</p>
+</div>
+<div class="readable-text" data-hash="8b6ba54cda59c9aaeb9192ac98d98cf4" data-text-hash="5cf1063e1085b59476eefee1ef3b41a7" id="95" refid="95">
+<h4>Understanding the runtime isolation between pods in different namespaces</h4>
+</div>
+<div class="readable-text" data-hash="6caa7af68d03b2109f116ce638423ee5" data-text-hash="2e8a5e6ceb73a11bd7da5f07ab269d4b" id="96" refid="96">
+<p>When users use namespaces in a single physical cluster, it&#8217;s as if they each use their own virtual cluster. But this is only true up to the point of being able to create objects without running into naming conflicts. The physical cluster nodes are shared by all users in the cluster. This means that the isolation between the their pods is not the same as if they were running on different physical clusters and therefore on different physical nodes.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c088e4f6c446e70df4ff2eb57363dc5e" data-text-hash="41ad1cdf64de01c9fb38d04df6b3179f" id="97" refid="97">
+<h5>Figure 10.3 Pods from different namespaces may run on the same cluster node.</h5>
+<img alt="" data-processed="true" height="427" id="Picture_3" loading="lazy" src="EPUB/images/10image004.png" width="804">
+</div>
+<div class="readable-text" data-hash="e60f357f692c62a770905bcae81e5c20" data-text-hash="701264caf4a5d959610f0ecb923f8ab7" id="98" refid="98">
+<p>When two pods created in different namespaces are scheduled to the same cluster node, they both run in the same OS kernel. Although they are isolated from each other with container technologies, an application that breaks out of its container or consumes too much of the node&#8217;s resources can affect the operation of the other application. Kubernetes namespaces play no role here.</p>
+</div>
+<div class="readable-text" data-hash="9afd55ff1d7b7e1f2a403bd101c61252" data-text-hash="9f947c5f6105f23504ab88a2707918e4" id="99" refid="99">
+<h4>Understanding network isolation between namespaces</h4>
+</div>
+<div class="readable-text" data-hash="798c535df5b2c45523f6f210a2af7a6b" data-text-hash="80a7e8d90647bd70ac8f699db90621c8" id="100" refid="100">
+<p>Unless explicitly configured to do so, Kubernetes doesn&#8217;t provide network isolation between applications running in pods in different namespaces. An application running in one namespace can communicate with applications running in other namespaces. By default, there is no network isolation between namespaces. However, you can use the NetworkPolicy object to configure which applications in which namespaces can connect to which applications in other namespaces. You&#8217;ll learn about this in chapter 25.</p>
+</div>
+<div class="readable-text" data-hash="6173a569e1acea82e39b532b46a7e9ec" data-text-hash="c72bfef71060e4faeef039902edef67e" id="101" refid="101">
+<h4>Using namespaces to separate production, staging and development environments?</h4>
+</div>
+<div class="readable-text" data-hash="455283060ad1203190c918c05f5daebe" data-text-hash="c05d7def3c5d55042f963068abd0b82e" id="102" refid="102">
+<p>Because namespaces don&#8217;t provide true isolation, you should not use them to split a single physical Kubernetes cluster into the production, staging, and development environments. Hosting each environment on a separate physical cluster is a much safer approach.</p>
+</div>
+<div class="readable-text" data-hash="25c520f7c1ab82297a40ff1606d3d944" data-text-hash="2a03b5f16271f4299f620bf63997bb57" id="103" refid="103">
+<h3 id="sigil_toc_id_174">10.1.5&#160;Deleting namespaces</h3>
+</div>
+<div class="readable-text" data-hash="b2df08025cbad6be1c591954ef47e704" data-text-hash="608f01d6f2f1d1ebd4999b8d5ea9b874" id="104" refid="104">
+<p>Let&#8217;s conclude this section on namespaces by deleting the two namespaces you created. When you delete the Namespace object, all the objects you created in that namespace are automatically deleted. You don&#8217;t need to delete them first.</p>
+</div>
+<div class="readable-text" data-hash="cb0cbc49d2e39bfee839c0915ee56a49" data-text-hash="c8098b3f0941923f8485d2afbbf3596c" id="105" refid="105">
+<p>Delete the <code>kiada-test2</code> namespaces as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="20be35e8e08e6fabfd88f6e5cf67b3f0" data-text-hash="85a2927828217aba4042a4a47105a58c" id="106" refid="106">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete ns kiada-test2
+namespace "kiada-test2" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="742606dcb61a9cdd893bee5a5816ebae" data-text-hash="9591aceb91a526092dfef41c07965041" id="107" refid="107">
+<p>The command blocks until everything in the namespace and the namespace itself are deleted. But, if you interrupt the command and list the namespaces before the deletion is complete, you&#8217;ll see that the namespace&#8217;s status is <code>Terminating</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="dc250769178745e36e71a1c48a5dc249" data-text-hash="372ac15ab4753b289abca0f40891535f" id="108" refid="108">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ns
+NAME                 STATUS        AGE
+default              Active        2h
+kiada-test1          Active        2h
+kiada-test2          Terminating   2h
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d542a35508251c61453997454f78e920" data-text-hash="57c6d4a76901bdf0f6286e578f2447a1" id="109" refid="109">
+<p>The reason I show this is because you will eventually run the delete command and it will never finish. You&#8217;ll probably interrupt the command and check the namespace list, as I show here. Then you&#8217;ll wonder why the namespace termination doesn&#8217;t complete.</p>
+</div>
+<div class="readable-text" data-hash="f7cf7cc466a2daca7bdb9069e2e346d1" data-text-hash="df1ea1fc784f326987265a313131d2b2" id="110" refid="110">
+<h4>Diagnosing why namespace termination is stuck</h4>
+</div>
+<div class="readable-text" data-hash="86391ba5d749c4d227635d6b15b295f0" data-text-hash="1a9e6d2fc48dd6c0fb26435b161867dc" id="111" refid="111">
+<p>In short, the reason a namespace can&#8217;t be deleted is because one or more objects created in it can&#8217;t be deleted. You may think to yourself, &#8220;Oh, I&#8217;ll list the objects in the namespace with <code>kubectl get all</code> to see which object is still there,&#8221; but that usually doesn&#8217;t get you any further because kubectl doesn&#8217;t return any results.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="112" refid="112">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="741174bb71cdfaa66c52412f01102626" data-text-hash="38b6a5416ae5d9bee1379174d2084117" id="113" refid="113">
+<p> Remember that the <code>kubectl get all</code> command lists only some types of objects. For example, it doesn&#8217;t list secrets. Even though the command doesn&#8217;t return anything, this doesn&#8217;t mean that the namespace is empty.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c3152189a77969dd933b475b5840cf8c" data-text-hash="d6abcd03856088ad00215be99ce23782" id="114" refid="114">
+<p>In most, if not all, cases where I&#8217;ve seen a namespace get stuck this way, the problem was caused by a custom object and its custom controller not processing the object&#8217;s deletion and removing a finalizer from the object. You&#8217;ll learn more about finalizers in chapter 15, and about custom objects and controllers in chapter 29.</p>
+</div>
+<div class="readable-text" data-hash="97e51f1938b989c9c02afc02e2140ca9" data-text-hash="8c01707b3d4cd6064ba977472fa02909" id="115" refid="115">
+<p>Here I just want to show you how to figure out which object is causing the namespace to be stuck. Here&#8217;s a hint: Namespace objects also have a <code>status</code> field. While the <code>kubectl describe</code> command normally also displays the status of the object, at the time of writing this is not the case for Namespaces. I consider this to be a bug that will likely be fixed at some point. Until then, you can check the status of the namespace as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7f2875bd89ee0d5d6407c9449c66aed2" data-text-hash="12c9407954af71d573176d0d2a97d8cf" id="116" refid="116">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ns kiada-test2 -o yaml
+...
+status:
+  conditions:
+  - lastTransitionTime: "2021-10-10T08:35:11Z"
+    message: All resources successfully discovered
+    reason: ResourcesDiscovered
+    status: "False"
+    type: NamespaceDeletionDiscoveryFailure
+  - lastTransitionTime: "2021-10-10T08:35:11Z"
+    message: All legacy kube types successfully parsed
+    reason: ParsedGroupVersions
+    status: "False"
+    type: NamespaceDeletionGroupVersionParsingFailure
+  - lastTransitionTime: "2021-10-10T08:35:11Z"    #A
+    message: All content successfully deleted, may be waiting on finalization    #A
+    reason: ContentDeleted    #A
+    status: "False"    #A
+    type: NamespaceDeletionContentFailure    #A
+  - lastTransitionTime: "2021-10-10T08:35:11Z"    #B
+    message: 'Some resources are remaining: pods. has 1 resource instances'    #B
+    reason: SomeResourcesRemain    #B
+    status: "True"    #B
+    type: NamespaceContentRemaining    #B
+  - lastTransitionTime: "2021-10-10T08:35:11Z"    #C
+    message: 'Some content in the namespace has finalizers remaining:    #C
+              xyz.xyz/xyz-finalizer in 1 resource instances'    #C
+    reason: SomeFinalizersRemain    #C
+    status: "True"    #C
+    type: NamespaceFinalizersRemaining    #C
+  phase: Terminating</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWxsIG9iamVjdHMgaW4gdGhlIG5hbWVzcGFjZSB3ZXJlIG1hcmtlZCBmb3IgZGVsZXRpb24sIGJ1dCBzb21lIGhhdmVu4oCZdCBiZWVuIGZ1bGx5IGRlbGV0ZWQgeWV0LgojQiBPbmUgcG9kIHJlbWFpbnMgaW4gdGhlIG5hbWVzcGFjZS4KI0MgVGhlIHBvZCBoYXNu4oCZdCBiZWVuIGZ1bGx5IGRlbGV0ZWQgYmVjYXVzZSBhIGNvbnRyb2xsZXIgaGFzIG5vdCByZW1vdmVkIHRoZSBzcGVjaWZpZWQgZmluYWxpemVyIGZyb20gdGhlIG9iamVjdC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8a951e95b53d809128b114dbf1503b1c" data-text-hash="b89598f562619009910fdb308d9f4e48" id="117" refid="117">
+<p>When you delete the kiada-test2 namespace, you won&#8217;t see the output in this example. The command output in this example is hypothetical. I forced Kubernetes to produce it to demonstrate what happens when the delete process gets stuck. If you look at the output, you&#8217;ll see that the objects in the namespace were all successfully marked for deletion, but one pod remains in the namespace due to a finalizer that was not removed from the pod. Don&#8217;t worry about finalizers for now. You&#8217;ll learn about them soon enough.</p>
+</div>
+<div class="readable-text" data-hash="1a411bab142f8458f59e92043e95b3ca" data-text-hash="04f348ef3293df7c31cc8d07954aae55" id="118" refid="118">
+<p>Before proceeding to the next section, please also delete the <code>kiada-test1</code> namespace.</p>
+</div>
+<div class="readable-text" data-hash="b2675c7527c391246d6ecdf7c17040c7" data-text-hash="5f02ffdf60747d63072381443a31351d" id="119" refid="119">
+<h2 id="sigil_toc_id_175">10.2&#160;Organizing pods with labels</h2>
+</div>
+<div class="readable-text" data-hash="d69f53c6f602fe14e02d7c0cf83e9f90" data-text-hash="01eecb7955af189d7c4cd89b0d1e779a" id="120" refid="120">
+<p>In this book, you will build and deploy the full Kiada application suite, which is composed of several services. So far, you&#8217;ve implemented the Kiada, the Quote service, and the Quiz service. These services run in three different pods. Accompanying the pods are other types of objects, like config maps, secrets, persistent volumes, and claims.</p>
+</div>
+<div class="readable-text" data-hash="0c1a60544a0ae7db6948695b4c376849" data-text-hash="6073022fe556f91d54fecf30e0da520a" id="121" refid="121">
+<p>As you can imagine, the number of these objects will increase as the book progresses. Before things get out of hand, you need to start organizing these objects so that you and all the other users in your cluster can easily figure out which objects belong to which service.</p>
+</div>
+<div class="readable-text" data-hash="2f110d90d796069e39609408b94a24b1" data-text-hash="21c31ae2411640e8e4ea88f71f1e5a0c" id="122" refid="122">
+<p>In other systems that use a microservices architecture, the number of services can exceed 100 or more. Some of these services are replicated, which means that multiple copies of the same pod are deployed. Also, at certain points in time, multiple versions of a service are running simultaneously. This results in hundreds or even thousands of pods in the system.</p>
+</div>
+<div class="readable-text" data-hash="70d61f0ba57cd8c13bb468965c1b59ba" data-text-hash="0599a023db4a5fa78cb0d231d6be9b07" id="123" refid="123">
+<p>Imagine you, too, start replicating and running multiple releases of the pods in your Kiada suite. For example, suppose you are running both the stable and canary release of the Kiada service.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5f6f231ffbdb1e7db8391123e3859af9" data-text-hash="080b060a08b5510d95d161e76c398e95" id="124" refid="124">
+<h5>Definition&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="3bbd569f7935d04d3885ef7635210814" data-text-hash="66ec4ff139d74a6735c6b946ec55bbd9" id="125" refid="125">
+<p>A canary release is a deployment pattern where you deploy a new version of an application alongside the stable version, and direct only a small portion of requests to the new version to see how it behaves before rolling it out to all users. This prevents a bad release from being made available to too many users.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e71fd3a334d71c5cac79bb2a43d8533b" data-text-hash="20a4438baa3f7f855ef40fa6a3c359f6" id="126" refid="126">
+<p>You run three replicas of the stable Kiada version, and one canary instance. Similarly, you run three instances of the stable release of the Quote service, along with a canary release of the Quote service. You run a single, stable release of the Quiz service. All these pods are shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="9dcd085f207b9a45bd36bc11e23bb64e" data-text-hash="0f210ff3b8efa2958775621b2a1b43f9" id="127" refid="127">
+<h5>Figure 10.4 Unorganized pods of the Kiada application suite</h5>
+<img alt="" data-processed="true" height="272" id="Picture_4" loading="lazy" src="EPUB/images/10image005.png" width="861">
+</div>
+<div class="readable-text" data-hash="7661d6742efd5cf978151adb0e66309f" data-text-hash="67d9d0641008fdbb5b46cdd9f247d0ca" id="128" refid="128">
+<p>Even with only nine pods in the system, the system diagram is challenging to understand. And it doesn&#8217;t even show any of the other API objects required by the pods. It&#8217;s obvious that you need to organize them into smaller groups. You could split these three services into three namespaces, but that&#8217;s not the real purpose of namespaces. A more appropriate mechanism for this case is object <i>labels</i>.</p>
+</div>
+<div class="readable-text" data-hash="3267352db5e2abee58336524dc2eede7" data-text-hash="3915d9b143ab2efca9dc5cf48b27bf8c" id="129" refid="129">
+<h3 id="sigil_toc_id_176">10.2.1&#160;Introducing labels</h3>
+</div>
+<div class="readable-text" data-hash="4d2af130454b1ac0ea28835e459ed105" data-text-hash="32c2473de41ced78f27e2274c58eaaaf" id="130" refid="130">
+<p>Labels are an incredibly powerful yet simple feature for organizing Kubernetes API objects. A label is a key-value pair you attach to an object that allows any user of the cluster to identify the object&#8217;s role in the system. Both the key and the value are simple strings that you can specify as you wish. An object can have more than one label, but the label keys must be unique within that object. You normally add labels to objects when you create them, but you can also change an object&#8217;s labels later.</p>
+</div>
+<div class="readable-text" data-hash="71d8e4224a93b7be46d2ba6b48280da3" data-text-hash="86558429a0bc5d2466bceba36816eaa5" id="131" refid="131">
+<h4>Using labels to provide additional information about an object</h4>
+</div>
+<div class="readable-text" data-hash="58943c9dc9f8815f5fc28172838f7cc8" data-text-hash="dde824e014e26282a2846bfd2d94eb5f" id="132" refid="132">
+<p>To illustrate the benefits of adding labels to objects, let&#8217;s take the pods shown in figure 10.4. These pods run three different services - the Kiada service, the Quote, and the Quiz service. Additionally, the pods behind the Kiada and Quote services run different releases of each application. There are three pod instances running a stable release and one running a canary release.</p>
+</div>
+<div class="readable-text" data-hash="bc78b24677fe50b21d6f6c4398dd5e94" data-text-hash="68e8536a8b485478b0a9534fe457695e" id="133" refid="133">
+<p>To help identify the application and the release running in each pod, we use pod labels. Kubernetes does not care what labels you add to your objects. You can choose the keys and values however you want. In the case at hand, the following two labels make sense:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="4434d6059967c555c131b6da914ef80d" data-text-hash="5e8b5a6ccc5a88aef78e365b9c3b965a" id="134" refid="134">The <code class="codechar">app</code> label indicates to which application the pod belongs.</li>
+<li class="readable-text" data-hash="1080c90f54f468adae58c5130d79a270" data-text-hash="7c6bf8f9e6dda349679ffce6f523129b" id="135" refid="135">The <code>rel</code> label indicates whether the pod is running the stable or canary release of the application.</li>
+</ul>
+<div class="readable-text" data-hash="07b4bf35c4bc920b98db51b998130f47" data-text-hash="866912d5700f3b2760179100136eddc3" id="136" refid="136">
+<p>As you can see in the following figure, the value of the <code>app</code> label is set to <code>kiada</code> in all three <code>kiada-xxx</code> and the <code>kiada-canary</code> pod, since all these pods are running the Kiada application. The <code>rel</code> label differs between the pods running the stable release and the pod running the canary release.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="8c10710bd42a03865234d3c2c03389d2" data-text-hash="a9211c7fcdbef7ea6a25f6eae6ecd8e7" id="137" refid="137">
+<h5>Figure 10.5 Labelling pods with the app and rel label</h5>
+<img alt="" data-processed="true" height="256" id="Picture_5" loading="lazy" src="EPUB/images/10image006.png" width="859">
+</div>
+<div class="readable-text" data-hash="4d132fe1a4a3a2ba491aa9d55b8eb92b" data-text-hash="49626f3c24ad2c739cb29e6a546ab641" id="138" refid="138">
+<p>The illustration shows only the kiada pods, but imagine adding the same two labels to the other pods as well. With these labels, users that come across these pods can easily tell what application and what kind of release is running in the pod.</p>
+</div>
+<div class="readable-text" data-hash="ba9163fc327da4d256c5da9aaefbaeea" data-text-hash="430dc4985156b49790576bd761df1df5" id="139" refid="139">
+<h4>Understanding how labels keep objects organized</h4>
+</div>
+<div class="readable-text" data-hash="f6b3383c51f1eb6b0dd80e6c1537f531" data-text-hash="1f71a0181bc4b73d01efbf5437d500b2" id="140" refid="140">
+<p>If you haven&#8217;t yet realized the value of adding labels to an object, consider that by adding the <code>app</code> and <code>rel</code> labels, you&#8217;ve organized your pods in two dimensions (horizontally by application and vertically by release), as shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="317e54b5fdbee4bf82f37d69238c0856" data-text-hash="b96b40eeb148a12476d0f4f3adbcf270" id="141" refid="141">
+<h5>Figure 10.6 All the pods of the Kiada suite organized by two criteria</h5>
+<img alt="" data-processed="true" height="394" id="Picture_6" loading="lazy" src="EPUB/images/10image007.png" width="859">
+</div>
+<div class="readable-text" data-hash="baac4db0cd7df290afdb60dc3078810d" data-text-hash="d4221681ca75832b859025f703248475" id="142" refid="142">
+<p>This may seem abstract until you see how these labels make it easier to manage these pods with kubectl, so let&#8217;s get practical.</p>
+</div>
+<div class="readable-text" data-hash="25bb9dc735a361fb646dfbb5d07684f0" data-text-hash="7d6c078a9fc6bffe0b5201e67d0980bf" id="143" refid="143">
+<h3 id="sigil_toc_id_177">10.2.2&#160;Attaching labels to pods</h3>
+</div>
+<div class="readable-text" data-hash="2c37c4ace9a7dfbb18ce85b6d263dabf" data-text-hash="b04ab277e96fcd08c73089fbf8d0574f" id="144" refid="144">
+<p>The book&#8217;s code archive contains a set of manifest files with all the pods from the previous example. All the stable pods are already labelled, but the canary pods aren&#8217;t. You&#8217;ll label them manually.</p>
+</div>
+<div class="readable-text" data-hash="8b79eaed32621c135a6c22f1614997d6" data-text-hash="3c7c097c381d02387ad260fb9ac40df0" id="145" refid="145">
+<h4>Setting up the exercise</h4>
+</div>
+<div class="readable-text" data-hash="ea374c089e0a0abacd4f5e1f8f5c0889" data-text-hash="cddef3718dc09f28a91f5e1ba4bb305f" id="146" refid="146">
+<p>To get started, create a new namespace called <code>kiada</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d08e4380442ae598139005fec35b0b72" data-text-hash="e9663b3a227907311dff68cea3428c73" id="147" refid="147">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create namespace kiada
+namespace/kiada created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5ca7cd49e880413ba411a3c16bf91583" data-text-hash="6b39ea348875ba940d279cf810fb21d5" id="148" refid="148">
+<p>Configure kubectl to default to this new namespace like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9bc8884395f27ff24a876dbe5501c51f" data-text-hash="e345d63b40b9e48857dc5ec100a9a1b7" id="149" refid="149">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl config set-context --current --namespace kiada
+Context "kind-kind" modified.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="08d73b0e6b4c59edb8d4b44e3deff69d" data-text-hash="7a2f3bc00257e294a5e7de2f6ce1246c" id="150" refid="150">
+<p>The manifest files are organized into three subdirectories within <code>Chapter10/kiada-suite/</code>. Instead of applying each manifest individually, you can apply them all with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="affb58725e3834ca36e3cb8f0c7827df" data-text-hash="83cc615252d6b28bf3c8ccca128ab538" id="151" refid="151">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f kiada-suite/ --recursive    #A
+configmap/kiada-envoy-config created
+pod/kiada-001 created
+pod/kiada-002 created
+pod/kiada-003 created
+pod/kiada-canary created
+secret/kiada-tls created
+pod/quiz created
+persistentvolumeclaim/quiz-data created
+pod/quote-001 created
+pod/quote-002 created
+pod/quote-003 created
+pod/quote-canary created</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBhcHBsaWVzIGFsbCBtYW5pZmVzdHMgaW4gdGhlIGtpYWRhLXN1aXRlLyBkaXJlY3RvcnkgYW5kIGl0cyBzdWJkaXJlY3Rvcmllcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="53ad53053e6acdd99d073e98e994019a" data-text-hash="528c45d6dd49c763886c8cbe546892b9" id="152" refid="152">
+<p>You&#8217;re used to applying a single manifest file, but here you use the <code>-f</code> option to specify a directory name. Kubectl will apply all manifest files it finds in that directory. The <code>--recursive</code> option causes kubectl to look for manifests in all subdirectories instead of just the specified directory.</p>
+</div>
+<div class="readable-text" data-hash="3e2bca6b8c2d739ebf3f8858c4f7eed9" data-text-hash="636f318118c3e1eb11aded932b9695e8" id="153" refid="153">
+<p>As you can see, this command created several objects of different kinds. Labels help keep them organized.</p>
+</div>
+<div class="readable-text" data-hash="d053e8ff7303de27ebed9b5effd1f1ec" data-text-hash="131b0d8ede22d7173c7a5928df5b3e23" id="154" refid="154">
+<h4>Defining labels in object manifests</h4>
+</div>
+<div class="readable-text" data-hash="bb8152e6fa7e622d28766caded641e54" data-text-hash="e9488ceb29eb6a0f424d2e2e1f48bc03" id="155" refid="155">
+<p>Examine the manifest file <code>kiada-suite/kiada/pod.kiada-001.yaml</code> shown in the following listing. Look at the <code>metadata</code> section. Besides the <code>name</code> field, which you&#8217;ve seen many times before, this manifest also contains the <code>labels</code> field. It specifies two labels: <code>app</code> and <code>rel</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8ee3863495a6182c77935da085419c5b" data-text-hash="703df17f1f98f64938160360b8639ebe" id="156" refid="156">
+<h5>Listing 10.3 A pod with labels</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-001
+  labels:    #A
+    app: kiada    #B
+    rel: stable    #C
+spec:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG9iamVjdOKAmXMgbGFiZWxzIGFyZSBkZWZpbmVkIGluIHRoZSBtZXRhZGF0YS5sYWJlbHMgZmllbGQuCiNCIFRoZSDigJxhcHDigJ0gbGFiZWwgaXMgc2V0IHRvIOKAnGtpYWRh4oCdLgojQyBUaGUg4oCccmVs4oCdIGxhYmVsIGlzIHNldCB0byDigJxzdGFibGXigJ0u"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7d2c42a6fe67515b4da59ecb0fe23402" data-text-hash="be0d0790226b6068e626f84e01d7542b" id="157" refid="157">
+<p>Labels are supported by all object kinds. Regardless of the kind, you add labels to the object by specifying them in the <code>metadata.labels</code> map.</p>
+</div>
+<div class="readable-text" data-hash="002305393a0a90f208a8b8a482a0d36d" data-text-hash="e8330f236503aca94b252efe3eab66d6" id="158" refid="158">
+<h4>Displaying object labels</h4>
+</div>
+<div class="readable-text" data-hash="4d6bfa7117f51c8b5ff3a5666bc0d6c3" data-text-hash="024f8e2ec12161ed97f8843b955fd64c" id="159" refid="159">
+<p>You can see the labels of a particular object by running the <code>kubectl describe</code> command. View the labels of the pod <code>kiada-001</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8d687f34bca6c0f9a3d2ed9a871ab5f9" data-text-hash="69dcaf73dbf6a8cff7b84ec3d2b6f721" id="160" refid="160">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe pod kiada-001
+Name:         kiada-001
+Namespace:    kiada
+Priority:     0
+Node:         kind-worker2/172.18.0.2
+Start Time:   Sun, 10 Oct 2021 21:58:25 +0200
+Labels:       app=kiada    #A
+              rel=stable    #A
+Annotations:  &lt;none&gt;    #B
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgYXJlIHRoZSB0d28gbGFiZWxzIHRoYXQgYXJlIGRlZmluZWQgaW4gdGhpcyBwb2TigJlzIG1hbmlmZXN0IGZpbGUuCiNCIEFubm90YXRvbnMgYXJlIGV4cGxhaW5lZCBpbiBzZWN0aW9uIDEwLjQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fcfe3ba68f9a0761d3fd3159b84efaa3" data-text-hash="3af07147cfdb8cf124777aac78dc75b3" id="161" refid="161">
+<p>The <code>kubectl</code> <code>get</code> <code>pods</code> command doesn&#8217;t display labels by default, but you can display them with the <code>--show-labels</code> option. Check the labels of all pods in the namespace as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="800a53511183e9af2a09d8aa9519c8da" data-text-hash="abb5b8f83e5ff33e9a038a63cbbe25b6" id="162" refid="162">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods --show-labels
+NAME           READY   STATUS    RESTARTS   AGE   LABELS    #A
+kiada-canary   2/2     Running   0          12m   &lt;none&gt;    #B
+kiada-001      2/2     Running   0          12m   app=kiada,rel=stable   #C
+kiada-002      2/2     Running   0          12m   app=kiada,rel=stable   #C
+kiada-003      2/2     Running   0          12m   app=kiada,rel=stable   #C
+quiz           2/2     Running   0          12m   app=quiz,rel=stable   #D
+quote-canary   2/2     Running   0          12m   &lt;none&gt;    #B
+quote-001      2/2     Running   0          12m   app=quote,rel=stable   #E
+quote-002      2/2     Running   0          12m   app=quote,rel=stable   #E
+quote-003      2/2     Running   0          12m   app=quote,rel=stable   #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBvZCBsYWJlbHMgYXJlIHNob3duIGluIHRoZSBMQUJFTFMgY29sdW1uCiNCIFRoZXNlIHBvZHMgaGF2ZSBubyBsYWJlbHMuCiNDIFRoZXNlIGFyZSB0aGUgc3RhYmxlIGtpYWRhIHBvZHMuCiNEIFRoaXMgaXMgdGhlIHN0YWJsZSBxdWl6IHBvZC4KI0UgVGhlc2UgYXJlIHRoZSBzdGFibGUgcXVvdGUgcG9kcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e5d5e4250be2963f1af00b8ce9718605" data-text-hash="9ced6516cfc376c3e0f4425aa2e4743c" id="163" refid="163">
+<p>Instead of showing all labels with <code>--show-labels</code>, you can also show specific labels with the <code>--label-columns</code> option (or the shorter variant <code>-L</code>). Each label is displayed in its own column. List all pods along with their <code>app</code> and <code>rel</code> labels as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="55e4be9ec5656ed66dd41e7d6e95e05c" data-text-hash="e8fbab35cc04a3157329f262c0f25b52" id="164" refid="164">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -L app,rel
+NAME           READY   STATUS    RESTARTS   AGE   APP     REL
+kiada-canary   2/2     Running   0          14m
+kiada-001      2/2     Running   0          14m   kiada   stable
+kiada-002      2/2     Running   0          14m   kiada   stable
+kiada-003      2/2     Running   0          14m   kiada   stable
+quiz           2/2     Running   0          14m   quiz    stable
+quote-canary   2/2     Running   0          14m
+quote-001      2/2     Running   0          14m   quote   stable
+quote-002      2/2     Running   0          14m   quote   stable
+quote-003      2/2     Running   0          14m   quote   stable</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f4abb5ab6c65573dcc93a24cfc7a616a" data-text-hash="38d443124cd9a36f06b5868ebf899272" id="165" refid="165">
+<p>You can see that the two canary pods have no labels. Let&#8217;s add them.</p>
+</div>
+<div class="readable-text" data-hash="9e5ca29df73a9a80c58861f138b50da6" data-text-hash="f2900cddb42ab8c30f2c4570a5751829" id="166" refid="166">
+<h4>Adding labels to an existing object</h4>
+</div>
+<div class="readable-text" data-hash="499a74dad4381ced8ec138697986d1af" data-text-hash="6f3120d2faa28f55af05b70c2b303b11" id="167" refid="167">
+<p>To add labels to an existing object, you can edit the object&#8217;s manifest file, add labels to the <code>metadata</code> section, and reapply the manifest using <code>kubectl</code> <code>apply</code>. You can also edit the object definition directly in the API using <code>kubectl</code> <code>edit</code>. However, the simplest method is to use the <code>kubectl label</code> command.</p>
+</div>
+<div class="readable-text" data-hash="e5c849b26ebae0af32ea353f27ff0931" data-text-hash="b20e2ecd10839ff3c751cec99c58d791" id="168" refid="168">
+<p>Add the labels <code>app</code> and <code>rel</code> to the <code>kiada-canary</code> pod using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3f227240f246b62c628ad819075327df" data-text-hash="0d1a7c17286f37805aa9da432d78faaa" id="169" refid="169">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod kiada-canary app=kiada rel=canary
+pod/kiada-canary labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="791dfcc1f061889f9ae1e6bc90c32dc9" data-text-hash="59b717c11f84f0ceca952410fa367786" id="170" refid="170">
+<p>Now do the same for the pod <code>quote-canary</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7298f204b696951b3935788e31c9784f" data-text-hash="8f1242d8b12930aa5c7baf778096a7fd" id="171" refid="171">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod quote-canary app=kiada rel=canary
+pod/quote-canary labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f148d9f4453a2fdd06d91e6c6aaec8d5" data-text-hash="92289aab49b4d46219e6fcbfefd2ffae" id="172" refid="172">
+<p>List the pods and display their labels to confirm that all pods are now labelled. If you didn&#8217;t notice the error when you entered the previous command, you probably caught it when you listed the pods. The <code>app</code> label of the pod <code>quote-canary</code> is set to the wrong value (<code>kiada</code> instead of <code>quote</code>). Let&#8217;s fix this.</p>
+</div>
+<div class="readable-text" data-hash="67f94d3a4e8cca811d2582e164206eb0" data-text-hash="50de11fbf04e361d8dc6976f084d7fb3" id="173" refid="173">
+<h4>Changing labels of an existing object</h4>
+</div>
+<div class="readable-text" data-hash="6e2c5d8347804775e5cfb22ba277b567" data-text-hash="9ba1dc8d5f991e6bc20c5181d1988e74" id="174" refid="174">
+<p>You can use the same command to update object labels. To change the label you set incorrectly, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cc6a2ae8ae0d8fd836183627c7a7d324" data-text-hash="a706f90ac7f8aeb5f5ba1d3f722b7e19" id="175" refid="175">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod quote-canary app=quote
+error: 'app' already has a value (kiada), and --overwrite is false</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d36feea5a37901e8bc192a642e9deda6" data-text-hash="640c57b74b546f9de0682a40ae3f1700" id="176" refid="176">
+<p>To prevent accidentally changing the value of an existing label, you must explicitly tell kubectl to overwrite the label with <code>--overwrite</code>. Here&#8217;s the correct command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d0699111bb46cd8fe63b8572c650f6b7" data-text-hash="aa1526173599e5cde4520a2f01815de8" id="177" refid="177">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod quote-canary app=quote --overwrite
+pod/quote-canary labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="65d758c42e9424390121cf11eeaeda14" data-text-hash="1df5e8a715513275f67d56f8f8aa0328" id="178" refid="178">
+<p>List the pods again to check that all the labels are now correct.</p>
+</div>
+<div class="readable-text" data-hash="97e4327521c5349b9c7f36b29249d55c" data-text-hash="dfa709d9a7076b0dca538be60c0cba27" id="179" refid="179">
+<h4>Labelling all objects of a kind</h4>
+</div>
+<div class="readable-text" data-hash="c2541b4b45458f341f0ff8f40b24b014" data-text-hash="2042764e76195e2500148188dc50cab4" id="180" refid="180">
+<p>Now imagine that you want to deploy another application suite in the same namespace. Before doing this, it is useful to add the <code>suite</code> label to all existing pods so that you can distinguish which pods belong to one suite and which belong to the other. Run the following command to add the label to all pods in the namespace:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e2d9858f7a29353cc57029048933e901" data-text-hash="402605823e0469d576b145ea574b2e12" id="181" refid="181">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod --all suite=kiada-suite
+pod/kiada-canary labeled
+pod/kiada-001 labeled
+...
+pod/quote-003 labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2c7cb14092235c423d2ddc8d1622f5d0" data-text-hash="f25a5fa1fee4ef01fec5ee90fef2c245" id="182" refid="182">
+<p>List the pods again with the <code>--show-labels</code> or the <code>-L suite</code> option to confirm that all pods now contain this new label.</p>
+</div>
+<div class="readable-text" data-hash="8d7c22f6052d43990456a0e5833b0dce" data-text-hash="e5fe4fbe74ff8ebd5c5c741aeb1889de" id="183" refid="183">
+<h4>Removing a label from an object</h4>
+</div>
+<div class="readable-text" data-hash="3a7b908dea14fd5d893a06053b7f1a3d" data-text-hash="cacfbd359a9cde24fd28d7fdc546e9ef" id="184" refid="184">
+<p>Okay, I lied. You will not be setting up another application suite. Therefore, the <code>suite</code> label is redundant. To remove the label from an object, run the <code>kubectl label</code> command with a minus sign after the label key as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="de94ab697a4f4a07a32f8160b1475a91" data-text-hash="7bef1e45627c05a41bf41a92ca92a795" id="185" refid="185">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod kiada-canary suite-    #A
+pod/kiada-canary labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG1pbnVzIHNpZ24gc2lnbmlmaWVzIHRoZSByZW1vdmFsIG9mIGEgbGFiZWw="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="57df2a5836ea891aebd496c271f433c1" data-text-hash="2ca22b3d9dea68bf4853b65c32ea0413" id="186" refid="186">
+<p>To remove the label from all other pods, specify <code>--all</code> instead of the pod name:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e74df7219083bcd0bfb091b6dec0fe6c" data-text-hash="80c5fddda960db4912814c8a234ac334" id="187" refid="187">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod --all suite-
+label "suite" not found.    #A
+pod/kiada-canary not labeled    #A
+pod/kiada-001 labeled
+...
+pod/quote-003 labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGtpYWRhLWNhbmFyeSBwb2QgZG9lc27igJl0IGhhdmUgdGhlIHN1aXRlIGxhYmVs"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="188" refid="188">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8ac72d40529e5aceb45763779a019231" data-text-hash="65675f8b7c9a825146e7ef86646c3f83" id="189" refid="189">
+<p> If you set the label value to an empty string, the label key is not removed. To remove it, you must use the minus sign after the label key.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c4acad9914a85c78f6dbf503e5143b9f" data-text-hash="a91dd6f4980a87fe76bb570cd511265b" id="190" refid="190">
+<h3 id="sigil_toc_id_178">10.2.3&#160;Label syntax rules</h3>
+</div>
+<div class="readable-text" data-hash="f5dc224001aeef0cee9315a0179134ee" data-text-hash="ff604310a166c88171fcd190ca1c70f7" id="191" refid="191">
+<p>While you can label your objects however you like, there are some restrictions on both the label keys and the values.</p>
+</div>
+<div class="readable-text" data-hash="26fefba8957e25cde0668a6eae044c09" data-text-hash="0971712fa73fac48d2b778b436c1f157" id="192" refid="192">
+<h4>Valid label keys</h4>
+</div>
+<div class="readable-text" data-hash="eea6fcc3cc266c7333b99f81f6629192" data-text-hash="5994097205e94005911fa35094d7da94" id="193" refid="193">
+<p>In the examples, you used the label keys <code>app</code>, <code>rel</code>, and <code>suite</code>. These keys have no prefix and are considered private to the user. Common label keys that Kubernetes itself applies or reads always start with a prefix. This also applies to labels used by Kubernetes components outside of the core, as well as other commonly accepted label keys.</p>
+</div>
+<div class="readable-text" data-hash="867249a1a33d4dad58bb996e4c364635" data-text-hash="27df82cd68aafb37b92c59872a3234c5" id="194" refid="194">
+<p>An example of a prefixed label key used by Kubernetes is <code>kubernetes.io/arch</code>. You can find it on Node objects to identify the architecture type used by the node.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a367061743d6f2df5e0dcf555e8e31c9" data-text-hash="2d64d1ad40fff6ac72f24b6585afde6d" id="195" refid="195">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node -L kubernetes.io/arch
+NAME                 STATUS   ROLES                  AGE   VERSION   ARCH
+kind-control-plane   Ready    control-plane,master   31d   v1.21.1   amd64    #A
+kind-worker          Ready    &lt;none&gt;                 31d   v1.21.1   amd64    #A
+kind-worker2         Ready    &lt;none&gt;                 31d   v1.21.1   amd64    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGt1YmVybmV0ZXMuaW8vYXJjaCBsYWJlbCBpcyBzZXQgdG8gYW1kNjQgb24gYWxsIHRocmVlIG5vZGVzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="212b15613927548a2636142b7a492f97" data-text-hash="a98517720fb4105dc74caac33d72b7fe" id="196" refid="196">
+<p>The label prefixes <code>kubernetes.io/</code> and <code>k8s.io/</code> are reserved for Kubernetes components. If you want to use a prefix for your labels, use your organization&#8217;s domain name to avoid conflicts.</p>
+</div>
+<div class="readable-text" data-hash="281d595f90210e6c62967735312615cb" data-text-hash="c5cd64a7b6d8e335c31507d4781b1ab9" id="197" refid="197">
+<p>When choosing a key for your labels, some syntax restrictions apply to both the prefix and the name part. The following table provides examples of valid and invalid label keys.</p>
+</div>
+<div class="browsable-container" data-hash="3aea4fe804478c0689e2e06c2aeac3ac" data-text-hash="8367d25dec532688296cc09d94a42c32" id="198" refid="198">
+<h5>Table 10.1 Examples of valid and invalid label keys</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Valid label keys</p> </td>
+<td> <p>Invalid label keys</p> </td>
+</tr>
+<tr>
+<td> <pre>foo</pre> </td>
+<td> <pre>_foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>foo-bar_baz</pre> </td>
+<td> <pre>foo%bar*baz</pre> </td>
+</tr>
+<tr>
+<td> <pre>example/foo</pre> </td>
+<td> <pre>/foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>example/FOO</pre> </td>
+<td> <pre>EXAMPLE/foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>example.com/foo</pre> </td>
+<td> <pre>example..com/foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>my_example.com/foo</pre> </td>
+<td> <pre>my@example.com/foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>example.com/foo-bar</pre> </td>
+<td> <pre>example.com/-foo-bar</pre> </td>
+</tr>
+<tr>
+<td> <pre>my.example.com/foo</pre> </td>
+<td> <pre>a.very.long.prefix.over.253.characters/foo</pre> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="42cdf269963d5e701b18feba4b276c11" data-text-hash="9f0c7b9cd2d8873ed5d41e8d6e16ff1f" id="199" refid="199">
+<p>The following syntax rules apply to the prefix:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="c5c0fa3869ccf4532cbe93e91db9c8c4" data-text-hash="c5c0fa3869ccf4532cbe93e91db9c8c4" id="200" refid="200">Must be a DNS subdomain (must contain only lowercase alphanumeric characters, hyphens, underscores, and dots).</li>
+<li class="readable-text" data-hash="5905180bd4c8deedca9cad4ca4311b75" data-text-hash="5905180bd4c8deedca9cad4ca4311b75" id="201" refid="201">Must be no more than 253 characters long (not including the slash character).</li>
+<li class="readable-text" data-hash="1f4a4d6929cf098d4b87d310a0fa8dc9" data-text-hash="1f4a4d6929cf098d4b87d310a0fa8dc9" id="202" refid="202">Must end with a forward slash.</li>
+</ul>
+<div class="readable-text" data-hash="30868587557fc54df172f420f522393c" data-text-hash="7d87104785023aa7661d0dc5b0d8b0f8" id="203" refid="203">
+<p>The prefix must be followed by the label name, which:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="41a62c42438c29a5907ec87c452f30e3" data-text-hash="41a62c42438c29a5907ec87c452f30e3" id="204" refid="204">Must begin and end with an alphanumeric character.</li>
+<li class="readable-text" data-hash="ed120ca0091db8e55018c5f75c232c13" data-text-hash="ed120ca0091db8e55018c5f75c232c13" id="205" refid="205">May contain hyphens, underscores, and dots.</li>
+<li class="readable-text" data-hash="3931d3941ad2b1ea1ca19c3b0ce0d475" data-text-hash="3931d3941ad2b1ea1ca19c3b0ce0d475" id="206" refid="206">May contain uppercase letters.</li>
+<li class="readable-text" data-hash="1e8d264193c3855ab6f990dc473bf28e" data-text-hash="1e8d264193c3855ab6f990dc473bf28e" id="207" refid="207">May not be longer than 63 characters.</li>
+</ul>
+<div class="readable-text" data-hash="20f78f55e0636ec5b00f64c707e694d6" data-text-hash="e52590abcad83728292925e00a6df9a7" id="208" refid="208">
+<h4>Valid label values</h4>
+</div>
+<div class="readable-text" data-hash="6c00a16d972c1f88b30bc19fd525f988" data-text-hash="769116da0b1114799eb34929be16fe33" id="209" refid="209">
+<p>Remember that labels are used to add identifying information to your objects. As with label keys, there are certain rules you must follow for label values. For example, label values can&#8217;t contain spaces or special characters. The following table provides examples of valid and invalid label values.</p>
+</div>
+<div class="browsable-container" data-hash="0f8f6c5e9efbfb119965ef5d33d793d1" data-text-hash="d745eea53c1535f831791877b721f4cc" id="210" refid="210">
+<h5>Table 10.2 Examples of valid and invalid label values</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Valid label values</p> </td>
+<td> <p>Invalid label values</p> </td>
+</tr>
+<tr>
+<td> <pre>foo</pre> </td>
+<td> <pre>_foo</pre> </td>
+</tr>
+<tr>
+<td> <pre>foo-bar_baz</pre> </td>
+<td> <pre>foo%bar*baz</pre> </td>
+</tr>
+<tr>
+<td> <pre>FOO</pre> </td>
+<td> <pre>value.longer.than.63.characters</pre> </td>
+</tr>
+<tr>
+<td> <p>(empty)</p> </td>
+<td> <pre>value with spaces</pre> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="1d5b166b66367444db554d45432c3b58" data-text-hash="4aa29fd98c1ca358a26210caf9a0831f" id="211" refid="211">
+<p>A label value:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="b4596d4845dbca527dcf4fc4ecf00c84" data-text-hash="b4596d4845dbca527dcf4fc4ecf00c84" id="212" refid="212">May be empty.</li>
+<li class="readable-text" data-hash="54e205ffd8f3ff175d07b4707f5481b0" data-text-hash="54e205ffd8f3ff175d07b4707f5481b0" id="213" refid="213">Must begin with an alphanumeric character if not empty.</li>
+<li class="readable-text" data-hash="7d822e4b565833afe33598ddbfb116ca" data-text-hash="7d822e4b565833afe33598ddbfb116ca" id="214" refid="214">May contain only alphanumeric characters, hyphens, underscores, and dots.</li>
+<li class="readable-text" data-hash="55f3a7172e873be702781afc127ad6cd" data-text-hash="55f3a7172e873be702781afc127ad6cd" id="215" refid="215">Must not contain spaces or other whitespace.</li>
+<li class="readable-text" data-hash="6264312d2c27af294f334c46244eac8b" data-text-hash="6264312d2c27af294f334c46244eac8b" id="216" refid="216">Must be no more than 63 characters long.</li>
+</ul>
+<div class="readable-text" data-hash="2fb3aedea306dcaa730573bb68f273f3" data-text-hash="9d2e12e3858f1f74ae862352b7091cc4" id="217" refid="217">
+<p>If you need to add values that don&#8217;t follow these rules, you can add them as annotations instead of labels. You&#8217;ll learn more about annotations later in this chapter.</p>
+</div>
+<div class="readable-text" data-hash="a4590595961ed527bc31246707bc4919" data-text-hash="604edfdb5c0c530eb7b65ed46e25afb5" id="218" refid="218">
+<h3 id="sigil_toc_id_179">10.2.4&#160;Using standard label keys</h3>
+</div>
+<div class="readable-text" data-hash="7d5339bb85ae8eb7b85df5059bc22719" data-text-hash="c535799fe569dda18315b4eb8c9eef6e" id="219" refid="219">
+<p>While you can always choose your own label keys, there are some standard keys you should know. Some of these are used by Kubernetes itself to label system objects, while others have become common for use in user-created objects.</p>
+</div>
+<div class="readable-text" data-hash="9cfdc20ed1a4b31912551375c25784dd" data-text-hash="c11eff50a97d832eaf7fca72a6ce863b" id="220" refid="220">
+<h4>Well-known labels used by Kubernetes</h4>
+</div>
+<div class="readable-text" data-hash="7b6c5b5838e1f920e867e608c6f4fd9d" data-text-hash="eaa3cc1b9cf20fbf1364dab302d0559e" id="221" refid="221">
+<p>Kubernetes doesn&#8217;t usually add labels to the objects you create. However, it does use various labels for system objects such as Nodes and PersistentVolumes, especially if the cluster is running in a cloud environment. The following table lists some well-known labels you might find on these objects.</p>
+</div>
+<div class="browsable-container" data-hash="7ca505b93e501e034ed4d478d01f09f7" data-text-hash="d28ea72b04bb8af4e54091a7639d0aaa" id="222" refid="222">
+<h5>Table <span xml:lang="SL">10</span>.3 Well-known labels on Nodes and PersistentVolumes</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Label key</p> </td>
+<td> <p>Example value</p> </td>
+<td> <p>Applied to</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <pre>kubernetes.io/arch</pre> </td>
+<td> <pre>amd64</pre> </td>
+<td> <p>Node</p> </td>
+<td> <p>The architecture of the node.</p> </td>
+</tr>
+<tr>
+<td> <pre>kubernetes.io/os</pre> </td>
+<td> <pre>linux</pre> </td>
+<td> <p>Node</p> </td>
+<td> <p>The operating system running on the node.</p> </td>
+</tr>
+<tr>
+<td> <pre>kubernetes.io/hostname</pre> </td>
+<td> <pre>worker-node2</pre> </td>
+<td> <p>Node</p> </td>
+<td> <p>The node&#8217;s hostname.</p> </td>
+</tr>
+<tr>
+<td> <pre>topology.kubernetes.io/ region</pre> </td>
+<td> <pre>eu-west3</pre> </td>
+<td> <p>Node</p> <p>PersistentVolume</p> </td>
+<td> <p>The region in which the node or persistent volume is located.</p> </td>
+</tr>
+<tr>
+<td> <pre>topology.kubernetes.io/ zone</pre> </td>
+<td> <pre>eu-west3-c</pre> </td>
+<td> <p>Node</p> <p>PersistentVolume</p> </td>
+<td> <p>The zone in which the node or persistent volume is located.</p> </td>
+</tr>
+<tr>
+<td> <pre>node.kubernetes.io/ instance-type</pre> </td>
+<td> <pre>micro-1</pre> </td>
+<td> <p>Node</p> </td>
+<td> <p>The node instance type. Set when using cloud-provided infrastructure.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="223" refid="223">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b008cd649ff31da72946e67ed128a7ea" data-text-hash="4a6fa4ba57215bc10373c08bf81c9ba6" id="224" refid="224">
+<p> You can also find some of these labels under the older prefix <code>beta.kubernetes.io</code>, in addition to <code>kubernetes.io</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2bdd22c496a007f57a5ee2da18dbae25" data-text-hash="74a09af86b1b2d8d753d3e0b9cd4dc04" id="225" refid="225">
+<p>Cloud providers can provide additional labels for nodes and other objects. For example, Google Kubernetes Engine adds the labels <code>cloud.google.com/gke-nodepool</code> and <code>cloud.google.com/gke-os-distribution</code> to provide further information about each node. You can also find more standard labels on other objects.</p>
+</div>
+<div class="readable-text" data-hash="d53a385a0ca5797930a6cfb9f965ae18" data-text-hash="23384840f1ab551642ffd5839f4c385d" id="226" refid="226">
+<h4>Recommended labels for deployed application components</h4>
+</div>
+<div class="readable-text" data-hash="2f3e69603971a46e7bd974ca1594075f" data-text-hash="259a12511400b12abf3087cbe3d80352" id="227" refid="227">
+<p>The Kubernetes community has agreed on a set of standard labels that you can add to your objects so that other users and tools can understand them. The following table lists these standard labels.</p>
+</div>
+<div class="browsable-container" data-hash="090c2ef1780fb1a445427701db3837a1" data-text-hash="2bec65668e22aab27c191d8f270497be" id="228" refid="228">
+<h5>Table <span xml:lang="SL">10</span>.4 <span xml:lang="SL">Recommended labels used in the Kubernetes community</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Label</p> </td>
+<td> <p>Example</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/name</pre> </td>
+<td> <pre>quotes</pre> </td>
+<td> <p>The name of the application. If the application consists of multiple components, this is the name of the entire application, not the individual components.</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/instance</pre> </td>
+<td> <pre>quotes-foo</pre> </td>
+<td> <p>The name of this application instance. If you create multiple instances of the same application for different purposes, this label helps you distinguish between them.</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/component</pre> </td>
+<td> <pre>database</pre> </td>
+<td> <p>The role that this component plays in the application architecture.</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/part-of</pre> </td>
+<td> <pre>kubia-demo</pre> </td>
+<td> <p>The name of the application suite to which this application belongs.</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/version</pre> </td>
+<td> <pre>1.0.0</pre> </td>
+<td> <p>The version of the application.</p> </td>
+</tr>
+<tr>
+<td> <pre>app.kubernetes.io/managed-by</pre> </td>
+<td> <pre>quotes-operator</pre> </td>
+<td> <p>The tool that manages the deployment and update of this application.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="39e8636dd6fef645c259c6892432079e" data-text-hash="64c165052d8304fe88a3f74ce0d30f1b" id="229" refid="229">
+<p>All objects belonging to the same application instance should have the same set of labels. For example, the pod and the persistent volume claim used by that pod should have the same values for the labels listed in the previous table. This way, anyone using the Kubernetes cluster can see which components belong together and which do not. Also, you can manage these components using bulk operations by using label selectors, which are explained in the next section.</p>
+</div>
+<div class="readable-text" data-hash="9357828e807cdabf8b0448873636ca6a" data-text-hash="d61e162037ce5e5b02eb154c4307a35e" id="230" refid="230">
+<h2 id="sigil_toc_id_180">10.3&#160;Filtering objects with label selectors</h2>
+</div>
+<div class="readable-text" data-hash="f17fca50d4b906445ba7f2e0f3b5f679" data-text-hash="c5c8b9ef28729b2b7d2b3518d21e8982" id="231" refid="231">
+<p>The labels you added to the pods in the previous exercises allow you to identify each object and understand its place in the system. So far, these labels have only provided additional information when you list objects. But the real power of labels comes when you use <i>label selectors</i> to filter objects based on their labels.</p>
+</div>
+<div class="readable-text" data-hash="1a9820cc7e83f2dc33b8dfe7cfd04dab" data-text-hash="f9bf8ec62b3a811446ee382512abd744" id="232" refid="232">
+<p>Label selectors allow you to select a subset of pods or other objects that contain a particular label and perform an operation on those objects. A label selector is a criterion that filters objects based on whether they contain a particular label key with a particular value.</p>
+</div>
+<div class="readable-text" data-hash="eb061a97b14ac12a2d9ee925a401f62a" data-text-hash="15ddb77f625cdb08ce095d759fd3b5c9" id="233" refid="233">
+<p>There are two types of label selectors:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="6ec6cad31ad3c172efe39d9f9f6d8f24" data-text-hash="a78e693631763eba44b7e5aa6ac50e6d" id="234" refid="234"><i>equality-based</i> selectors, and</li>
+<li class="readable-text" data-hash="f493a5c413434fb2b9b35624f22b09aa" data-text-hash="0e20c0f7f7a760e87ba6fb105eb1ad4e" id="235" refid="235"><i>set-based</i> selectors.</li>
+</ul>
+<div class="readable-text" data-hash="0d0a122ba266ea909b5a8a9fe4fae3a5" data-text-hash="97588260583b7a5c5784abb41c76a656" id="236" refid="236">
+<h4>Introducing equality-based selectors</h4>
+</div>
+<div class="readable-text" data-hash="0f4781436a4594f761e1cbe638b92e39" data-text-hash="d1680db27bd0a01bdd8b27af147647a9" id="237" refid="237">
+<p>An equality-based selector can filter objects based on whether the value of a particular label is equal to or not equal to a particular value. For example, applying the label selector <code>app=quote</code> to all pods in our previous example selects all quote pods (all stable instances plus the canary instance), as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ac51d1cc43e17354b7fccae1f87a0e92" data-text-hash="19a2ee6292a7733407d466f02dceb7bc" id="238" refid="238">
+<h5>Figure 10.7 Selecting objects using an equality-based selector</h5>
+<img alt="" data-processed="true" height="361" id="Picture_7" loading="lazy" src="EPUB/images/10image008.png" width="851">
+</div>
+<div class="readable-text" data-hash="6d7aaad40bb1cc2e9f546c798645d7b9" data-text-hash="f02c0c4ac22a9652c8327e55d144d4b0" id="239" refid="239">
+<p>Similarly, the label selector <code>app!=quote</code> selects all pods except the quote pods.</p>
+</div>
+<div class="readable-text" data-hash="803fe39c605e450d185005aead14c59d" data-text-hash="1bc426ed3435cc5b85eafe420c8d814c" id="240" refid="240">
+<h4>Introducing set-based selectors</h4>
+</div>
+<div class="readable-text" data-hash="54431fe5e286604caf732bf76cb17233" data-text-hash="085caddd0fddd9a89207ea9b65478a73" id="241" refid="241">
+<p>Set-based selectors are more powerful and allow you to specify:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="30c0b46be288ccf00d2e0c75c7b5f27d" data-text-hash="3ee3eb878d133d02a9814bd74451ab90" id="242" refid="242">a set of values that a particular label must have; for example: <code class="codechar">app in (quiz, quote)</code>,</li>
+<li class="readable-text" data-hash="54484b1e4b7bd784e1ad0698c0251fd4" data-text-hash="880921a3ca4bdf15da7c50803c07f7e5" id="243" refid="243">a set of values that a particular label must not have; for example: <code>app notin (kiada)</code>,</li>
+<li class="readable-text" data-hash="bbb655cda71a2f50e523de6403ed3b23" data-text-hash="afdbf3065e53cad3f30aa6b652b42305" id="244" refid="244">a particular label key that should be present in the object&#8217;s labels; for example, to select objects that have the <code>app</code> label, the selector is simply <code>app</code>,</li>
+<li class="readable-text" data-hash="8c25204cebc18dda8835816bac39a963" data-text-hash="4d552b4976540dfad464fd974dd361b9" id="245" refid="245">a particular label key that should not be present in the object&#8217;s labels; for example, to select objects that do not have the <code>app</code> label, the selector is <code>!app</code>.</li>
+</ul>
+<div class="readable-text" data-hash="8691f5fb822a035083eca15ebb0a08b4" data-text-hash="741929bfcbdb7d15ad9143e41a295d7c" id="246" refid="246">
+<h4>Combining multiple selectors</h4>
+</div>
+<div class="readable-text" data-hash="bfd915e9a2519497cd59157af64fa9ad" data-text-hash="26d9899b880493035519abe5c8201c61" id="247" refid="247">
+<p>When you filter objects, you can combine multiple selectors. To be selected, an object must match all of the specified selectors. As shown in the following figure, the selector <code>app=quote,rel=canary</code> selects the pod <code>quote-canary</code>.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="1bba62cf67aa02780d1331940501e70b" data-text-hash="cbee216b025c44727146ee028a92adb1" id="248" refid="248">
+<h5>Figure 10.8 Combining two label selectors</h5>
+<img alt="" data-processed="true" height="313" id="Picture_8" loading="lazy" src="EPUB/images/10image009.png" width="846">
+</div>
+<div class="readable-text" data-hash="9cb642b7ec47d7c9f497a4233cb2619c" data-text-hash="2b1f372b1fb37603da095876903062a1" id="249" refid="249">
+<p>You use label selectors when managing objects with kubectl, but they are also used internally by Kubernetes when an object references a subset of other objects. These scenarios are covered in the next two sections.</p>
+</div>
+<div class="readable-text" data-hash="a86843c88a87cf5f060794b87210abc9" data-text-hash="ebe1dcb0829776630c7327879c610437" id="250" refid="250">
+<h3 id="sigil_toc_id_181">10.3.1&#160;Using label selectors for object management with kubectl</h3>
+</div>
+<div class="readable-text" data-hash="6c146853fda53dc6d7e05d9276842e0f" data-text-hash="79ec258346475f71ae4301f848f408be" id="251" refid="251">
+<p>If you&#8217;ve been following the exercises in this book, you&#8217;ve used the <code>kubectl get</code> command many times to list objects in your cluster. When you run this command without specifying a label selector, it prints all the objects of a particular kind. Fortunately, you never had more than a few objects in the namespace, so the list was never too long. In real-world environments, however, you can have hundreds of objects of a particular kind in the namespace. That&#8217;s when label selectors come in.</p>
+</div>
+<div class="readable-text" data-hash="2f735f872295cedaffa07e6fcfd526ae" data-text-hash="24611ea6ab12b3e680e723fbedd96a91" id="252" refid="252">
+<h4>Filtering the list of objects using label selectors</h4>
+</div>
+<div class="readable-text" data-hash="108da0cc7254a6b217f350c6f5086542" data-text-hash="92fc6a7898889eded72e932290910ee8" id="253" refid="253">
+<p>You&#8217;ll use a label selector to list the pods you created in the <code>kiada</code> namespace in the previous section. Let&#8217;s try the example in figure 10.7, where the selector <code>app=quote</code> was used to select only the pods running the quote application. To apply a label selector to <code>kubectl get</code>, specify it with the <code>--selector</code> argument (or the short equivalent <code>-l</code>) as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="66f9ad10f41043a508c66c032f632c1b" data-text-hash="a54a901f37c6aa70e834f36d1c5bde31" id="254" refid="254">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=quote
+NAME           READY   STATUS    RESTARTS   AGE
+quote-canary   2/2     Running   0          2h
+quote-001      2/2     Running   0          2h
+quote-002      2/2     Running   0          2h
+quote-003      2/2     Running   0          2h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6ba0711f921772eb32e202922aa6b1c7" data-text-hash="f8c77e8de986cdf14c473cafc3e621ee" id="255" refid="255">
+<p>Only the quote pods are shown. Other pods are ignored. Now, as another example, try listing all the canary pods:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="abb85aaf3d5cf87293e9d934bcb6fd37" data-text-hash="baf69a139007dfd00025a5535afdbe72" id="256" refid="256">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l rel=canary
+NAME           READY   STATUS    RESTARTS   AGE
+kiada-canary   2/2     Running   0          2h
+quote-canary   2/2     Running   0          2h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ba6a109983a8b2c6def7f2bec2900210" data-text-hash="7417c56a1f8d1e715a66d4867b3eac44" id="257" refid="257">
+<p>Let&#8217;s also try the example from figure 10.8, combining the two selectors <code>app=quote</code> and <code>rel=canary</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="036fb77789a5a1121efdfe99f270a48b" data-text-hash="082230cee3f65e1230cc9f3c75dd9887" id="258" refid="258">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=quote,rel=canary
+NAME           READY   STATUS    RESTARTS   AGE
+quote-canary   2/2     Running   0          2h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e8bb472ff1412d7566790aed2428c590" data-text-hash="5168e50300b0818e37c992c91480ed19" id="259" refid="259">
+<p>Only the labels of the <code>quote-canary</code> pod match both label selectors, so only this pod is shown.</p>
+</div>
+<div class="readable-text" data-hash="bfef32f4a1d2d35f3b0d572774058e3b" data-text-hash="1821c12233200791d01f47ef8a86dc84" id="260" refid="260">
+<p>As the next example, try using a set-based selector. To display all quiz and quote pods, use the selector <code>&#8217;app in (quiz, quote)&#8217;</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="61d5c51bf850a9eea6a942da7a27884a" data-text-hash="98c3f13de2972fc4a665e8c60761cbdd" id="261" refid="261">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l 'app in (quiz, quote)' -L app
+NAME           READY   STATUS    RESTARTS   AGE   APP
+quiz           2/2     Running   0          2h    quiz
+quote-canary   2/2     Running   0          2h    quote
+quote-001      2/2     Running   0          2h    quote
+quote-002      2/2     Running   0          2h    quote
+quote-003      2/2     Running   0          2h    quote</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="09c885dc958614ebb6339b32b1238cf6" data-text-hash="bf9691230b7c89fcaf4e28f321d77fd0" id="262" refid="262">
+<p>You&#8217;d get the same result if you used the equality-based selector <code>&#8217;app!=kiada&#8217;</code> or the set-based selector <code>&#8217;app notin (kiada)&#8217;</code>. The <code>-L app</code> option in the command displays the value of the <code>app</code> label for each pod (see the <code>APP</code> column in the output).</p>
+</div>
+<div class="readable-text" data-hash="b7e912d2dea9e3313cf81762607ec969" data-text-hash="f25db4ee1b9f2b1c594ab3d2a94a71b7" id="263" refid="263">
+<p>The only two selectors you haven&#8217;t tried yet are the ones that only test for the presence (or absence) of a particular label key. If you want to try them, first remove the <code>rel</code> label from the <code>quiz</code> pod with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="43c8c4ad7630f948d67f4eddb8ea4f40" data-text-hash="b6a960163732fc754f96e99610cd01fa" id="264" refid="264">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label pod quiz rel-
+pod/quiz labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="981d9c1abd69c0422b4f79551e9cf766" data-text-hash="357a33cf6a28b8b5399984e38f361821" id="265" refid="265">
+<p>You can now list pods that do not have the <code>rel</code> label like so:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="aca178320b288ef03aad9f086dcec46b" data-text-hash="cdbf85ace715fd9444d595c2abcd5635" id="266" refid="266">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l '!rel'
+NAME   READY   STATUS    RESTARTS   AGE
+quiz   2/2     Running   0          2h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="9422eb5bbae64e9e841a7c50f677bf53" data-text-hash="c7cec814ce9534a527989a293921dbfc" id="267" refid="267">
+<h5>NOTE&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="da90390cb7e9c18d464455ed57e07e77" data-text-hash="01400cc8c8d5b4680d6a888df392cd13" id="268" refid="268">
+<p>Make sure to use single quotes around <code>!rel</code>, so your shell doesn&#8217;t evaluate the exclamation mark.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9516f0f9103a2754e42ca293bc21d9ea" data-text-hash="12dfbb14446628d59a47a7f6c5feb271" id="269" refid="269">
+<p>And to list all pods that <i>do</i> have the <code>rel</code> label, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="64aeea68fe4893068e0ab3181dc41e07" data-text-hash="3d1fce55b8c6b77c0c482ecd64aa8e50" id="270" refid="270">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l rel</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2679d34c9e218e516b09fb0b1b16f051" data-text-hash="4a225a24406ce78a69a60bd2b4242e42" id="271" refid="271">
+<p>The command should show all pods except the <code>quiz</code> pod.</p>
+</div>
+<div class="readable-text" data-hash="7769123ba90f1ac60a9279e9e348234d" data-text-hash="e52e0447f79f727d800179c73a827d12" id="272" refid="272">
+<p>If your Kubernetes cluster is running in the cloud and distributed across multiple regions or zones, you can also try to list nodes of a particular type or list nodes and persistent volumes in a particular region or zone. In table 10.3, you can see which label key to specify in the selector.</p>
+</div>
+<div class="readable-text" data-hash="385fa7471727896a6bb95698458d2cde" data-text-hash="a1a6dabacfd0cbeadf2da67cd777136b" id="273" refid="273">
+<p>You&#8217;ve now mastered the use of label selectors when listing objects. Do you have the confidence to use them for deleting objects as well?</p>
+</div>
+<div class="readable-text" data-hash="fa760b8743004d719248fe444d2c2e79" data-text-hash="ccc25c00745ef5d497068588048690db" id="274" refid="274">
+<h4>Deleting objects using a label selector</h4>
+</div>
+<div class="readable-text" data-hash="ee0fef3317a58a4bbdea5c95d1b79392" data-text-hash="62faf719e431acc10eb305168f064d41" id="275" refid="275">
+<p>There are currently two canary releases in use in your system. It turns out that they aren&#8217;t behaving as expected and need to be terminated. You could list all canaries in your system and remove them one by one. A faster method is to use a label selector to delete them in a single operation, as illustrated in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d6fd94a9edf2f711d98a7cd2c4ed7a4b" data-text-hash="6abb7a7eff199bb243192856161f60a9" id="276" refid="276">
+<h5>Figure 10.9 Selecting and deleting all canary pods using the <code>rel=canary</code> label selector</h5>
+<img alt="" data-processed="true" height="303" id="Picture_9" loading="lazy" src="EPUB/images/10image010.png" width="853">
+</div>
+<div class="readable-text" data-hash="731720ad0bea34f516a94056b58f4de6" data-text-hash="d051853267f58cef9dee2b2eb0e99b58" id="277" refid="277">
+<p>Delete the canary pods with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c1d9e3256742c19c9a5206c137b31063" data-text-hash="9a4177f56e063640e1b59ba945839652" id="278" refid="278">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pods -l rel=canary
+pod "kiada-canary" deleted
+pod "quote-canary" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4e5882c9d572ad896579c895b8080bfd" data-text-hash="5785d46e0c8afb176cfe69a75bd76807" id="279" refid="279">
+<p>The output of the command shows that both the <code>kiada-canary</code> and <code>quote-canary</code> pods have been deleted. However, because the <code>kubectl delete</code> command does not ask for confirmation, you should be very careful when using label selectors to delete objects. Especially in a production environment.</p>
+</div>
+<div class="readable-text" data-hash="068985c295aba52832b81f5306090ed9" data-text-hash="7a291627fb4477950fe3455f391fbeb7" id="280" refid="280">
+<h3 id="sigil_toc_id_182">10.3.2&#160;Utilizing label selectors within Kubernetes API objects</h3>
+</div>
+<div class="readable-text" data-hash="81162ddbcb585c246e9a8df56640ddba" data-text-hash="dc3a894a475db352056435a68c1d5f45" id="281" refid="281">
+<p>You&#8217;ve learned how to use labels and selectors with kubectl to organize your objects and filter them, but selectors are also used within Kubernetes API objects.</p>
+</div>
+<div class="readable-text" data-hash="f87dba0eb355c122768b155b847d865e" data-text-hash="16bff2d330609e02813f217e53588c44" id="282" refid="282">
+<p>For example, you can specify a node selector in each Pod object to specify which nodes the pod can be scheduled to. In the next chapter, which explains the Service object, you&#8217;ll learn that you need to define a pod selector in this object to specify a pod subset to which the service will forward traffic. In the following chapters, you&#8217;ll see how pod selectors are used by objects such as Deployment, ReplicaSet, DaemonSet, and StatefulSet to define the set of pods that belong to these objects.</p>
+</div>
+<div class="readable-text" data-hash="5cf336751876f67dbe5fb10246d8d7cc" data-text-hash="6e2225064e86dedbe08e043aac8fe7e3" id="283" refid="283">
+<h4>Using label selectors to schedule pods to specific nodes</h4>
+</div>
+<div class="readable-text" data-hash="0de6b14d55b45b20d4ebf9973182a8ec" data-text-hash="10d65b336afb15db6afb1d5d98fb58d8" id="284" refid="284">
+<p>All the pods you&#8217;ve created so far have been randomly distributed across your entire cluster. Normally, it doesn&#8217;t matter which node a pod is scheduled to, because each pod gets exactly the amount of compute resources it requests (CPU, memory, and so on). Also, other pods can access this pod regardless of which node this and the other pods are running on. However, there are scenarios where you may want to deploy certain pods only on a specific subset of nodes.</p>
+</div>
+<div class="readable-text" data-hash="1ddb4078a1460361ec2c4294b62aba00" data-text-hash="fe8845f876dcd75256c560527c96ec3a" id="285" refid="285">
+<p>A good example is when your hardware infrastructure isn&#8217;t homogenous. If some of your worker nodes use spinning disks while others use SSDs, you may want to schedule pods that require low-latency storage only to the nodes that can provide it.</p>
+</div>
+<div class="readable-text" data-hash="c707e2679a01e3a1dd9cd1de480bb65e" data-text-hash="9838fb2a55b3f9633890333796c9cd2e" id="286" refid="286">
+<p>Another example is if you want to schedule front-end pods to some nodes and back-end pods to others. Or if you want to deploy a separate set of application instances for each customer and want each set to run on its own set of nodes for security reasons.</p>
+</div>
+<div class="readable-text" data-hash="d02f2d642e51bbf4c66c258b65864a28" data-text-hash="235b662849ef69c5fad8a7f6ff46753d" id="287" refid="287">
+<p>In all of these cases, rather than scheduling a pod to a particular node, allow Kubernetes to select a node out from a set of nodes that meet the required criteria. Typically, you&#8217;ll have more than one node that meets the specified criteria, so that if one node fails, the pods running on it can be moved to the other nodes.</p>
+</div>
+<div class="readable-text" data-hash="f9548a6fc72cb7871c05d5efa644bcb5" data-text-hash="a8ef8d5e3898ed881c47b974e570a021" id="288" refid="288">
+<p>The mechanisms you can use to do this are labels and selectors.</p>
+</div>
+<div class="readable-text" data-hash="624e0a0c97ed8bfa450cc461f66527a2" data-text-hash="6ec3207382d8be98bc986530a6ba7e19" id="289" refid="289">
+<h4>Attaching labels to nodes</h4>
+</div>
+<div class="readable-text" data-hash="3dedceeaf98b26eb5f3fcb92406259ad" data-text-hash="3402eeb6ad27f9909aea8419cb3dccab" id="290" refid="290">
+<p>The Kiada application suite consists of the Kiada, Quiz, and Quote services. Let&#8217;s consider the Kiada service as the front-end and the Quiz and Quote services as the back-end services. Imagine that you want the Kiada pods to be scheduled only to the cluster nodes that you reserve for front-end workloads. To do this, you first label some of the nodes as such.</p>
+</div>
+<div class="readable-text" data-hash="b792511b7f32593f21f4990f92e324dc" data-text-hash="8e44086c3e22129c54e867189e50ff56" id="291" refid="291">
+<p>First, list all the nodes in your cluster and select one of the worker nodes. If your cluster consists of only one node, use that one.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7cdda8591a6d29b8837c3832d240fc85" data-text-hash="29eed99afe48bd423188f531ded0d4bd" id="292" refid="292">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node
+NAME                 STATUS   ROLES                  AGE   VERSION
+kind-control-plane   Ready    control-plane,master   1d    v1.21.1
+kind-worker          Ready    &lt;none&gt;                 1d    v1.21.1
+kind-worker2         Ready    &lt;none&gt;                 1d    v1.21.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d18d15ddbb165118d961f1917723f7df" data-text-hash="b5ad4900854f6509772a5dbdb7716ec5" id="293" refid="293">
+<p>In this example, I choose the <code>kind-worker</code> node as the node for the front-end workloads. After selecting your node, add the <code>node-role: front-end</code> label to it as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b1eb4689aa134687c425d20860986460" data-text-hash="6470b78acabeaf3a6ce70be6aecc6ef4" id="294" refid="294">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label node kind-worker node-role=front-end
+node/kind-worker labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4f550918762c402b456575573e5648b3" data-text-hash="9eeccdc8de11ee2f09e1448a27333101" id="295" refid="295">
+<p>Now list the nodes with a label selector to confirm that this is the only front-end node:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="60c6f08ccf17118208046bbfdee53913" data-text-hash="e056f6e11a5c57eb735d7817033f0ffc" id="296" refid="296">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node -l node-role=front-end
+NAME          STATUS   ROLES    AGE   VERSION
+kind-worker   Ready    &lt;none&gt;   1d    v1.21.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0ffde41d7a75bdcd07e3d54af805dac6" data-text-hash="b06501dbc6f033f09976c40d034beedc" id="297" refid="297">
+<p>If your cluster has many nodes, you can label multiple nodes this way.</p>
+</div>
+<div class="readable-text" data-hash="776696adfe869928f1abfd605f86d96b" data-text-hash="035d468bb37dcb4ce7f7e9f8602c2297" id="298" refid="298">
+<h4>Scheduling pods to nodes with specific labels</h4>
+</div>
+<div class="readable-text" data-hash="f702725fffc7c19546dffd40864553b3" data-text-hash="8a80495fcce5419a82a454a7093d2a0a" id="299" refid="299">
+<p>To schedule a pod to the node(s) you designated as front-end nodes, you must add a node selector to the pod&#8217;s manifest before you create the pod. The following listing shows the contents of the <code>pod.kiada-front-end.yaml</code> manifest file. The node selector is specified in the <code>spec.nodeSelector</code> field.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c1ed938da598b8e6ebe0b4b71303f18e" data-text-hash="7f0889ce8bee734d70b87c2c4c4f179d" id="300" refid="300">
+<h5>Listing 3.4 Using a node selector to schedule a pod to a specific node</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-front-end
+spec:
+  nodeSelector:    #A
+    node-role: front-end    #A
+  volumes:</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2QgbWF5IG9ubHkgYmUgc2NoZWR1bGVkIHRvIG5vZGVzIHdpdGggdGhlIG5vZGUtcm9sZT1mcm9udC1lbmQgbGFiZWwu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7ebfc3695494a50fd4032482b232821" data-text-hash="17ac2fadfc249d017da71c7e3b9e394c" id="301" refid="301">
+<p>In the <code>nodeSelector</code> field, you can specify one or more label keys and values that the node must match to be eligible to run the pod. Note that this field only supports specifying an equality-based label selector. The label value must match the value in the selector. You can&#8217;t use a not-equal or set-based selector in the <code>nodeSelector</code> field. However, set-based selectors are supported in other objects.</p>
+</div>
+<div class="readable-text" data-hash="cd5fc3d7bd10d1839826ade20ad36f69" data-text-hash="54c45f44dda9a6dd394f12dc9106d704" id="302" refid="302">
+<p>When you create the pod from the previous listing by applying the manifest with <code>kubectl apply</code>, you&#8217;ll see that the pod is scheduled to the node(s) that you have labelled with the label <code>node-role: front-end</code>. You can confirm this by displaying the pod with the <code>-o wide</code> option to show the pod&#8217;s node as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9b50693997e12ac065103c914f603212" data-text-hash="d4d845c434eca14e96003457b002ec92" id="303" refid="303">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pod kiada-front-end -o wide
+NAME              READY   STATUS    RESTARTS   AGE   IP            NODE          
+kiada-front-end   2/2     Running   0          1m    10.244.2.20   kind-worker   #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBvZCBpcyBydW5uaW5nIG9uIHRoZSBraW5kLXdvcmtlciBub2RlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a483040ad45f25ff43339829b49fd2ac" data-text-hash="b337cf346e41fc55c4c2577ffd76b6f1" id="304" refid="304">
+<p>You can delete and recreate the pod several times to make sure that it always lands on the front-end node(s).</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="444b115d6e9c337892ff242bd23e058d" data-text-hash="ffaa47ddd6cbbbe2406eb8b5da8f7a2a" id="305" refid="305">
+<h5>Note&#8195;</h5>
+</div>
+<div class="readable-text" data-hash="6c91d74dbdfd1afb3a3e10e88cb6266e" data-text-hash="54fb3982a80ed1d787be17b17ab5b5cd" id="306" refid="306">
+<p>Other mechanisms for affecting pod scheduling are covered in chapter 21.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b9f3b25154dcb93697f5a5adcef5b161" data-text-hash="3fbb28c1f03712488ce489f44e5b5e6a" id="307" refid="307">
+<h4>Using label selectors in persistent volume claims</h4>
+</div>
+<div class="readable-text" data-hash="3cec8dfe0830b28e0f77b136254e9c52" data-text-hash="38f43ee19d58e22d2570bf3bbed7d479" id="308" refid="308">
+<p>In chapter 8, you learned about persistent volumes and persistent volume claims. A persistent volume usually represents a network storage volume, and the persistent volume claim allows you to reserve one of the persistent volumes so that you can use it in your pods.</p>
+</div>
+<div class="readable-text" data-hash="889372aacddbe44115a237185494a3b3" data-text-hash="7a1fe535924b0d1fefba81d72c7e1c6a" id="309" refid="309">
+<p>I didn&#8217;t mention this at the time, but you can specify a label selector in the PersistentVolumeClaim object definition to indicate which persistent volumes Kubernetes should consider for binding. Without the label selector, any available persistent volume that matches the capacity and access modes specified in the claim will be bound. If the claim specifies a label selector, Kubernetes also checks the labels of the available persistent volumes and binds the claim to a volume only if its labels match the label selector in the claim.</p>
+</div>
+<div class="readable-text" data-hash="22c6810d0a4ef664776e14338967b1f8" data-text-hash="10724b04cc3985cfb1425b38bb6cd291" id="310" refid="310">
+<p>Unlike the node selector in the Pod object, the label selector in the PersistentVolumeClaim object supports both equality-based and set-based selectors and uses a slightly different syntax.</p>
+</div>
+<div class="readable-text" data-hash="0e65e59fc68ccc542cf5f1492acbbc53" data-text-hash="df5edfe5e1cdd2fa25e92ee219db0808" id="311" refid="311">
+<p>The following listing shows a PersistentVolumeClaim object definition that uses an equality-based selector to ensure that the bound volume has the label <code>type: ssd</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9eb31887390d91e8ad72ca55014a3352" data-text-hash="8d40fb7cdd2c6c43397c8add8e69b170" id="312" refid="312">
+<h5>Listing 10.4 A PersistentVolumeClaim definition with an equality-based selector</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ssd-claim
+spec:
+  selector:    #A
+    matchLabels:    #B
+      type: ssd    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGxhYmVsIHNlbGVjdG9yIHRoYXQgdGhlIGVsaWdpYmxlIFBlcnNpc3RlbnRWb2x1bWUgb2JqZWN0IG11c3QgbWF0Y2guCiNCIFRoZSBzZWxlY3RvciBpcyBlcXVhbGl0eS1iYXNlZC4KI0MgT25seSBQZXJzaXN0ZW50Vm9sdW1lIHdpdGggdGhlIOKAnHR5cGU6IHNzZOKAnSBsYWJlbCBhcmUgZWxpZ2libGUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="327699585611ea0a7c065ff965d27a2d" data-text-hash="90955b384cdbf976aa3d18d62bb07323" id="313" refid="313">
+<p>The <code>matchLabels</code> field behaves just like the <code>nodeSelector</code> field in the Pod object you learned about in the previous section.</p>
+</div>
+<div class="readable-text" data-hash="d05ea9c36ea058dcfcf47ed0e2849ff2" data-text-hash="57f2d5f799cff9e0f1f082f40876718f" id="314" refid="314">
+<p>Alternatively, you can use the <code>matchExpressions</code> field to specify a more expressive set-based label selector. The following listing shows a selector that matches PersistentVolumes with the <code>type</code> label set to anything other than <code>ssd</code>, and the <code>age</code> label set to <code>old</code> or <code>very-old</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5ca5ff9b8b3ae732ec8cd139a8218e85" data-text-hash="4c5f0658f065f9f42edc35ddd389ed16" id="315" refid="315">
+<h5>Listing 10.5 Using a set-based selector in a PersistentVolumeClaim</h5>
+<div class="code-area-container">
+<pre class="code-area">spec:
+  selector:
+    matchExpressions:    #A
+    - key: type    #B
+      operator: NotIn    #B
+      values:    #B
+      - ssd    #B
+    - key: age    #C
+      operator: In    #C
+      values:    #C
+      - old    #C
+      - very-old    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQSBzZXQtYmFzZWQgc2VsZWN0b3IgaXMgZGVmaW5lZC4gVGhlIFBlcnNpc3RlbnRWb2x1bWXigJlzIGxhYmVscyBtdXN0IG1hdGNoIHRoZSBmb2xsb3dpbmcgZXhwcmVzc2lvbnMuCiNCIFRoZSDigJx0eXBl4oCdIGxhYmVsIG11c3Qgbm90IG1hdGNoIHRoZSB2YWx1ZSDigJxzc2TigJ0uCiNDIFRoZSDigJxhZ2XigJ0gbGFiZWwgbXVzdCBiZSBlaXRoZXIg4oCcb2xk4oCdIG9yIOKAnHZlcnktb2xk4oCdLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2ad5dad76f581d8b338ad18993e1756c" data-text-hash="28d238619f5d5afbe8d88ea431083cc5" id="316" refid="316">
+<p>As you can see in the listing, you can specify multiple <code>matchExpressions</code> in the <code>selector</code>. To match the selector, the PersistentVolume&#8217;s labels must match all the expressions.</p>
+</div>
+<div class="readable-text" data-hash="4ad25f43a57844f31fb9af058da09b37" data-text-hash="7e4310202c5b2befc1413253f3dd4a7a" id="317" refid="317">
+<p>You must specify the <code>key</code>, <code>operator</code>, and <code>values</code> for each expression. The <code>key</code> is the label key to which the selector is applied. The <code>operator</code> must be one of <code>In</code>, <code>NotIn</code>, <code>Exists</code>, and <code>DoesNotExist</code>. When you use the <code>In</code> or <code>NotIn</code> operators, the <code>values</code> array must not be empty. However, you must omit it when using the <code>Exists</code> or <code>DoesNotExist</code> operators.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="318" refid="318">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b09ca2116158f2eecf1f581f78da24f2" data-text-hash="a36926e0a5e1522019ae8278096d4608" id="319" refid="319">
+<p> The <code>NotIn</code> operator matches objects that don&#8217;t contain the specified label. A PersistentVolumeClaim with the label selector <code>type NotIn [ssd], age In [old, very-old]</code> can therefore bind to a PersistentVolume with the label <code>age: old</code>, even though it has no <code>type</code> label. To change this, you must add an additional selector expression with the <code>Exists</code> operator.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6aa7780b57a1d083e16a5c8160504812" data-text-hash="6297a53c6c1b611958e80c77025388e5" id="320" refid="320">
+<p>To see these selectors in action, first create the persistent volumes found in the manifest file <code>persistent-volumes.yaml</code>. Then create the two claims in the manifest files <code>pvc.ssd-claim.yaml</code> and <code>pvc.old-non-ssd-claim.yaml</code>. You can find these files in the <code>Chapter10/</code> directory in the book&#8217;s code archive.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="1d8db09160eca1e9f1c0dcafc94f148e" data-text-hash="a513c11c5dd82f81e0de8ea99803e447" id="321" refid="321">
+<h5>Filtering objects with field selectors</h5>
+</div>
+<div class="readable-text" data-hash="b19cea20a7b049e9bccbc6673c9b072a" data-text-hash="e5fb017b963221fbed97fcc87a8a07f8" id="322" refid="322">
+<p>Kubernetes initially only allowed you to filter objects with label selectors. Then it became clear that users want to filter objects by other properties as well. One such example is filtering pods based on the cluster node they are running on. This can now be accomplished with <i>field selectors</i>. Unlike label selectors, you only use field selectors with kubectl or other Kubernetes API clients. No object uses field selectors internally.</p>
+</div>
+<div class="readable-text" data-hash="e3eea8c48b43c3a5fc6877d33c805fea" data-text-hash="692bb79fd0b0a2427046cd02cae0077c" id="323" refid="323">
+<p>The set of fields you can use in a field selector depends on the object kind. The <code>metadata.name</code> and <code>metadata.namespace</code> fields are always supported. Like equality-based label selectors, field selectors support the equal (<code>=</code> or <code>==</code>) and not equal (<code>!=</code>) operator, and you can combine multiple field selectors by separating them with a comma.</p>
+</div>
+<div class="readable-text" data-hash="d5d08f9c452c40393972a5946ef68241" data-text-hash="1f6489d21db7c048c471403da23e69a4" id="324" refid="324">
+<p>Listing pods running on a specific node</p>
+</div>
+<div class="readable-text" data-hash="04e5da7f14dad25ff7cc869c10efe3d2" data-text-hash="d21a15eeae5b094b99780518f4d9fdca" id="325" refid="325">
+<p>As an example of using field selectors, run the following command to list pods on the <code>kind-worker</code> node (if your cluster wasn&#8217;t provisioned with the kind tool, you must specify a different node name):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b33f82a983b4e3c08df34157631b8899" data-text-hash="ce9c77b0d651b599a17189dae99481b7" id="326" refid="326">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods --field-selector spec.nodeName=kind-worker
+NAME READY STATUS RESTARTS AGE
+kiada-front-end 2/2 Running 0 15m
+kiada-002 2/2 Running 0 3h
+quote-002 2/2 Running 0 3h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3a3d7be1fa06f7c8218de6dc1d5c6903" data-text-hash="4cd79cc2c86aa172b5a503f1802af317" id="327" refid="327">
+<p>Instead of displaying all pods in the current namespace, the filter selected only those pods whose <code>spec.nodeName</code> field is set to <code>kind-worker</code>.</p>
+</div>
+<div class="readable-text" data-hash="d7d07aef55c6cfba98a48c61474068a5" data-text-hash="e6e469c62e657c54b4fea536e8a351a8" id="328" refid="328">
+<p>How do you know which field to use in the selector? By looking up the field names with <code>kubectl explain</code>, of course. You learned this in chapter 4. For example: <code>kubectl explain pod.spec</code> shows the fields in the <code>spec</code> section of Pod objects. It doesn&#8217;t show which fields are supported in field selectors, but you can try to use a field and kubectl will tell you if it isn&#8217;t supported.</p>
+</div>
+<div class="readable-text" data-hash="53dd5c247477eb0466462676a5d5f2c4" data-text-hash="e890ece62f2ecb02d254f2aa056fa905" id="329" refid="329">
+<p>Finding pods that aren&#8217;t running</p>
+</div>
+<div class="readable-text" data-hash="32992d7d5a3b70ffc8f039eb35ffc3cd" data-text-hash="4f9358c5a1f68962def9a552245e8fd5" id="330" refid="330">
+<p>Another example of using field selectors is to find pods that aren&#8217;t currently running. You accomplish this by using the <code>status.phase!=Running</code> field selector as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3041f0721dd57a42a1f7c6e9a9d60122" data-text-hash="26f40466bafa24ded46e1f6cf0f89ad6" id="331" refid="331">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods --field-selector status.phase!=Running</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3aafabaca4cf2dc5783af049ec21f7fa" data-text-hash="0052de1c4de38ca8a137931dee0102f9" id="332" refid="332">
+<p>Since all pods in your namespace are running, this command won&#8217;t produce any results, but it can be useful in practice, especially if you combine it with the <code>--all-namespaces</code> option to list non-running pods in all namespaces. The full command is as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="72f500d9d383357f2ddcd31eba7fdcb5" data-text-hash="dace3b75cad398752431f9cefd253b60" id="333" refid="333">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods --field-selector status.phase!=Running --all-namespaces</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="235174e0764ed51647d07195c7d503aa" data-text-hash="cd0b643a76338bf080167d34f21b4b4e" id="334" refid="334">
+<p>The <code>--all-namespaces</code> option is also useful when you use the <code>metadata.name</code> or <code>metadata.namespace</code> fields in the field selector.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="aafd597ec649a40bc77e83ea111c8999" data-text-hash="350fb77ba9f6942b2f1f68b97480cee8" id="335" refid="335">
+<h2 id="sigil_toc_id_183">10.4&#160;Annotating objects</h2>
+</div>
+<div class="readable-text" data-hash="c2adf8a3eeb91c892d992faaec11d562" data-text-hash="fa7d0281cb52df451779f522d79b6f30" id="336" refid="336">
+<p>Adding labels to your objects makes them easier to manage. In some cases, objects must have labels because Kubernetes uses them to identify which objects belong to the same set. But as you learned in this chapter, you can&#8217;t just store anything you want in the label value. For example, the maximum length of a label value is only 63 characters, and the value can&#8217;t contain whitespace at all.</p>
+</div>
+<div class="readable-text" data-hash="2b4f3dfa88513f0ea9d57062df32f06b" data-text-hash="c634e0dab84cdb31292edfdcb06dc5d7" id="337" refid="337">
+<p>For this reason, Kubernetes provides a feature similar to labels&#8211;object <i>annotations</i>.</p>
+</div>
+<div class="readable-text" data-hash="34c18e08f58579695907ea05223a1aa4" data-text-hash="7b21fbff8d7f9f7ae3accaff02cc4e7c" id="338" refid="338">
+<h3 id="sigil_toc_id_184">10.4.1&#160;Introducing object annotations</h3>
+</div>
+<div class="readable-text" data-hash="7a412fafcd7862254b4a2f870b24ae2e" data-text-hash="ff1ed0c153f155bfc75f8a8b6311975b" id="339" refid="339">
+<p>Like labels, annotations are also key-value pairs, but they don&#8217;t store identifying information and can&#8217;t be used to filter objects. Unlike labels, an annotation value can be much longer (up to 256 KB at the time of this writing) and can contain any character.</p>
+</div>
+<div class="readable-text" data-hash="3a6c376704376d713c4addcc8984113e" data-text-hash="f5ac0e7d246171717d02b5f7720bcbe7" id="340" refid="340">
+<h4>Understanding annotations added by Kubernetes</h4>
+</div>
+<div class="readable-text" data-hash="de161c7f9f60e8cbaf119707915edc8e" data-text-hash="7c62c5e45c7695b38215f52aef488595" id="341" refid="341">
+<p>Tools like kubectl and the various controllers that run in Kubernetes may add annotations to your objects if the information can&#8217;t be stored in one of the object&#8217;s fields.</p>
+</div>
+<div class="readable-text" data-hash="752c17b4d44315b27c2f6df2e9874bb5" data-text-hash="7923054c28d47993549aefe7cbe8f275" id="342" refid="342">
+<p>Annotations are often used when new features are introduced to Kubernetes. If a feature requires a change to the Kubernetes API (for example, a new field needs to be added to an object&#8217;s schema), that change is usually deferred for a few Kubernetes releases until it&#8217;s clear that the change makes sense. After all, changes to any API should always be made with great care, because after you add a field to the API, you can&#8217;t just remove it or you&#8217;ll break everyone that use the API.</p>
+</div>
+<div class="readable-text" data-hash="36f62a3ed3aa43fddef01c4e39b38124" data-text-hash="c0d842490dba9ede8c72fcb3d1bd718a" id="343" refid="343">
+<p>Changing the Kubernetes API requires careful consideration, and each change must first be proven in practice. For this reason, instead of adding new fields to the schema, usually a new object annotation is introduced first. The Kubernetes community is given the opportunity to use the feature in practice. After a few releases, when everyone&#8217;s happy with the feature, a new field is introduced and the annotation is deprecated. Then a few releases later, the annotation is removed.</p>
+</div>
+<div class="readable-text" data-hash="87d54cfa4dc4329aae65dece2d7dc7d6" data-text-hash="be32e402b8e145db3e43425373a71aff" id="344" refid="344">
+<h4>Adding your own annotations</h4>
+</div>
+<div class="readable-text" data-hash="a83690ca94f07f600a8ee78dbd6fee54" data-text-hash="6d4b065f080194e9c33096234c2bfce2" id="345" refid="345">
+<p>As with labels, you can add your own annotations to objects. A great use of annotations is to add a description to each pod or other object so that all users of the cluster can quickly see information about an object without having to look it up elsewhere.</p>
+</div>
+<div class="readable-text" data-hash="2b50811bcba15d741e580bc3523413e0" data-text-hash="059f3fa8cf7cfa4b5b6bd96f14139aec" id="346" refid="346">
+<p>For example, storing the name of the person who created the object and their contact information in the object&#8217;s annotations can greatly facilitate collaboration between cluster users.</p>
+</div>
+<div class="readable-text" data-hash="d53d97ae19da048efd23c95caa8aefb0" data-text-hash="0832d90a5aa0fb55869872979295c9d3" id="347" refid="347">
+<p>Similarly, you can use annotations to provide more details about the application running in a pod. For example, you can attach the URL of the Git repository, the Git commit hash, the build timestamp, and similar information to your pods.</p>
+</div>
+<div class="readable-text" data-hash="1cef158916e1fe065014124770ee7c2e" data-text-hash="4b26a4d8888be144d10e3a7e1fcc4aed" id="348" refid="348">
+<p>You can also use annotations to add the information that certain tools need to manage or augment your objects. For example, a particular annotation value set to <code>true</code> could signal to the tool whether it should process and modify the object.</p>
+</div>
+<div class="readable-text" data-hash="1ff87b6304d3ba50bdae10041d6fcbef" data-text-hash="dea47309d497afc7d6893d3223a895e5" id="349" refid="349">
+<h4>Understanding annotation keys and values</h4>
+</div>
+<div class="readable-text" data-hash="196652a343b1e281304af1f7b0decfcd" data-text-hash="ac6f8c2aa07683cf2ddea5779cc3c32b" id="350" refid="350">
+<p>The same rules that apply to label keys also apply to annotations keys. For more information, see section 10.2.3. Annotation values, on the other hand, have no special rules. An annotation value can contain any character and can be up to 256 KB long. It must be a string, but can contain plain text, YAML, JSON, or even a Base64-Encoded value.</p>
+</div>
+<div class="readable-text" data-hash="29158c5a3e04c3d23262ce4a09f8bd3d" data-text-hash="b4211b5c2ce05eeea76d07dc6978b546" id="351" refid="351">
+<h3 id="sigil_toc_id_185">10.4.2&#160;Adding annotations to objects</h3>
+</div>
+<div class="readable-text" data-hash="50352485d6c7c11a89d9253cb1b3787c" data-text-hash="52bfc48af35d1f11879a00c8484f3be5" id="352" refid="352">
+<p>Like labels, annotations can be added to existing objects or included in the object manifest file you use to create the object. Let&#8217;s look at how to add an annotation to an existing object.</p>
+</div>
+<div class="readable-text" data-hash="af97b3072f3c00db5933762d237fd05d" data-text-hash="e7968f55ff8c04b57eeddf54973ed9d8" id="353" refid="353">
+<h4>Setting object annotations</h4>
+</div>
+<div class="readable-text" data-hash="59c601bd281e9abff457f2c778fecd8f" data-text-hash="bd812a41e7e952da5fcef7002349f4f6" id="354" refid="354">
+<p>The simplest way to add an annotation to an existing object is to use the <code>kubectl</code> <code>annotate</code> command. Let&#8217;s add an annotation to one of the pods. You should still have a pod named <code>kiada-front-end</code> from one of the previous exercises in this chapter. If not, you can use any other pod or object in your current namespace. Run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="de4e684516591b306b06c0cb33481e8c" data-text-hash="398fee0730db72d284c83e7e767d8dd0" id="355" refid="355">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl annotate pod kiada-front-end created-by='Marko Luksa &lt;marko.luksa@xyz.com&gt;'
+pod/kiada-front-end annotated</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="aa3fe0d90742c054ce6b79d8c0a5a659" data-text-hash="55ef44ea5ef3cacd11f3d1c27a8fa083" id="356" refid="356">
+<p>This command adds the annotation <code>created-by</code> with the value <code>'Marko Luksa &lt;marko.luksa@xyz.com&gt;'</code> to the <code>kiada-front-end</code> pod.</p>
+</div>
+<div class="readable-text" data-hash="c136419dd4a0887a5b974e9dc5a6afec" data-text-hash="7e05aafb336b066455314aeca38c93d6" id="357" refid="357">
+<h4>Specifying annotations in the object manifest</h4>
+</div>
+<div class="readable-text" data-hash="1b3cb58d10819e0a641caa2500fe2c55" data-text-hash="7ed4cd3d149c43a5c8763f06a489ff37" id="358" refid="358">
+<p>You can also add annotations to your object manifest file before you create the object. The following listing shows an example. You can find the manifest in the <code>pod.pod-with-annotations.yaml</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="48ea8b64cd61471fc68e9175b0427dfc" data-text-hash="d1b1575bf94ba6f09c4bf53bd7b8cd34" id="359" refid="359">
+<h5>Listing 10.6 Annotations in an object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-annotations
+  annotations:
+    created-by: Marko Luksa &lt;marko.luksa@xyz.com&gt;    #A
+    contact-phone: +1 234 567 890   #B
+    managed: 'yes'    #C
+    revision: '3'    #D   
+spec:
+  ...  </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSGVyZeKAmXMgb25lIGFubm90YXRpb24uCiNCIEhlcmXigJlzIGFub3RoZXIgb25lLgojQyBUaGlyZCBhbm5vdGF0aW9uLiBWYWx1ZSBtdXN0IGJlIHF1b3RlZC4gU2VlIG5leHQgd2FybmluZyBmb3IgZXhwbGFuYXRpb24uCiNEIEFub3RoZXIgYW5ub3RhdGlvbiB2YWx1ZSB0aGF0IG11c3QgYmUgcXVvdGVkIG9yIGFuIGVycm9yIHdvdWxkIG9jY3VyLg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="360" refid="360">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="64049e446f3b216273347a10945f6900" data-text-hash="30d96311637f24349d29cbcb1909b6f0" id="361" refid="361">
+<p> Make sure you enclose the annotation value in quotes if the YAML parser would otherwise treat it as something other than a string. If you don&#8217;t, a cryptic error will occur when you apply the manifest. For example, if the annotation value is a number like 123 or a value that could be interpreted as a boolean (true, false, but also words like yes and no), enclose the value in quotes (examples: &#8220;123&#8221;, &#8220;true&#8221;, &#8220;yes&#8221;) to avoid the following error: &#8220;unable to decode yaml ... ReadString: expects &#8220; or n, but found t&#8221;.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4357eafaecee36be1613b4ecddd60584" data-text-hash="732456cb8e6d5bedb5f9ddc5ef97f404" id="362" refid="362">
+<p>Apply the manifest from the previous listing by executing the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="259ab6b4f2ef57eeea375de735d8364c" data-text-hash="c45e96eca9f7e5fd90f3ead2241be320" id="363" refid="363">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.pod-with-annotations.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="aad70dfa9ee79e2c5318d05f2030b8a5" data-text-hash="339bd8dde9f08e4d9a2be047c077dd85" id="364" refid="364">
+<h3 id="sigil_toc_id_186">10.4.3&#160;Inspecting an object&#8217;s annotations</h3>
+</div>
+<div class="readable-text" data-hash="7b239ac5548c682fd584f2f178bc5343" data-text-hash="c7a38522ecec14dc3e451112cf25458a" id="365" refid="365">
+<p>Unlike labels, the <code>kubectl get</code> command does not provide an option to display annotations in the object list. To see the annotations of an object, you should use <code>kubectl describe</code> or find the annotation in the object&#8217;s YAML or JSON definition.</p>
+</div>
+<div class="readable-text" data-hash="6f068221be886136eb46ca5bbde0be0a" data-text-hash="414d8ec03d6d2bfcf932cb5e1667be6b" id="366" refid="366">
+<h4>Viewing an object&#8217;s annotations with kubectl describe</h4>
+</div>
+<div class="readable-text" data-hash="3781af09c06259972aa6d27d267ce1ef" data-text-hash="3de6b31b02d3d60b9049bdbb1b6d1b91" id="367" refid="367">
+<p>To see the annotations of the <code>pod-with-annotations</code> pod you created, use <code>kubectl</code> <code>describe</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5d9a18ac9a622e290413ed4ff87af673" data-text-hash="358108b1d885631be519b2a8c3d3befa" id="368" refid="368">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe pod pod-with-annotations
+Name:         pod-with-annotations
+Namespace:    kiada
+Priority:     0
+Node:         kind-worker/172.18.0.4
+Start Time:   Tue, 12 Oct 2021 16:37:50 +0200
+Labels:       &lt;none&gt;
+Annotations:  contact-phone: +1 234 567 890    #A
+              created-by: Marko Luksa &lt;marko.luksa@xyz.com&gt;    #A
+              managed: yes    #A
+              revision: 3    #A
+Status:       Running
+ 
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgYXJlIHRoZSBmb3VyIGFubm90YXRpb25zIHRoYXQgd2VyZSBkZWZpbmVkIGluIHRoZSBtYW5pZmVzdCBmaWxlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="595702b4d74919d814f88b9d000f1d37" data-text-hash="25d08a0687fe9a494de151a0135b6e84" id="369" refid="369">
+<h4>Displaying the object&#8217;s annotations in the object&#8217;s JSON definition</h4>
+</div>
+<div class="readable-text" data-hash="59ffbfb9f87e0d720ca6da7095449a15" data-text-hash="78c3c00a68384b4c67f96acb26451eba" id="370" refid="370">
+<p>Alternatively, you can use the <code>jq</code> command to extract the annotations from the JSON definition of the pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="efe00e4ae3e7b5937144bd4c7f3d7d00" data-text-hash="1d3e7491c591fafb34ea821263dca534" id="371" refid="371">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pod pod-with-annotations -o json | jq .metadata.annotations
+{
+  "contact-phone": "+1 234 567 890",
+  "created-by": "Marko Luksa &lt;marko.luksa@xyz.com&gt;",
+  "kubectl.kubernetes.io/last-applied-configuration": "..."    #A
+  "managed": "yes",
+  "revision": "3"
+}</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBhbm5vdGF0aW9uIGlzIGFkZGVkIGJ5IGt1YmVjdGwuIEl0IGNvdWxkIGJlIGRlcHJlY2F0ZWQgYW5kIHJlbW92ZWQgaW4gdGhlIGZ1dHVyZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="99f3ed8db152ced0dd0f2d6cc244f3d6" data-text-hash="a75757328818888975b7fe95d913e334" id="372" refid="372">
+<p>You&#8217;ll notice that there&#8217;s an additional annotation in the object with the key <code>kubectl.kubernetes.io/last-applied-configuration</code>. It isn&#8217;t shown by the <code>kubectl describe</code> command, because it&#8217;s only used internally by kubectl and would also make the output too long. In the future, this annotation may become deprecated and then be removed. Don&#8217;t worry if you don&#8217;t see it when you run the command yourself.</p>
+</div>
+<div class="readable-text" data-hash="ab03017b1e504e03e74c3c250275d23e" data-text-hash="e1724ab33a15ca33b2683e8ebc5d4dd5" id="373" refid="373">
+<h3 id="sigil_toc_id_187">10.4.4&#160;Updating and removing annotations</h3>
+</div>
+<div class="readable-text" data-hash="8b432b2b6572321e0908fdade1425789" data-text-hash="1b1718acac1b6ed79372d26986bc3106" id="374" refid="374">
+<p>If you want to use the <code>kubectl annotate</code> command to change an existing annotation, you must also specify the <code>--overwrite</code> option, just as you would when changing an existing object label. For example, to change the annotation <code>created-by</code>, the full command is as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8b7109968474608047b5c01264d08e5a" data-text-hash="3b250ad1cd7ced1958caf59458b94fa6" id="375" refid="375">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl annotate pod kiada-front-end created-by='Humpty Dumpty' --overwrite</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1f85b2e9fde104f65bd6a42d6856b7bd" data-text-hash="5bdd0d80e1f52a751cd4a54b863c05d0" id="376" refid="376">
+<p>To remove an annotation from an object, add the minus sign to the end of the annotation key you want to remove:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="783c4f2836c158579a1ffa1c19c01b94" data-text-hash="ca6ce76e73409948a30ab2213a0183ff" id="377" refid="377">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl annotate pod kiada-front-end created-by-</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a6a136d29198af3bbe0026fb8f4cca33" data-text-hash="3c63ea26017d88efe1f4bcb03231a1ad" id="378" refid="378">
+<h2 id="sigil_toc_id_188">10.5&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="6ea81bcb1b381bb9924b775f10867861" data-text-hash="297f6ac416aad7b0f62363138ce79080" id="379" refid="379">
+<p>The Kubernetes features described in this chapter will help you keep your cluster organized and make your system easier to understand. In this chapter, you learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="28452285562136d1aa8122070f0db74f" data-text-hash="28452285562136d1aa8122070f0db74f" id="380" refid="380">Objects in a Kubernetes cluster are typically divided into many namespaces. Within a namespace, object names must be unique, but you can give two objects the same name if you create them in different namespaces.</li>
+<li class="readable-text" data-hash="9ec2c34c0eec7fede85e6bae2efa9e64" data-text-hash="9ec2c34c0eec7fede85e6bae2efa9e64" id="381" refid="381">Namespaces allow different users and teams to use the same cluster as if they were using separate Kubernetes clusters.</li>
+<li class="readable-text" data-hash="207b88371c54a8aab833bd5a2b8bef6f" data-text-hash="207b88371c54a8aab833bd5a2b8bef6f" id="382" refid="382">Each object can have several labels. Labels are key-value pairs that help identify the object. By adding labels to objects, you can effectively organize objects into groups.</li>
+<li class="readable-text" data-hash="e0f40606894db0877054e169acbd39e8" data-text-hash="e0f40606894db0877054e169acbd39e8" id="383" refid="383">Label selectors allow you to filter objects based on their labels. You can easily filter pods that belong to a specific application, or by any other criteria if you&#8217;ve previously added the appropriate labels to those pods.</li>
+<li class="readable-text" data-hash="d8965378c95fcc5ab6fef2a3cb2a32b4" data-text-hash="d8965378c95fcc5ab6fef2a3cb2a32b4" id="384" refid="384">Field selectors are like label selectors, but they allow you to filter objects based on specific fields in the object manifest. For example, a field selector can be used to list pods that run on a particular node. Unfortunately, you can&#8217;t use them to filter on annotations.</li>
+<li class="readable-text" data-hash="3a115f49fce3e62021cad57d4b5c7f84" data-text-hash="3a115f49fce3e62021cad57d4b5c7f84" id="385" refid="385">Instead of performing an operation on each pod individually, you can use a label selector to perform the same operation on a set of objects that match the label selector.</li>
+<li class="readable-text" data-hash="f95aa8ef355a87cc7a9446bace074afc" data-text-hash="f95aa8ef355a87cc7a9446bace074afc" id="386" refid="386">Labels and selectors are also used internally by some object types. You can add labels to Node objects and define a node selector in a pod to schedule that pod only to those nodes that meet the specified criteria.</li>
+<li class="readable-text" data-hash="3b5771543207f18dc927a111f41e5611" data-text-hash="3b5771543207f18dc927a111f41e5611" id="387" refid="387">In addition to labels, you can also add annotations to objects. An annotation can contain a much larger amount of data and can include whitespace and other special characters that aren&#8217;t allowed in labels. Annotations are typically used to add additional information used by tools and cluster users. They are also used to defer changes to the Kubernetes API.</li>
+</ul>
+<div class="readable-text" data-hash="7e553e4e9deac24dfed62f337dd0a864" data-text-hash="27c08ec66deabd8691fa6ac939d9dbf2" id="388" refid="388">
+<p>In the next chapter, you&#8217;ll learn how to forward traffic to a set of pods using the Service object.</p>
+</div></div>
+
+        </body>
+        
+        

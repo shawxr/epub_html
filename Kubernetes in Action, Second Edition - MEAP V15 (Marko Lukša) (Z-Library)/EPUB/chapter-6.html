@@ -1,0 +1,1845 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="a49235086dc78d7cd8806b5b4566707c" data-text-hash="d3eb6e700b24f75a14d0f526efd35bc7" id="1" refid="1">
+<h1>6 Manging the Pod lifecycle</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="73ba5cc0c8474f95d1291bef0826d7c8" data-text-hash="73ba5cc0c8474f95d1291bef0826d7c8" id="2" refid="2">Inspecting the pod&#8217;s status</li>
+<li class="readable-text" data-hash="51b15d2cfb273b32e940731da232690c" data-text-hash="51b15d2cfb273b32e940731da232690c" id="3" refid="3">Keeping containers healthy using liveness probes</li>
+<li class="readable-text" data-hash="c763661a2c78cf817f189981c779af38" data-text-hash="c763661a2c78cf817f189981c779af38" id="4" refid="4">Using lifecycle hooks to perform actions at container startup and shutdown</li>
+<li class="readable-text" data-hash="2e82bcc26b314ad536636612c454371e" data-text-hash="2e82bcc26b314ad536636612c454371e" id="5" refid="5">Understanding the complete lifecycle of the pod and its containers</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="7e6e497659cc8701691621b6fb294644" data-text-hash="497df70896260a57e731feda9f6b470f" id="6" refid="6">
+<p>After reading the previous chapter, you should be able to deploy, inspect and communicate with pods containing one or more containers. In this chapter, you&#8217;ll gain a much deeper understanding of how the pod and its containers operate.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="7" refid="7">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b53694930e2986f9a5b63701ba2dc7e0" data-text-hash="c9147ffe3a8120bcbf02a662cf0dac7c" id="8" refid="8">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html"><span>https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter06</span></a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="ff010ba7ea2eb27faf97907827c4ee04" data-text-hash="dfc973b116f2213c8cb35a3b298716bb" id="9" refid="9">
+<h2 id="sigil_toc_id_91">6.1&#160;Understanding the pod's status</h2>
+</div>
+<div class="readable-text" data-hash="60337215fa0d8ac532d5420f10a7c1d1" data-text-hash="d02605199c0f61334750587c9ad1b4fb" id="10" refid="10">
+<p>After you create a pod object and it runs, you can see what&#8217;s going on with the pod by reading the pod object back from the API. As you&#8217;ve learned in chapter 4, the pod object manifest, as well as the manifests of most other kinds of objects, contain a section, which provides the status of the object. A pod&#8217;s <code>status</code> section contains the following information:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="d5adc2539e3aa7eb6c452e5f756ae417" data-text-hash="d5adc2539e3aa7eb6c452e5f756ae417" id="11" refid="11">the IP addresses of the pod and the worker node that hosts it</li>
+<li class="readable-text" data-hash="06002995afb7a8f81dd439c4dec3b425" data-text-hash="06002995afb7a8f81dd439c4dec3b425" id="12" refid="12">when the pod was started</li>
+<li class="readable-text" data-hash="f7adc454292d1bc1da5978cf4e924c88" data-text-hash="f7adc454292d1bc1da5978cf4e924c88" id="13" refid="13">the pod&#8217;s quality-of-service (QoS) class</li>
+<li class="readable-text" data-hash="1102184f6ff44d717bfcb2f9ac8b4f15" data-text-hash="1102184f6ff44d717bfcb2f9ac8b4f15" id="14" refid="14">what phase the pod is in,</li>
+<li class="readable-text" data-hash="38f24a1e305e046edddaa0b4ce2c2cd6" data-text-hash="38f24a1e305e046edddaa0b4ce2c2cd6" id="15" refid="15">the conditions of the pod, and</li>
+<li class="readable-text" data-hash="c642f5a0b8c15ab02b1c643563d2a8f1" data-text-hash="c642f5a0b8c15ab02b1c643563d2a8f1" id="16" refid="16">the state of its individual containers.</li>
+</ul>
+<div class="readable-text" data-hash="929473be04a641bc16afe9f4f593368b" data-text-hash="763e68d657b449c6b18590fdfac067b9" id="17" refid="17">
+<p>The IP addresses and the start time don&#8217;t need any further explanation, and the QoS class isn&#8217;t relevant now - you&#8217;ll learn about it in chapter 19. However, the phase and conditions of the pod, as well as the states of its containers are important for you to understand the pod lifecycle.</p>
+</div>
+<div class="readable-text" data-hash="3f51ea62fa4bf8eb212ef752668ec04f" data-text-hash="f80b24980bb3cbbc3e9a554d32cfbdc2" id="18" refid="18">
+<h3 id="sigil_toc_id_92">6.1.1&#160;Understanding the pod phase</h3>
+</div>
+<div class="readable-text" data-hash="f62473434847648abf4a00b9a09347e2" data-text-hash="c377cb20862b0fade0b30e0eec889750" id="19" refid="19">
+<p>In any moment of the pod&#8217;s life, it&#8217;s in one of the five phases shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="615bdf18c958a21e7c546ab1a3a94ac6" data-text-hash="3a08055cb1b785cb8b985895a02679e5" id="20" refid="20">
+<h5>Figure 6.1 The phases of a Kubernetes pod</h5>
+<img alt="" data-processed="true" height="270" id="Picture_1" loading="lazy" src="EPUB/images/06image002.png" width="839">
+</div>
+<div class="readable-text" data-hash="2340166c819d3f667918859f3988c463" data-text-hash="c7ba08ed0c92fe55c1be51e2b95598cc" id="21" refid="21">
+<p>The meaning of each phase is explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="311d1019c8b17b55dfed5b0315ad5e9b" data-text-hash="10c79c3251bd8ee707e40cb9b23e8d94" id="22" refid="22">
+<h5>Table 6.1 List of phases a pod can be in</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Pod Phase</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Pending
+</pre> </td>
+<td> <p>After you create the Pod object, this is its initial phase. Until the pod is scheduled to a node and the images of its containers are pulled and started, it remains in this phase.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Running
+</pre> </td>
+<td> <p>At least one of the pod&#8217;s containers is running.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Succeeded
+</pre> </td>
+<td> <p>Pods that aren&#8217;t intended to run indefinitely are marked as <code>Succeeded</code> when all their containers complete successfully.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Failed
+</pre> </td>
+<td> <p>When a pod is not configured to run indefinitely and at least one of its containers terminates unsuccessfully, the pod is marked as Failed.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Unknown
+</pre> </td>
+<td> <p>The state of the pod is unknown because the Kubelet has stopped reporting communicating with the API server. Possibly the worker node has failed or has disconnected from the network.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="20b4b5916b96df1e9acf03906135317e" data-text-hash="9a59d0be260ec2525881b546dfae4220" id="23" refid="23">
+<p>The pod&#8217;s phase provides a quick summary of what&#8217;s happening with the pod. Let&#8217;s deploy the <code>kiada</code> pod again and inspect its phase. Create the pod by applying the manifest file to your cluster again, as in the previous chapter (you&#8217;ll find it in <code>Chapter06/pod.kiada.yaml</code>):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="800cdb660deb01c3e4a26d52e763a0e0" data-text-hash="4cec1e0c50ec25a17e95e5c76f3cf85e" id="24" refid="24">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e7efca981d4437c1fbfb97af2686920d" data-text-hash="89a07baa6c75ab192ef84f051ca0d0d2" id="25" refid="25">
+<h4>Displaying a pod&#8217;s phase</h4>
+</div>
+<div class="readable-text" data-hash="1ede47812cc5bc601ca0c6886eb1a59e" data-text-hash="be17778a66e8f4b1c2a64317bc5f51a1" id="26" refid="26">
+<p>The pod&#8217;s phase is one of the fields in the pod object&#8217;s <code>status</code> section. You can see it by displaying its manifest and optionally grepping the output to search for the field:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="298363d4954faa5349b2c3eef78ba395" data-text-hash="56d44ebd67e5c9b36557c87c192d3a8c" id="27" refid="27">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada -o yaml | grep phase
+phase: Running</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="28" refid="28">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="73867b843a8bb9d4f962670a2f0a5698" data-text-hash="aa798ec4f973e7aafc8a8d6e4dd7570d" id="29" refid="29">
+<p> Remember the <code>jq</code> tool? You can use it to print out the value of the <code>phase</code> field like this: <code>kubectl get po kiada -o json | jq .status.phase</code></p>
+</div>
+</div>
+<div class="readable-text" data-hash="5028c168dc453f737875097d6b5f8ef6" data-text-hash="39db11e1420894c3a1296eda8811ef0c" id="30" refid="30">
+<p>You can also see the pod&#8217;s phase using <code>kubectl describe</code>. The pod&#8217;s status is shown close to the top of the output.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e85faf9c61b40bb41676d1756e829f68" data-text-hash="373ab53e8afa831ce0f6b3c3f32298a0" id="31" refid="31">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po kiada
+Name:         kiada
+Namespace:    default
+...
+Status:       Running
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9a9118485e9a914c32b9994a225803a7" data-text-hash="572b74fc99d5f43c426041ae002d2350" id="32" refid="32">
+<p>Although it may appear that the <code>STATUS</code> column displayed by <code>kubectl get pods</code> also shows the phase, this is only true for pods that are healthy:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="003839f5f624c707190230060f42a75e" data-text-hash="f3db6767d189f14111457a948b7a7b37" id="33" refid="33">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada
+NAME    READY   STATUS    RESTARTS   AGE
+kiada   1/1     Running   0          40m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1281450553952e437c97f51afc5d15b4" data-text-hash="7fca0b056a577a4b3ad5affd1fddcca0" id="34" refid="34">
+<p>For unhealthy pods, the <code>STATUS</code> column indicates what&#8217;s wrong with the pod. You&#8217;ll see this later in this chapter.</p>
+</div>
+<div class="readable-text" data-hash="2add74c5c0123c72dc324a270a637caa" data-text-hash="e6ffc7e78f36c88c05ebb55f4d49cba0" id="35" refid="35">
+<h3 id="sigil_toc_id_93">6.1.2&#160;Understanding pod conditions</h3>
+</div>
+<div class="readable-text" data-hash="61ede0d3e410a1010f148843f25bc8bd" data-text-hash="5a4012abdc00dcefa7ec7e15fbc815b3" id="36" refid="36">
+<p>The phase of a pod says little about the condition of the pod. You can learn more by looking at the pod&#8217;s list of conditions, just as you did for the node object in chapter 4. A pod&#8217;s conditions indicate whether a pod has reached a certain state or not, and why that&#8217;s the case.</p>
+</div>
+<div class="readable-text" data-hash="c45a791ac7a926196c523feae60563dc" data-text-hash="e4ae0f70fd79564d8350ae92bae3d8cc" id="37" refid="37">
+<p>In contrast to the phase, a pod has several conditions at the same time. Four condition <i>types</i> are known at the time of writing. They are explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="791df21f379524a5b99a8916e3ff961f" data-text-hash="1a0734fd1afdecd1361f851ea9bee09b" id="38" refid="38">
+<h5>Table 6.2 List of pod conditions</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Pod Condition</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>PodScheduled
+</pre> </td>
+<td> <p>Indicates whether or not the pod has been scheduled to a node.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Initialized
+</pre> </td>
+<td> <p>The pod&#8217;s init containers have all completed successfully.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ContainersReady
+</pre> </td>
+<td> <p>All containers in the pod indicate that they are ready. This is a necessary but not sufficient condition for the entire pod to be ready.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Ready
+</pre> </td>
+<td> <p>The pod is ready to provide services to its clients. The containers in the pod and the pod&#8217;s readiness gates are all reporting that they are ready. Note: this is explained in chapter 10.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="abfa9d9d9a859e2099cec186a39b835f" data-text-hash="a8bc340a83d6c4ba49df4f7d6044d316" id="39" refid="39">
+<p>Each condition is either fulfilled or not. As you can see in the following figure, the <code>PodScheduled</code> and <code>Initialized</code> conditions start as unfulfilled, but are soon fulfilled and remain so throughout the life of the pod. In contrast, the <code>Ready</code> and <code>ContainersReady</code> conditions can change many times during the pod&#8217;s lifetime.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c2749bc6a0a1cccf3479690020dce965" data-text-hash="6d7708497c6150992d22a1da3b07c912" id="40" refid="40">
+<h5>Figure 6.2 The transitions of the pod&#8217;s conditions during its lifecycle</h5>
+<img alt="" data-processed="true" height="308" id="Picture_2" loading="lazy" src="EPUB/images/06image003.png" width="857">
+</div>
+<div class="readable-text" data-hash="c6cf078722fbd33d67dbf51dc2d464a1" data-text-hash="8a5c8f714642eda8bb5397e3dc00198c" id="41" refid="41">
+<p>Do you remember the conditions you can find in a node object? They are <code>MemoryPressure</code>, <code>DiskPressure</code>, <code>PIDPressure</code> and <code>Ready</code>. As you can see, each object has its own set of condition types, but many contain the generic <code>Ready</code> condition, which typically indicates whether everything is fine with the object.</p>
+</div>
+<div class="readable-text" data-hash="03f980faa4a4beb2cf35b55026a8999a" data-text-hash="a4eacf381c63ca7d87237edefe6c9b0d" id="42" refid="42">
+<h4>Inspecting the pod&#8217;s conditions</h4>
+</div>
+<div class="readable-text" data-hash="a1700a825d12517c50aa854d40593968" data-text-hash="1eeb9fbbf9c7fe61bca3bd62a7e8ef85" id="43" refid="43">
+<p>To see the conditions of a pod, you can use <code>kubectl describe</code> as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2e1090a751f0b6403beaaea01ab86d6b" data-text-hash="a16255550b6f9f00e31f9cd200ad17f1" id="44" refid="44">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po kiada
+...
+Conditions:
+  Type              Status
+  Initialized       True    #A
+  Ready             True    #B
+  ContainersReady   True    #B
+  PodScheduled      True    #C
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBvZCBoYXMgYmVlbiBpbml0aWFsaXplZAojQiBUaGUgcG9kIGFuZCBpdHMgY29udGFpbmVycyBhcmUgcmVhZHkKI0MgVGhlIHBvZCBoYXMgYmVlbiBzY2hlZHVsZWQgdG8gYSBub2Rl"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="037280918b3840f2dc43e47a7e813ed1" data-text-hash="56fbcf7241268f4eceaab3a1b96693e1" id="45" refid="45">
+<p>The <code>kubectl describe</code> command shows only whether each condition is true or not. To find out why a condition is false, you must look for the <code>status.conditions</code> field in the pod manifest as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b717e8a68eaf0923c2f007edbea3f63" data-text-hash="d023e97f834b3a5ee0ee47fdbc1cac95" id="46" refid="46">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada -o json | jq .status.conditions
+[
+  {
+    "lastProbeTime": null,
+    "lastTransitionTime": "2020-02-02T11:42:59Z",
+    "status": "True",
+    "type": "Initialized"
+  },
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="190351d45070806fbaf3c7000e2e8868" data-text-hash="9daa308ded4c6494bb6238bc66392bbc" id="47" refid="47">
+<p>Each condition has a <code>status</code> field that indicates whether the condition is <code>True</code>, <code>False</code> or <code>Unknown</code>. In the case of the <code>kiada</code> pod, the status of all conditions is <code>True</code>, which means they are all fulfilled. The condition can also contain a <code>reason</code> field that specifies a machine-facing reason for the last change of the condition&#8217;s status, and a <code>message</code> field that explains the change in detail. The <code>lastTransitionTime</code> field shows when the change occurred, while the <code>lastProbeTime</code> indicates when this condition was last checked.</p>
+</div>
+<div class="readable-text" data-hash="f252b93ab3edda8d3221a44679798d74" data-text-hash="f67effcefb499d101a7fe6f70d23dc38" id="48" refid="48">
+<h3 id="sigil_toc_id_94">6.1.3&#160;Understanding the container status</h3>
+</div>
+<div class="readable-text" data-hash="24201d24cce74ee1f306abba61c4d00a" data-text-hash="cf51131dbd36e8cebf9d2da7148b9adf" id="49" refid="49">
+<p>Also contained in the status of the pod is the status of each of its containers. Inspecting the status provides better insight into the operation of each individual container.</p>
+</div>
+<div class="readable-text" data-hash="e42e78634afb18019e63be268372d6ee" data-text-hash="8365595e72bc914b4a1082ea1ca1a4ea" id="50" refid="50">
+<p>The status contains several fields. The <code>state</code> field indicates the container&#8217;s current state, whereas the <code>lastState</code> field shows the state of the previous container after it has terminated. The container status also indicates the internal ID of the container (<code>containerID</code>), the <code>image</code> and <code>imageID</code> the container is running, whether the container is <code>ready</code> or not and how often it has been restarted (<code>restartCount</code>).</p>
+</div>
+<div class="readable-text" data-hash="6c438f203c73d9e91089fb00c7405f59" data-text-hash="a309594c4c0a132ee7dfe90c854bf31d" id="51" refid="51">
+<h4>Understanding the container state</h4>
+</div>
+<div class="readable-text" data-hash="9db3caf9a3aa0392ff33fb1a08b4d929" data-text-hash="ce59aea9454ee03589ce519dadc86f63" id="52" refid="52">
+<p>The most important part of a container&#8217;s status is its <code>state</code>. A container can be in one of the states shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e6fec85b012729f474776d272c294776" data-text-hash="79ca1183bb8ed86d944ab635badc4d1c" id="53" refid="53">
+<h5>Figure 6.3 The possible states of a container</h5>
+<img alt="" data-processed="true" height="230" id="Picture_3" loading="lazy" src="EPUB/images/06image004.png" width="855">
+</div>
+<div class="readable-text" data-hash="17fe6237c62fcc03b8d7e0e8fd6d888e" data-text-hash="74d29bfd97f9bbcd4b333cf187fa7578" id="54" refid="54">
+<p>Individual states are explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="f0f583657403bc1084d826985f5f7f01" data-text-hash="32504b2a9ea8b7324a15a30b8bf8687c" id="55" refid="55">
+<h5>Table 6.3 Possible container states</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Container State</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Waiting
+</pre> </td>
+<td> <p>The container is waiting to be started. The <code>reason</code> and <code>message</code> fields indicate why the container is in this state.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Running
+</pre> </td>
+<td> <p>The container has been created and processes are running in it. The <code>startedAt</code> field indicates the time at which this container was started.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Terminated
+</pre> </td>
+<td> <p>The processes that had been running in the container have terminated. The <code>startedAt</code> and <code>finishedAt</code> fields indicate when the container was started and when it terminated. The exit code with which the main process terminated is in the <code>exitCode</code> field.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Unknown
+</pre> </td>
+<td> <p>The state of the container couldn&#8217;t be determined.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="e369afbd581684d5f1e6892857e04491" data-text-hash="7431b280f2a27902c701c42c9b80d02b" id="56" refid="56">
+<h4>Displaying the status of the pod&#8217;s containers</h4>
+</div>
+<div class="readable-text" data-hash="c6b9925adf989edf6398cc616eb78684" data-text-hash="6feb2eec12b7777951f4887e9ba7efc9" id="57" refid="57">
+<p>The pod list displayed by <code>kubectl get pods</code> shows only the number of containers in each pod and how many of them are ready. To see the status of individual containers, you can use <code>kubectl describe</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3235a744e56d081a2697441bcf88f2c1" data-text-hash="84a6ee648fd102a9c40efa08386a0681" id="58" refid="58">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po kiada
+...
+Containers:
+  kiada:
+    Container ID:   docker://c64944a684d57faacfced0be1af44686...
+    Image:          luksa/kiada:0.1
+    Image ID:       docker-pullable://luksa/kiada@sha256:3f28...
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running    #A
+      Started:      Sun, 02 Feb 2020 12:43:03 +0100    #A
+    Ready:          True    #B
+    Restart Count:  0    #C
+    Environment:    &lt;none&gt;
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGN1cnJlbnQgc3RhdGUgb2YgdGhlIGNvbnRhaW5lciBhbmQgd2hlbiBpdCB3YXMgc3RhcnRlZAojQiBXaGV0aGVyIHRoZSBjb250YWluZXIgaXMgcmVhZHkgdG8gcHJvdmlkZSBpdHMgc2VydmljZXMKI0MgSG93IG1hbnkgdGltZXMgdGhlIGNvbnRhaW5lciBoYXMgYmVlbiByZXN0YXJ0ZWQ="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0703f0c26b2fce595fb53a2d13358994" data-text-hash="b280f4e45e8eae44e0998c51beb0620c" id="59" refid="59">
+<p>Focus on the annotated lines in the listing, as they indicate whether the container is healthy. The <code>kiada</code> container is <code>Running</code> and is <code>Ready</code>. It has never been restarted.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="60" refid="60">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="9d4e16582f9889eb19bd5f4825b757cc" data-text-hash="6adea43c654dcb264a1514cbd31783df" id="61" refid="61">
+<p> You can also display the container status(es) using <code>jq</code> like this: <code>kubectl get po kiada -o json | jq .status.containerStatuses</code></p>
+</div>
+</div>
+<div class="readable-text" data-hash="693fc3b4a6f93dee682c72a8970caffd" data-text-hash="599b810c7133809f60a3beec089af21d" id="62" refid="62">
+<h4>Inspecting the status of an init container</h4>
+</div>
+<div class="readable-text" data-hash="32403296fdaf05484506d42be676a98f" data-text-hash="ffd57e6333d83bf8e3e3f4cef178992f" id="63" refid="63">
+<p>In the previous chapter, you learned that in addition to regular containers, a pod can also have init containers that run when the pod starts. As with regular containers, the status of these containers is available in the <code>status</code> section of the pod object manifest, but in the <code>initContainerStatuses</code> field.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="a12ea2a605861671978ea48589270544" data-text-hash="a8459644e8ee022d22ac770887f8e9e6" id="64" refid="64">
+<h5>Inspecting the status of the kiada-init pod</h5>
+</div>
+<div class="readable-text" data-hash="390c9d257c6daabc67d82c853258c45b" data-text-hash="721566606015e5e92b0871265a945921" id="65" refid="65">
+<p>As an additional exercise you can try on your own, create the <code>kiada-init</code> pod from the previous chapter and inspect its phase, conditions and the status of its two regular and two init containers. Use the <code>kubectl describe</code> command and the <code>kubectl get po kiada-init -o json | jq .status</code> command to find the information in the object definition.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="7ddcbb9b951bb200cac4e1a373166a77" data-text-hash="070b6bf90e7d4146927b12fc951df239" id="66" refid="66">
+<h2 id="sigil_toc_id_95">6.2&#160;Keeping containers healthy</h2>
+</div>
+<div class="readable-text" data-hash="17912949d0eac4763c5de5615c4eeb7f" data-text-hash="413f16f6b577206950b51e8cc5ae255d" id="67" refid="67">
+<p>The pods you created in the previous chapter ran without any problems. But what if one of the containers dies? What if all the containers in a pod die? How do you keep the pods healthy and their containers running? That&#8217;s the focus of this section.</p>
+</div>
+<div class="readable-text" data-hash="f2f18d2ec8eeed6c32912f664485e7ea" data-text-hash="370d7e8f01ad628a0de4add8e97a5fcf" id="68" refid="68">
+<h3 id="sigil_toc_id_96">6.2.1&#160;Understanding container auto-restart</h3>
+</div>
+<div class="readable-text" data-hash="08da3cef7b373d75e8e0ded5538db637" data-text-hash="c7a1e47126bb1e934070553f2d23574b" id="69" refid="69">
+<p>When a pod is scheduled to a node, the Kubelet on that node starts its containers and from then on keeps them running for as long as the pod object exists. If the main process in the container terminates for any reason, the Kubelet restarts the container. If an error in your application causes it to crash, Kubernetes automatically restarts it, so even without doing anything special in the application itself, running it in Kubernetes automatically gives it the ability to heal itself. Let&#8217;s see this in action.</p>
+</div>
+<div class="readable-text" data-hash="e80208cc3fa246a67dd5d9d9d0a99aaf" data-text-hash="bff1cfc7f79c4934c69c07dea1d9505a" id="70" refid="70">
+<h4>Observing a container failure</h4>
+</div>
+<div class="readable-text" data-hash="d32aa2b2c40e5065458c780cd5c842f0" data-text-hash="2dd1c0534713025c3664137db361989a" id="71" refid="71">
+<p>In the previous chapter, you created the <code>kiada-ssl</code> pod, which contains the Node.js and the Envoy containers. Create the pod again and enable communication with the pod by running the following two commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="46d2965311a0efc0786a40f1fc812ac8" data-text-hash="da06ed89851a8252aee4d63eed986173" id="72" refid="72">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada-ssl.yaml
+$ kubectl port-forward kiada-ssl 8080 8443 9901</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="040b3fee9a36cf3a38fe9a4ec53c4304" data-text-hash="0978804f67c9064e7c7f3c45ccf04a14" id="73" refid="73">
+<p>You&#8217;ll now cause the Envoy container to terminate to see how Kubernetes deals with the situation. Run the following command in a separate terminal so you can see how the pod&#8217;s status changes when one of its containers terminates:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6221f680a6c735227194d901e79fa1a1" data-text-hash="047799d6c95040df2233eba9ba0bcf99" id="74" refid="74">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="59e6cfbe2b8d3612682d1d64ee02adb8" data-text-hash="afcc02371f0ee4d5d17765b5fb6e0620" id="75" refid="75">
+<p>You&#8217;ll also want to watch events in another terminal using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7549a6509924ef5eee17ad97e0a19a57" data-text-hash="a5eeb4bbaf53070a0e5ff9f9d8806ecf" id="76" refid="76">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get events -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="398fcc910008584face1e5a24c61821c" data-text-hash="9535155486b74297362f0c20185aea79" id="77" refid="77">
+<p>You could emulate a crash of the container&#8217;s main process by sending it the <code>KILL</code> signal, but you can&#8217;t do this from inside the container because the Linux Kernel doesn&#8217;t let you kill the root process (the process with PID 1). You would have to SSH to the pod&#8217;s host node and kill the process from there. Fortunately, Envoy&#8217;s administration interface allows you to stop the process via its HTTP API.</p>
+</div>
+<div class="readable-text" data-hash="41968f3450b1f12bd90f559108c80f32" data-text-hash="b6fe9cf1a078e76560b5dc1c80b5c6e7" id="78" refid="78">
+<p>To terminate the <code>envoy</code> container, open the URL <a href=".html">http://localhost:9901</a> in your browser and click the <i>quitquitquit</i> button or run the following <code>curl</code> command in another terminal:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0115e73f9b000fc0cd273f3cb4c656ed" data-text-hash="580882e6250cbc9309838fc8216e3db7" id="79" refid="79">
+<div class="code-area-container">
+<pre class="code-area">$ curl -X POST http://localhost:9901/quitquitquit
+OK</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="63c1e255bbc73b5a06a292a03bd97286" data-text-hash="987bd0dad94c38a6a975db580c18e1ea" id="80" refid="80">
+<p>To see what happens with the container and the pod it belongs to, examine the output of the <code>kubectl get pods -w</code> command you ran earlier. This is its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="37945192e279e320206085366db0010c" data-text-hash="3cea93f1f2d9945fb174e1bfe768d06e" id="81" refid="81">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -w
+NAME           READY   STATUS     RESTARTS   AGE
+kiada-ssl      2/2     Running    0          1s
+kiada-ssl      1/2     NotReady   0          9m33s
+kiada-ssl      2/2     Running    1          9m34s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="680d7673d9c970af55bfbf41e42ce1ca" data-text-hash="319ba9be94645e223af121b60356e148" id="82" refid="82">
+<p>The listing shows that the pod&#8217;s <code>STATUS</code> changes from <code>Running</code> to <code>NotReady</code>, while the <code>READY</code> column indicates that only one of the two containers is ready. Immediately thereafter, Kubernetes restarts the container and the pod&#8217;s status returns to <code>Running</code>. The <code>RESTARTS</code> column indicates that one container has been restarted.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="83" refid="83">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="dc7f29ab6568b107a5998b2e0ffa0fa2" data-text-hash="2bcb287656d735433540aa17cc2dac22" id="84" refid="84">
+<p> If one of the pod&#8217;s containers fails, the other containers continue to run.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2ca94ff9d59fd4a78c787ffa56abb775" data-text-hash="7bba2c92bda5116d19fdd6bb0d80546a" id="85" refid="85">
+<p>Now examine the output of the <code>kubectl get events -w</code> command you ran earlier. Here&#8217;s the command and its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1e75c19cb0b9d12a971856c535d9597e" data-text-hash="b549cb000c986b0841dac4aa7a49ce28" id="86" refid="86">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ev -w
+LAST SEEN   TYPE      REASON      OBJECT           MESSAGE
+0s          Normal    Pulled      pod/kiada-ssl    Container image already
+                                                   present on machine
+0s          Normal    Created     pod/kiada-ssl    Created container envoy
+0s          Normal    Started     pod/kiada-ssl    Started container envoy</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fa80ca259de6214d290c6e98f3c356cb" data-text-hash="254f24d03eb54021034930591d4f3e33" id="87" refid="87">
+<p>The events show that the new <code>envoy</code> container has been started. You should be able to access the application via HTTPS again. Please confirm with your browser or <code>curl</code>.</p>
+</div>
+<div class="readable-text" data-hash="035a65bbd9a49d34b2f581ddb4d4d295" data-text-hash="5ca8d6b1bbcb987d5e5e6d21cecaa207" id="88" refid="88">
+<p>The events in the listing also expose an important detail about how Kubernetes restarts containers. The second event indicates that the entire <code>envoy</code> container has been recreated. Kubernetes never restarts a container, but instead discards it and creates a new container. Regardless, we call this <i>restarting</i> a container.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="89" refid="89">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5c66cf858d2ce876db57a26970f9fd22" data-text-hash="63aff748f41fd987ef5120d12ce5aaec" id="90" refid="90">
+<p> Any data that the process writes to the container&#8217;s filesystem is lost when the container is recreated. This behavior is sometimes undesirable. To persist data, you must add a storage volume to the pod, as explained in the next chapter.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="91" refid="91">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="46bb635c603030da212a443e4e24bd37" data-text-hash="0b43aa208af6cf87986c09c42ccaff43" id="92" refid="92">
+<p> If init containers are defined in the pod and one of the pod&#8217;s regular containers is restarted, the init containers are not executed again.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="481e1a4c98dc77f67b72c707b945bfb0" data-text-hash="4825de00c3811f0e4d48b62ab1b4aaf2" id="93" refid="93">
+<h4>Configuring the pod&#8217;s restart policy</h4>
+</div>
+<div class="readable-text" data-hash="3ef04056d74e1a0600db6fe533e556e2" data-text-hash="e2d0d8ffd9e73533a5baa06e07d76900" id="94" refid="94">
+<p>By default, Kubernetes restarts the container regardless of whether the process in the container exits with a zero or non-zero exit code - in other words, whether the container completes successfully or fails. This behavior can be changed by setting the <code>restartPolicy</code> field in the pod&#8217;s <code>spec</code>.</p>
+</div>
+<div class="readable-text" data-hash="0ed244bb9429729420c38dfb29d61966" data-text-hash="27485654701c115b38b5e711e23f6c6c" id="95" refid="95">
+<p>Three restart policies exist. They are explained in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="bede58bbdb3b81e7ad7e582ba8e7c8ea" data-text-hash="92936a59fca200d9ad2200e7bb6c8832" id="96" refid="96">
+<h5>Figure 6.4 The pod&#8217;s restartPolicy determines whether its containers are restarted or not</h5>
+<img alt="" data-processed="true" height="235" id="Picture_4" loading="lazy" src="EPUB/images/06image005.png" width="848">
+</div>
+<div class="readable-text" data-hash="ac6e0a81998f43cc59cd1f722d4dc875" data-text-hash="87cd27362ca63baebbe43a112c1aa9f7" id="97" refid="97">
+<p>The following table describes the three restart policies.</p>
+</div>
+<div class="browsable-container" data-hash="7421d6b64afb630dd21afce19c541652" data-text-hash="d00fcbf85cfccdcdb8f3b4203d601fdd" id="98" refid="98">
+<h5>Table 6.4 Pod restart policies</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Restart Policy</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Always
+</pre> </td>
+<td> <p>Container is restarted regardless of the exit code the process in the container terminates with. This is the default restart policy.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>OnFailure
+</pre> </td>
+<td> <p>The container is restarted only if the process terminates with a non-zero exit code, which by convention indicates failure.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Never
+</pre> </td>
+<td> <p>The container is never restarted - not even when it fails.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="99" refid="99">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="94a0f0fb182f6cb330d8ba0e98bcf034" data-text-hash="0c40720a7b133102257c7f9283de8949" id="100" refid="100">
+<p> Surprisingly, the restart policy is configured at the pod level and applies to all its containers. It can&#8217;t be configured for each container individually.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="1b5b6594766e572fe997b90bb1b489b1" data-text-hash="10deb4c32bc152613b391f25aa8a22f7" id="101" refid="101">
+<h4>Understanding the time delay inserted before a container is restarted</h4>
+</div>
+<div class="readable-text" data-hash="2a6d52220c8bda578bde352772ed1a27" data-text-hash="d16f1ebc879f675b1d537ce9b9087ebf" id="102" refid="102">
+<p>If you call Envoy&#8217;s <code>/quitquitquit</code> endpoint several times, you&#8217;ll notice that each time it takes longer to restart the container after it terminates. The pod&#8217;s status is displayed as either <code>NotReady</code> or <code>CrashLoopBackOff</code>. Here&#8217;s what it means.</p>
+</div>
+<div class="readable-text" data-hash="e486f1ecadac38fd7695032abad604c6" data-text-hash="54a1841c6f8b4c0c766a1d64784e9970" id="103" refid="103">
+<p>As shown in the following figure, the first time a container terminates, it is restarted immediately. The next time, however, Kubernetes waits ten seconds before restarting it again. This delay is then doubled to 20, 40, 80 and then to 160 seconds after each subsequent termination. From then on, the delay is kept at five minutes. This delay that doubles between attempts is called exponential back-off.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="59cbb77d2c0169e642b8eb00a871c04e" data-text-hash="a77103f284e75d48b51f1514b801d741" id="104" refid="104">
+<h5>Figure 6.5 Exponential back-off between container restarts</h5>
+<img alt="" data-processed="true" height="269" id="Picture_5" loading="lazy" src="EPUB/images/06image006.png" width="858">
+</div>
+<div class="readable-text" data-hash="97cf3edac1db3efd163219f69eca0162" data-text-hash="46011147199a1a869b908feb419eee8c" id="105" refid="105">
+<p>In the worst case, a container can therefore be prevented from starting for up to five minutes.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="106" refid="106">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9e73633cda192b178c959ff3428dc72f" data-text-hash="32ca5f24998d49aba2b261e012fd0ea2" id="107" refid="107">
+<p> The delay is reset to zero when the container has run successfully for 10 minutes. If the container must be restarted later, it is restarted immediately.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="33f53e460e49777ce2aaddcb39432d4f" data-text-hash="7d0000377ea817cc7b2119731863dd2a" id="108" refid="108">
+<p>Check the container status in the pod manifest as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="da9bf42c7128911c145853de4dc95925" data-text-hash="fb66a17e3feede711bcb00ba6fa238c4" id="109" refid="109">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada-ssl -o json | jq .status.containerStatuses
+...
+"state": {
+  "waiting": {
+    "message": "back-off 40s restarting failed container=envoy ...",
+    "reason": "CrashLoopBackOff"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="efa9554ed33e3a386d2aba9c3b1f7b64" data-text-hash="89b071c355700573530a8d1b3e6882fd" id="110" refid="110">
+<p>As you can see in the output, while the container is waiting to be restarted, its state is <code>Waiting</code>, and the <code>reason</code> is <code>CrashLoopBackOff</code>. The <code>message</code> field tells you how long it will take for the container to be restarted.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="111" refid="111">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="0889c41cf53ee6281a6e7e29e81da37b" data-text-hash="894f19f1c50749917d71c3d3e72bc07a" id="112" refid="112">
+<p> When you tell Envoy to terminate, it terminates with exit code zero, which means it hasn&#8217;t crashed. The <code>CrashLoopBackOff</code> status can therefore be misleading.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c411be7f8e79a33f510282c065d8a2c9" data-text-hash="d891afb27d24bf7c57431ab946643a01" id="113" refid="113">
+<h3 id="sigil_toc_id_97">6.2.2&#160;Checking the container&#8217;s health using liveness probes</h3>
+</div>
+<div class="readable-text" data-hash="7062f44bf7b7524b82504fcf5428ce04" data-text-hash="a21608d790b86083fc31ff3c0a649bbc" id="114" refid="114">
+<p>In the previous section, you learned that Kubernetes keeps your application healthy by restarting it when its process terminates. But applications can also become unresponsive without terminating. For example, a Java application with a memory leak eventually starts spewing out OutOfMemoryErrors, but its JVM process continues to run. Ideally, Kubernetes should detect this kind of error and restart the container.</p>
+</div>
+<div class="readable-text" data-hash="d03112a87d01b69448e4729dbb467269" data-text-hash="8af9509d26a16bfd05bc6a46a3f04af1" id="115" refid="115">
+<p>The application could catch these errors by itself and immediately terminate, but what about the situations where your application stops responding because it gets into an infinite loop or deadlock? What if the application can&#8217;t detect this? To ensure that the application is restarted in such cases, it may be necessary to check its state from the outside.</p>
+</div>
+<div class="readable-text" data-hash="4ba878bd19f3b7a9216669cc917ee771" data-text-hash="6afb91eefc85273c49e011bda2168922" id="116" refid="116">
+<h4>Introducing liveness probes</h4>
+</div>
+<div class="readable-text" data-hash="c1d11e717ab3816a554f70912af8ae89" data-text-hash="25f08a8632d9a1fda8d0d0aa745573a6" id="117" refid="117">
+<p>Kubernetes can be configured to check whether an application is still alive by defining a <i>liveness probe</i>. You can specify a liveness probe for each container in the pod. Kubernetes runs the probe periodically to ask the application if it&#8217;s still alive and well. If the application doesn&#8217;t respond, an error occurs, or the response is negative, the container is considered unhealthy and is terminated. The container is then restarted if the restart policy allows it.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="118" refid="118">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b1b7459496c6b0d5ad0d6a7d0ea5e85c" data-text-hash="e9d1ace326572a2d86d9d0714d69a714" id="119" refid="119">
+<p> Liveness probes can only be used in the pod&#8217;s regular containers. They can&#8217;t be defined in init containers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9f8a9ea8a9319768a17632b17409e121" data-text-hash="bbc2271cde3b891388f48727c346c60b" id="120" refid="120">
+<h4>Types of liveness probes</h4>
+</div>
+<div class="readable-text" data-hash="21cc056f0a6391accc98a9f47f4d841e" data-text-hash="6f512aa01beff1193ffa0fff7d80ed40" id="121" refid="121">
+<p>Kubernetes can probe a container with one of the following three mechanisms:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="312b7ba2face03f4f549a007f11252e8" data-text-hash="283edd27de35f93f69794371ac88ec87" id="122" refid="122">An <i>HTTP GET</i> probe sends a GET request to the container&#8217;s IP address, on the network port and path you specify. If the probe receives a response, and the response code doesn&#8217;t represent an error (in other words, if the HTTP response code is <code class="codechar">2xx</code> or <code class="codechar">3xx</code>), the probe is considered successful. If the server returns an error response code, or if it doesn&#8217;t respond in time, the probe is considered to have failed.</li>
+<li class="readable-text" data-hash="38fee2075a7ff062674767f8b04da379" data-text-hash="9b5e4960a4ea7dc387e844ed5746e897" id="123" refid="123">A <i>TCP Socket</i> probe attempts to open a TCP connection to the specified port of the container. If the connection is successfully established, the probe is considered successful. If the connection can&#8217;t be established in time, the probe is considered failed.</li>
+<li class="readable-text" data-hash="16a561fd28a677789ac74b1585700791" data-text-hash="48f5050eb565c5dd035e2fca33800805" id="124" refid="124">An <i>Exec</i> probe executes a command inside the container and checks the exit code it terminates with. If the exit code is zero, the probe is successful. A non-zero exit code is considered a failure. The probe is also considered to have failed if the command fails to terminate in time.</li>
+</ul>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="125" refid="125">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="bbfa64f18fbc23de04c328dee39f56af" data-text-hash="89cd282467e5d25e19136ed23559fc44" id="126" refid="126">
+<p> In addition to a liveness probe, a container may also have a <i>startup</i> probe, which is discussed in section 6.2.6, and a <i>readiness</i> probe, which is explained in chapter 10.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5b08b3d41584d6c32066ed15da6b0484" data-text-hash="163be839bbfff6fe7d3ebf3322fe2ae8" id="127" refid="127">
+<h3 id="sigil_toc_id_98">6.2.3&#160;Creating an HTTP GET liveness probe</h3>
+</div>
+<div class="readable-text" data-hash="cfc166b306b12624bea5bfea93e4143e" data-text-hash="19fd9f5b580a5a50ed634b5fc0876081" id="128" refid="128">
+<p>Let&#8217;s look at how to add a liveness probe to each of the containers in the <code>kiada-ssl</code> pod. Because they both run applications that understand HTTP, it makes sense to use an HTTP GET probe in each of them. The Node.js application doesn&#8217;t provide any endpoints to explicitly check the health of the application, but the Envoy proxy does. In real-world applications, you&#8217;ll encounter both cases.</p>
+</div>
+<div class="readable-text" data-hash="5c5175f6d3409ab34834aea0b90a002d" data-text-hash="8e74fd386853ff4163c71584bf7442d0" id="129" refid="129">
+<h4>Defining liveness probes in the pod manifest</h4>
+</div>
+<div class="readable-text" data-hash="a708f67b6ce640a7d225a8575c227b01" data-text-hash="540b9c0f71420d3b120e3d4e71fb47fd" id="130" refid="130">
+<p>The following listing shows an updated manifest for the pod, which defines a liveness probe for each of the two containers, with different levels of configuration (file <code>pod.kiada-liveness.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6c7f6d2d3649614b66fe43c73e159f3e" data-text-hash="291be881575409288f1dfcb0c4c46cf9" id="131" refid="131">
+<h5>Listing 6.1 Adding a liveness probe to a pod</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-liveness
+spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+    livenessProbe:    #A
+      httpGet:    #A
+        path: /    #A
+        port: 8080    #A
+  - name: envoy
+    image: luksa/kiada-ssl-proxy:0.1
+    ports:
+    - name: https
+      containerPort: 8443
+    - name: admin
+      containerPort: 9901
+    livenessProbe:    #B
+      httpGet:    #B
+        path: /ready    #B
+        port: admin    #B
+      initialDelaySeconds: 10    #B
+      periodSeconds: 5    #B
+      timeoutSeconds: 2    #B
+      failureThreshold: 3    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGxpdmVuZXNzIHByb2JlIGRlZmluaXRpb24gZm9yIHRoZSBjb250YWluZXIgcnVubmluZyBOb2RlLmpzCiNCIFRoZSBsaXZlbmVzcyBwcm9iZSBmb3IgdGhlIEVudm95IHByb3h5"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fcdbf39dd410de4c524f1e461f2aebcc" data-text-hash="dc0867039e9bfb9b4ade5ec022d44592" id="132" refid="132">
+<p>These liveness probes are explained in the next two sections.</p>
+</div>
+<div class="readable-text" data-hash="93f80880741c2e2a4c8982b664b34377" data-text-hash="b3afa24898db7f52b8516d8de22845a2" id="133" refid="133">
+<h4>Defining a liveness probe using the minimum required configuration</h4>
+</div>
+<div class="readable-text" data-hash="9a4a72a3eed53b36a7ca78f818227910" data-text-hash="1472750c59cc99c722539d888de30c55" id="134" refid="134">
+<p>The liveness probe for the <code>kiada</code> container is the simplest version of a probe for HTTP-based applications. The probe simply sends an HTTP <code>GET</code> request for the path <code>/</code> on port <code>8080</code> to determine if the container can still serve requests. If the application responds with an HTTP status between <code>200</code> and <code>399</code>, the application is considered healthy.</p>
+</div>
+<div class="readable-text" data-hash="aabe585e5bfd38cd181fa8ad8d0fcbdd" data-text-hash="f7a143855e7fdfc829217a56d7feca74" id="135" refid="135">
+<p>The probe doesn&#8217;t specify any other fields, so the default settings are used. The first request is sent 10s after the container starts and is repeated every 5s. If the application doesn&#8217;t respond within two seconds, the probe attempt is considered failed. If it fails three times in a row, the container is considered unhealthy and is terminated.</p>
+</div>
+<div class="readable-text" data-hash="68ea0be7afb7db3ba9f55455b28b89ae" data-text-hash="1b1215bb33532165f730f5a571104208" id="136" refid="136">
+<h4>Understanding liveness probe configuration options</h4>
+</div>
+<div class="readable-text" data-hash="c55c29195e898f006def917d659d17f0" data-text-hash="845eaf97bf3c783e220a4b33e313bca5" id="137" refid="137">
+<p>The administration interface of the Envoy proxy provides the special endpoint <code>/ready</code> through which it exposes its health status. Instead of targeting port <code>8443</code>, which is the port through which Envoy forwards HTTPS requests to Node.js, the liveness probe for the <code>envoy</code> container targets this special endpoint on the <code>admin</code> port, which is port number <code>9901</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="138" refid="138">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="1e89cf6f249b7982430f79d236a20a9c" data-text-hash="cb11dab93b395fa6831365209327e974" id="139" refid="139">
+<p> As you can see in the <code>envoy</code> container&#8217;s liveness probe, you can specify the probe&#8217;s target port by name instead of by number.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="141fe58e91c660183368d21889221126" data-text-hash="4bea241dff1b9be18b67e3c0b11d288a" id="140" refid="140">
+<p>The liveness probe for the <code>envoy</code> container also contains additional fields. These are best explained with the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="69db66d2f47e8ba6b5205e05e2b43147" data-text-hash="2a2ab59743d89d22ece79abfb03212a4" id="141" refid="141">
+<h5>Figure 6.6 The configuration and operation of a liveness probe</h5>
+<img alt="" data-processed="true" height="269" id="Picture_6" loading="lazy" src="EPUB/images/06image007.png" width="851">
+</div>
+<div class="readable-text" data-hash="c4be9cb8e162216ac76385d0db545dcb" data-text-hash="655719e8f073c4029f9313c26279e5e5" id="142" refid="142">
+<p>The parameter <code>initialDelaySeconds</code> determines how long Kubernetes should delay the execution of the first probe after starting the container. The <code>periodSeconds</code> field specifies the amount of time between the execution of two consecutive probes, whereas the <code>timeoutSeconds</code> field specifies how long to wait for a response before the probe attempt counts as failed. The <code>failureThreshold</code> field specifies how many times the probe must fail for the container to be considered unhealthy and potentially restarted.</p>
+</div>
+<div class="readable-text" data-hash="5d74411228735d244ae3c960cd6d2802" data-text-hash="391a7f3f2ce3739048d4ca5d69fdd7d8" id="143" refid="143">
+<h3 id="sigil_toc_id_99">6.2.4&#160;Observing the liveness probe in action</h3>
+</div>
+<div class="readable-text" data-hash="8052ab8952eb2ca1c191e732560ea0b0" data-text-hash="62a89d707dac999eceb948f1b456b292" id="144" refid="144">
+<p>To see Kubernetes restart a container when its liveness probe fails, create the pod from the <code>pod.kiada-liveness.yaml</code> manifest file using <code>kubectl apply</code>, and run <code>kubectl port-forward</code> to enable communication with the pod. You&#8217;ll need to stop the <code>kubectl port-forward</code> command still running from the previous exercise. Confirm that the pod is running and is responding to HTTP requests.</p>
+</div>
+<div class="readable-text" data-hash="d6d87fc6a113e2803c85558dedfdfec6" data-text-hash="513c5388867e00609f568aa7de7ffd7b" id="145" refid="145">
+<h4>Observing a successful liveness probe</h4>
+</div>
+<div class="readable-text" data-hash="66130691ad0693910b11bf58b5cdd3b5" data-text-hash="b8f330eeadcb1023ec8d4a7f750f5768" id="146" refid="146">
+<p>The liveness probes for the pod&#8217;s containers starts firing soon after the start of each individual container. Since the processes in both containers are healthy, the probes continuously report success. As this is the normal state, the fact that the probes are successful is not explicitly indicated anywhere in the status of the pod nor in its events.</p>
+</div>
+<div class="readable-text" data-hash="3abe290564ee969856b06d2a1eaea003" data-text-hash="0dfe6b6835afdff19ca15cb351fd4037" id="147" refid="147">
+<p>The only indication that Kubernetes is executing the probe is found in the container logs. The Node.js application in the <code>kiada</code> container prints a line to the standard output every time it handles an HTTP request. This includes the liveness probe requests, so you can display them using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="045d4bbc96b5bb13c8a298fe2bc52f8b" data-text-hash="5193b0d47ef2092233b50899b46dc674" id="148" refid="148">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-liveness -c kiada -f</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ac31bcf43f2c22ca68733ade7c624f6f" data-text-hash="142b0a4491e2bd65751095e013b7e99b" id="149" refid="149">
+<p>The liveness probe for the <code>envoy</code> container is configured to send HTTP requests to Envoy&#8217;s administration interface, which doesn&#8217;t log HTTP requests to the standard output, but to the file <code>/tmp/envoy.admin.log</code> in the container&#8217;s filesystem. To display the log file, you use the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0a3c4ab4bd183a2e3c9ffae211698dfc" data-text-hash="a4744e75a79e664c6b682fbf1e9e053d" id="150" refid="150">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada-liveness -c envoy -- tail -f /tmp/envoy.admin.log</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a389417d7a593d285a6110a2bdd7f4a3" data-text-hash="333bd849cf130d462ed34b565ca93509" id="151" refid="151">
+<h4>Observing the liveness probe fail</h4>
+</div>
+<div class="readable-text" data-hash="afb9219d20c16a099e78dc93a6013c35" data-text-hash="4bc294b533dc28427e8c9d19ed853379" id="152" refid="152">
+<p>A successful liveness probe isn&#8217;t interesting, so let&#8217;s cause Envoy&#8217;s liveness probe to fail. To see what will happen behind the scenes, start watching events by executing the following command in a separate terminal:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7549a6509924ef5eee17ad97e0a19a57" data-text-hash="a5eeb4bbaf53070a0e5ff9f9d8806ecf" id="153" refid="153">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get events -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="47d1ceb0d0d08f3ac660cc696df6569c" data-text-hash="ed01a50b9ce50aabea7c1a00557b9e9e" id="154" refid="154">
+<p>Using Envoy&#8217;s administration interface, you can configure its health check endpoint to succeed or fail. To make it fail, open URL <a href=".html">http://localhost:9901</a> in your browser and click the <i>healthcheck/fail</i> button, or use the following <code>curl</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8ff7f3f2374e3420c0be4e39972b44e3" data-text-hash="39879182e52ad790eb3a155f94186d29" id="155" refid="155">
+<div class="code-area-container">
+<pre class="code-area">$ curl -X POST localhost:9901/healthcheck/fail</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d2a5525a3e3144362e26e4df58216c6b" data-text-hash="a07d35dfb982abffa3671cb4506110f8" id="156" refid="156">
+<p>Immediately after executing the command, observe the events that are displayed in the other terminal. When the probe fails, a <code>Warning</code> event is recorded, indicating the error and the HTTP status code returned:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ca9db0da0dab1e0d9fef343a435feaa6" data-text-hash="022fe5e57a9b2a32ebdb22c0cebfa9cb" id="157" refid="157">
+<div class="code-area-container">
+<pre class="code-area">Warning  Unhealthy  Liveness probe failed: HTTP probe failed with code 503</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="363b0abc3a7e776aea66f95355ff08c5" data-text-hash="fe6b4a17f3292352e47d8d643f89f857" id="158" refid="158">
+<p>Because the probe&#8217;s <code>failureThreshold</code> is set to three, a single failure is not enough to consider the container unhealthy, so it continues to run. You can make the liveness probe succeed again by clicking the <i>healthcheck/ok</i> button in Envoy&#8217;s admin interface, or by using <code>curl</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f951d4c88699ada4548cf41d527ed18a" data-text-hash="51d8c34fea48d4e192904d4a2ce7e7a5" id="159" refid="159">
+<div class="code-area-container">
+<pre class="code-area">$ curl -X POST localhost:9901/healthcheck/ok</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="730c5bcf0351d861a86bba1e23e24ba7" data-text-hash="744c2acbc56f93c83f34a4095d2eaafa" id="160" refid="160">
+<p>If you are fast enough, the container won&#8217;t be restarted.</p>
+</div>
+<div class="readable-text" data-hash="37959388bd98660dc7cb94ba5c0828b0" data-text-hash="c778345fadc4b2e3b2ed7dc3fbcb73a8" id="161" refid="161">
+<h4>Observing the liveness probe reach the failure threshold</h4>
+</div>
+<div class="readable-text" data-hash="7477a9aee973d935f6e763b5ab95479c" data-text-hash="df229264a62f0a51d2ed296e9696b69a" id="162" refid="162">
+<p>If you let the liveness probe fail multiple times, the <code>kubectl get events -w</code> command should print the following events (note that some columns are omitted due to page width constraints):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0c86e1ae04f55969602f578c25dbac6a" data-text-hash="1627a315dd6afaa0a9cb9458234ba03a" id="163" refid="163">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get events -w
+TYPE     REASON     MESSAGE
+Warning  Unhealthy  Liveness probe failed: HTTP probe failed with code 503    #A
+Warning  Unhealthy  Liveness probe failed: HTTP probe failed with code 503    #A
+Warning  Unhealthy  Liveness probe failed: HTTP probe failed with code 503    #A
+Normal   Killing    Container envoy failed liveness probe, will be restarted    #B
+Normal   Pulled     Container image already present on machine
+Normal   Created    Created container envoy
+Normal   Started    Started container envoy</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGxpdmVuZXNzIHByb2JlIGZhaWxzIHRocmVlIHRpbWVzCiNCIFdoZW4gdGhlIGZhaWx1cmUgdGhyZXNob2xkIGlzIHJlYWNoZWQsIHRoZSBjb250YWluZXIgaXMgcmVzdGFydGVk"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="48b40c1a26ef60d8d7e167851007a0f1" data-text-hash="1e54ff531cd4affb4d8624c7cfa79158" id="164" refid="164">
+<p>Remember that the probe failure threshold is set to 3, so when the probe fails three times in a row, the container is stopped and restarted. This is indicated by the events in the listing.</p>
+</div>
+<div class="readable-text" data-hash="5694a611093334836b074eb17a0f4445" data-text-hash="a592af822fc0ba93183aee4bdd91bb54" id="165" refid="165">
+<p>The <code>kubectl get pods</code> command shows that the container has been restarted:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e77af400591b65edebc3be5a3d926c7a" data-text-hash="c62a8b623df7a6916bf99f0d65b3519d" id="166" refid="166">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada-liveness
+NAME             READY   STATUS    RESTARTS   AGE
+kiada-liveness   2/2     Running   1          5m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9d5e41de6fc56fba073287c9eacf3594" data-text-hash="fead7e2419e5f29bc4268fe5f751003f" id="167" refid="167">
+<p>The <code>RESTARTS</code> column shows that one container restart has taken place in the pod.</p>
+</div>
+<div class="readable-text" data-hash="f6d5b96c374062e7be36a3018584ac99" data-text-hash="d53810d2714dafd4d63fb57171c6048c" id="168" refid="168">
+<h4>Understanding how a container that fails its liveness probe is restarted</h4>
+</div>
+<div class="readable-text" data-hash="16e23519d4de4a1c892bb63397396d91" data-text-hash="21a22d2f9fa45547ca2a19b1079a1af8" id="169" refid="169">
+<p>If you&#8217;re wondering whether the main process in the container was gracefully stopped or killed forcibly, you can check the pod&#8217;s status by retrieving the full manifest using <code>kubectl get</code> or using <code>kubectl</code> <code>describe</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8038640c3d0d18b5fbcd0e589a1ee315" data-text-hash="410340c342748f65cfe05ac36de4da60" id="170" refid="170">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po kiada-liveness
+Name:           kiada-liveness
+...
+Containers:
+  ...
+  envoy:
+    ...
+    State:          Running    #A
+      Started:      Sun, 31 May 2020 21:33:13 +0200    #A
+    Last State:     Terminated    #B
+      Reason:       Completed    #B
+      Exit Code:    0    #B
+      Started:      Sun, 31 May 2020 21:16:43 +0200    #B
+      Finished:     Sun, 31 May 2020 21:33:13 +0200    #B
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB0aGUgc3RhdGUgb2YgdGhlIG5ldyBjb250YWluZXIuCiNCIFRoZSBwcmV2aW91cyBjb250YWluZXIgdGVybWluYXRlZCB3aXRoIGV4aXQgY29kZSAwLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ec2c081dcceaf616576d57963d5aee89" data-text-hash="0084425e6775334eefe8a791533cd225" id="171" refid="171">
+<p>The exit code zero shown in the listing implies that the application process gracefully exited on its own. If it had been killed, the exit code would have been 137.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="172" refid="172">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c5450a1c3ef3030d85de6549922410be" data-text-hash="e2a9b784a1b2494e57ffb8ea1aa38a9f" id="173" refid="173">
+<p> Exit code <code>128+n</code> indicates that the process exited due to external signal <code>n</code>. Exit code <code>137</code> is <code>128+9</code>, where <code>9</code> represents the <code>KILL</code> signal. You&#8217;ll see this exit code whenever the container is killed. Exit code <code>143</code> is <code>128+15</code>, where 15 is the <code>TERM</code> signal. You&#8217;ll typically see this exit code when the container runs a shell that has terminated gracefully.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="aa7c737c0d0fe09c12e631f76ad387c1" data-text-hash="60bf1b1b4f062102092ab62b5a03e877" id="174" refid="174">
+<p>Examine Envoy&#8217;s log to confirm that it caught the <code>TERM</code> signal and has terminated by itself. You must use the <code>kubectl</code> <code>logs</code> command with the <code>--container</code> or the shorter <code>-c</code> option to specify what container you&#8217;re interested in.</p>
+</div>
+<div class="readable-text" data-hash="aa43b328d413b96eb8c134f6aaed12f1" data-text-hash="2ab6767dfea69d1fc0049a5e824828a6" id="175" refid="175">
+<p>Also, because the container has been replaced with a new one due to the restart, you must request the log of the previous container using the <code>--previous</code> or <code>-p</code> flag. Here&#8217;s the command to use and the last four lines of its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d770ede988d17122bb47cbb0e93999b4" data-text-hash="c8e47962675072c26b27ec257bb68dcf" id="176" refid="176">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-liveness -c envoy -p
+...
+...[warning][main] [source/server/server.cc:493] caught SIGTERM
+...[info][main] [source/server/server.cc:613] shutting down server instance
+...[info][main] [source/server/server.cc:560] main dispatch loop exited
+...[info][main] [source/server/server.cc:606] exiting</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="df63e33b2cdc111b248f7dbbde15d01d" data-text-hash="42425718f12d8e5d1d7de7524859e677" id="177" refid="177">
+<p>The log confirms that Kubernetes sent the <code>TERM</code> signal to the process, allowing it to shut down gracefully. Had it not terminated by itself, Kubernetes would have killed it forcibly.</p>
+</div>
+<div class="readable-text" data-hash="4515f35adf69b4c12e111dfceb63be4a" data-text-hash="742b96ab7b8c1377f862e89d86884b98" id="178" refid="178">
+<p>After the container is restarted, its health check endpoint responds with HTTP status <code>200 OK</code> again, indicating that the container is healthy.</p>
+</div>
+<div class="readable-text" data-hash="43648e83ee4043f72ee7a27cf60f4c0f" data-text-hash="908437152fec2cd9c289e3ac414abed6" id="179" refid="179">
+<h3 id="sigil_toc_id_100">6.2.5&#160;Using the exec and the tcpSocket liveness probe types</h3>
+</div>
+<div class="readable-text" data-hash="4894dfe30a0bad414dbb997a7bcad0ed" data-text-hash="b61c8c81466335b86408f8465d33d769" id="180" refid="180">
+<p>For applications that don&#8217;t expose HTTP health-check endpoints, the <code>tcpSocket</code> or the <code>exec</code> liveness probes should be used.</p>
+</div>
+<div class="readable-text" data-hash="29e73c20c2a52e783760d2cd03c0ed06" data-text-hash="5e7bc9cf60c664867826b2bc813f29ac" id="181" refid="181">
+<h4>Adding a tcpSocket liveness probe</h4>
+</div>
+<div class="readable-text" data-hash="d29d0b63e05708f0e11a4229fe4f7795" data-text-hash="5d239b82feb1f530d3131873efeb5eb9" id="182" refid="182">
+<p>For applications that accept non-HTTP TCP connections, a <code>tcpSocket</code> liveness probe can be configured. Kubernetes tries to open a socket to the TCP port and if the connection is established, the probe is considered a success, otherwise it's considered a failure.</p>
+</div>
+<div class="readable-text" data-hash="fd013e32179177aaca5c1192d418b797" data-text-hash="2650e64646889f4fb1ed223b12ed05a0" id="183" refid="183">
+<p>An example of a <code>tcpSocket</code> liveness probe is shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="82f1e02b0bb9b4a5d509f1ba0de5fa43" data-text-hash="00828cf63046a03ffe8c4d8cb2224468" id="184" refid="184">
+<div class="code-area-container">
+<pre class="code-area">livenessProbe:
+      tcpSocket:    #A
+        port: 1234    #A
+      periodSeconds: 2    #B
+      failureThreshold: 1    #C  </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB0Y3BTb2NrZXQgcHJvYmUgdXNlcyBUQ1AgcG9ydCAxMjM0CiNCIFRoZSBwcm9iZSBydW5zIGV2ZXJ5IDJzCiNDIEEgc2luZ2xlIHByb2JlIGZhaWx1cmUgaXMgZW5vdWdoIHRvIHJlc3RhcnQgdGhlIGNvbnRhaW5lcg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b59968a0ab733a0fb5d23cadd05e524e" data-text-hash="4929d9d103096d4c29b42c856bec4bcd" id="185" refid="185">
+<p>The probe in the listing is configured to check if the container&#8217;s network port <code>1234</code> is open. An attempt to establish a connection is made every two seconds and a single failed attempt is enough to consider the container as unhealthy.</p>
+</div>
+<div class="readable-text" data-hash="f897338f83eb4a6119dec5f2bb15b05b" data-text-hash="304211acf8c9c912bfe36d96e8e7ffc9" id="186" refid="186">
+<h4>Adding an exec liveness probe</h4>
+</div>
+<div class="readable-text" data-hash="a23909f6d34f65bce4692be95a43fd98" data-text-hash="14c0295a89cfcf4614531d4e2a572ec5" id="187" refid="187">
+<p>Applications that do not accept TCP connections may provide a command to check their status. For these applications, an <code>exec</code> liveness probe is used. As shown in the next figure, the command is executed inside the container and must therefore be available on the container&#8217;s file system.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="18d2bcbed0edb17a9ccdbd7c7e8ad241" data-text-hash="6daa55c211567fe577f1415a74ccfcf5" id="188" refid="188">
+<h5>Figure 6.7 The exec liveness probe runs the command inside the container</h5>
+<img alt="" data-processed="true" height="161" id="Picture_7" loading="lazy" src="EPUB/images/06image008.png" width="757">
+</div>
+<div class="readable-text" data-hash="e2726aec4f3d0a51345ad36cca9f8baa" data-text-hash="76d1f0a698943650e34f8bb4502b443b" id="189" refid="189">
+<p>The following is an example of a probe that runs <code>/usr/bin/healthcheck</code> every two seconds to determine if the application running in the container is still alive:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="abe718336df0739253973dd799f90e4e" data-text-hash="d0352b2cfe652fe4b92238f6cab7750e" id="190" refid="190">
+<div class="code-area-container">
+<pre class="code-area">livenessProbe:
+      exec:
+        command:    #A
+        - /usr/bin/healthcheck    #A
+      periodSeconds: 2    #B
+      timeoutSeconds: 1    #C
+      failureThreshold: 1    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbW1hbmQgdG8gcnVuIGFuZCBpdHMgYXJndW1lbnRzCiNCIFRoZSBwcm9iZSBydW5zIGV2ZXJ5IHNlY29uZAojQyBUaGUgY29tbWFuZCBtdXN0IHJldHVybiB3aXRoaW4gb25lIHNlY29uZAojRCBBIHNpbmdsZSBwcm9iZSBmYWlsdXJlIGlzIGVub3VnaCB0byByZXN0YXJ0IHRoZSBjb250YWluZXI="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="24debf36718f2d49f55e6d3b0af44274" data-text-hash="2d347206ef4277503dd117220e074913" id="191" refid="191">
+<p>If the command returns exit code zero, the container is considered healthy. If it returns a non-zero exit code or fails to complete within one second as specified in the <code>timeoutSeconds</code> field, the container is terminated immediately, as configured in the <code>failureThreshold</code> field, which indicates that a single probe failure is sufficient to consider the container as unhealthy.</p>
+</div>
+<div class="readable-text" data-hash="29a78badcc8960ecde36cce553ddc40d" data-text-hash="627e70bde7a06c6d2ea8dfe8e3b7ff48" id="192" refid="192">
+<h3 id="sigil_toc_id_101">6.2.6&#160;Using a startup probe when an application is slow to start</h3>
+</div>
+<div class="readable-text" data-hash="c9dfa0604914ebce6aa255998d52b6c3" data-text-hash="04c7e91e71a3381bfd31331d76f1d613" id="193" refid="193">
+<p>The default liveness probe settings give the application between 20 and 30 seconds to start responding to liveness probe requests. If the application takes longer to start, it is restarted and must start again. If the second start also takes as long, it is restarted again. If this continues, the container never reaches the state where the liveness probe succeeds and gets stuck in an endless restart loop.</p>
+</div>
+<div class="readable-text" data-hash="1740e5cc559df2a6ada0cf212e5e6479" data-text-hash="db37ff17b27bb8669ad44f0a17b20aa7" id="194" refid="194">
+<p>To prevent this, you can increase the <code>initialDelaySeconds</code>, <code>periodSeconds</code> or <code>failureThreshold</code> settings to account for the long start time, but this will have a negative effect on the normal operation of the application. The higher the result of <code>periodSeconds</code> <code>*</code> <code>failureThreshold</code>, the longer it takes to restart the application if it becomes unhealthy. For applications that take minutes to start, increasing these parameters enough to prevent the application from being restarted prematurely may not be a viable option.</p>
+</div>
+<div class="readable-text" data-hash="8efaae69ef440c0e6a69911b42bbb380" data-text-hash="5b06bb97061fe853b10c44334895249b" id="195" refid="195">
+<h4>Introducing startup probes</h4>
+</div>
+<div class="readable-text" data-hash="64cab08b5ce04bb5cb5b117dada3ca9a" data-text-hash="5f550d625f6fb8b40588f7c210942036" id="196" refid="196">
+<p>To deal with the discrepancy between the start and the steady-state operation of an application, Kubernetes also provides <i>startup probes</i>.</p>
+</div>
+<div class="readable-text" data-hash="b02ceaf39e7f35f6f3ddfbcb18b9c022" data-text-hash="05f5de3159d0e191e250e8a64a265e84" id="197" refid="197">
+<p>If a startup probe is defined for a container, only the startup probe is executed when the container is started. The startup probe can be configured to consider the slow start of the application. When the startup probe succeeds, Kubernetes switches to using the liveness probe, which is configured to quickly detect when the application becomes unhealthy.</p>
+</div>
+<div class="readable-text" data-hash="218e62a11db71a5ecbc5f7f0f8ac5385" data-text-hash="cc053629b365c8591b11fe0a38a31e06" id="198" refid="198">
+<h4>Adding a startup probe to a pod&#8217;s manifest</h4>
+</div>
+<div class="readable-text" data-hash="76775d9886ada1e44f6c16f4d226d35e" data-text-hash="377547b93d1b719d774d707c7e37e5c8" id="199" refid="199">
+<p>Imagine that the Kiada Node.js application needs more than a minute to warm up, but you want it to be restarted within 10 seconds when it becomes unhealthy during normal operation. The following listing shows how you configure the startup and liveness probes (you can find it in the file <code>pod.kiada-startup-probe.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="43404bcdad1209fb10dc5c19d288177e" data-text-hash="2d9bdc74d19738db4d136d3fe7995852" id="200" refid="200">
+<h5>Listing 6.2 Using a combination of a startup and a liveness probe</h5>
+<div class="code-area-container">
+<pre class="code-area">...
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+    startupProbe:
+      httpGet:
+        path: /    #A
+        port: http    #A
+      periodSeconds: 10    #B
+      failureThreshold:  12    #B
+    livenessProbe:
+      httpGet:
+        path: /    #A
+        port: http    #A
+      periodSeconds: 5    #C
+      failureThreshold: 2    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHN0YXJ0dXAgYW5kIHRoZSBsaXZlbmVzcyBwcm9iZXMgdHlwaWNhbGx5IHVzZSB0aGUgc2FtZSBlbmRwb2ludAojQiBUaGUgYXBwbGljYXRpb24gZ2V0cyAxMjAgc2Vjb25kcyB0byBzdGFydAojQyBBZnRlciBzdGFydHVwLCB0aGUgYXBwbGljYXRpb27igJlzIGhlYWx0aCBpcyBjaGVja2VkIGV2ZXJ5IDUgc2Vjb25kcywgYW5kIGlzIHJlc3RhcnRlZCB3aGVuIGl0IGZhaWxzIHRoZSBsaXZlbmVzcyBwcm9iZSB0d2ljZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="19e2c428b6a32cd2f09d9fb40a71c750" data-text-hash="b4ab7e343cec40fca5fca6b9a9f84d83" id="201" refid="201">
+<p>When the container defined in the listing starts, the application has 120 seconds to start responding to requests. Kubernetes performs the startup probe every 10 seconds and makes a maximum of 12 attempts.</p>
+</div>
+<div class="readable-text" data-hash="67e4bdb1c4de33e19be30a974f5a7189" data-text-hash="0d94ddbb4e7ff71d02ca2e6598a7d321" id="202" refid="202">
+<p>As shown in the following figure, unlike liveness probes, it&#8217;s perfectly normal for a startup probe to fail. A failure only indicates that the application hasn&#8217;t yet been completely started. A successful startup probe indicates that the application has started successfully, and Kubernetes should switch to the liveness probe. The liveness probe is then typically executed using a shorter period of time, which allows for faster detection of non-responsive applications.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="7d6e8a9d66d971951ca3ebf9a2b31368" data-text-hash="a13b8cd862ed1ad735c0f49fd06ec89e" id="203" refid="203">
+<h5>Figure 6.8 Fast detection of application health problems using a combination of startup and liveness probe</h5>
+<img alt="" data-processed="true" height="335" id="Picture_8" loading="lazy" src="EPUB/images/06image009.png" width="848">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="204" refid="204">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e3019417a64107a2a8a8357aefc56c32" data-text-hash="bdc5f34fc49e9ebf6c536de0283539c7" id="205" refid="205">
+<p> If the startup probe fails often enough to reach the <code>failureThreshold</code>, the container is terminated as if the liveness probe had failed.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c7b5435d8b917a6d4dfde333a0125667" data-text-hash="41229d1ce00dc42acbc89cdd94024d48" id="206" refid="206">
+<p>Usually, the startup and liveness probes are configured to use the same HTTP endpoint, but different endpoints can be used. You can also configure the startup probe as an <code>exec</code> or <code>tcpSocket</code> probe instead of an <code>httpGet</code> probe.</p>
+</div>
+<div class="readable-text" data-hash="47a7463b93ba5334925a2412c4634b39" data-text-hash="f341943ff2ddfdb7ce66ee6916492b00" id="207" refid="207">
+<h3 id="sigil_toc_id_102">6.2.7&#160;Creating effective liveness probe handlers</h3>
+</div>
+<div class="readable-text" data-hash="33a1de420beb5bd1a9507287d56ea07d" data-text-hash="115df0e95f4b48ea3d12403e1fbe62f7" id="208" refid="208">
+<p>You should define a liveness probe for all your pods. Without one, Kubernetes has no way of knowing whether your app is still alive or not, apart from checking whether the application process has terminated.</p>
+</div>
+<div class="readable-text" data-hash="2ac29d0b3d845cc8b73a557d6e74dc9e" data-text-hash="6c9299138ce093a44935613bbf6d7d45" id="209" refid="209">
+<h4>Causing unnecessary restarts with badly implemented liveness probe handlers</h4>
+</div>
+<div class="readable-text" data-hash="12fd21f6b6bda60fa6fd935120acad48" data-text-hash="03ca40d9f611c2e06574884a06f5d6db" id="210" refid="210">
+<p>When you implement a handler for the liveness probe, either as an HTTP endpoint in your application or as an additional executable command, be very careful to implement it correctly. If a poorly implemented probe returns a negative response even though the application is healthy, the application will be restarted unnecessarily. Many Kubernetes users learn this the hard way. If you can make sure that the application process terminates by itself when it becomes unhealthy, it may be safer not to define a liveness probe.</p>
+</div>
+<div class="readable-text" data-hash="ffe6a2fd1f557628a0caae69ce67ff5e" data-text-hash="923e24621949a9db3d18207302578194" id="211" refid="211">
+<h4>What a liveness probe should check</h4>
+</div>
+<div class="readable-text" data-hash="e31392d964b96af11fd7d52673385c94" data-text-hash="4343b3b55a2baaea7037585fdd2e5175" id="212" refid="212">
+<p>The liveness probe for the <code>kiada</code> container isn&#8217;t configured to call an actual health-check endpoint, but only checks that the Node.js server responds to simple HTTP requests for the root URI. This may seem overly simple, but even such a liveness probe works wonders, because it causes a restart of the container if the server no longer responds to HTTP requests, which is its main task. If no liveness probe were defined, the pod would remain in an unhealthy state where it doesn&#8217;t respond to any requests and would have to be restarted manually. A simple liveness probe like this is better than nothing.</p>
+</div>
+<div class="readable-text" data-hash="4d625d1d6187af28b8bf94f6a912007b" data-text-hash="e7abe366b073bd347744990a91b19aa9" id="213" refid="213">
+<p>To provide a better liveness check, web applications typically expose a specific health-check endpoint, such as <code>/healthz</code>. When this endpoint is called, the application performs an internal status check of all the major components running within the application to ensure that none of them have died or are no longer doing what they should.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="214" refid="214">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="7d8e99bf824323bf51dd8ea16677212b" data-text-hash="143d629f8fa23fa8467232518dfca7c8" id="215" refid="215">
+<p> Make sure that the <code>/healthz</code> HTTP endpoint doesn&#8217;t require authentication or the probe will always fail, causing your container to be restarted continuously.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="425a2959b3872b1c32858d7916b54995" data-text-hash="3e9e3fe9b0f5ae30e2afaa3b130dda44" id="216" refid="216">
+<p>Make sure that the application checks only the operation of its internal components and nothing that is influenced by an external factor. For example, the health-check endpoint of a frontend service should never respond with failure when it can&#8217;t connect to a backend service. If the backend service fails, restarting the frontend will not solve the problem. Such a liveness probe will fail again after the restart, so the container will be restarted repeatedly until the backend is repaired. If many services are interdependent in this way, the failure of a single service can result in cascading failures across the entire system.</p>
+</div>
+<div class="readable-text" data-hash="da97a914c6b283b03e43575f119fca16" data-text-hash="bb455437e02c371c395a502a94df1ce4" id="217" refid="217">
+<h4>Keeping probes light</h4>
+</div>
+<div class="readable-text" data-hash="f393ada39dad48753a70f29c52937bb0" data-text-hash="f7aa5771d545fb08abd09fc8e5cf8edb" id="218" refid="218">
+<p>The handler invoked by a liveness probe shouldn&#8217;t use too much computing resources and shouldn&#8217;t take too long to complete. By default, probes are executed relatively often and only given one second to complete.</p>
+</div>
+<div class="readable-text" data-hash="c74481aa3582a983be32760ebcb07096" data-text-hash="f65722939807a904b22276bedde9db8e" id="219" refid="219">
+<p>Using a handler that consumes a lot of CPU or memory can seriously affect the main process of your container. Later in the book you&#8217;ll learn how to limit the CPU time and total memory available to a container. The CPU and memory consumed by the probe handler invocation count towards the resource quota of the container, so using a resource-intensive handler will reduce the CPU time available to the main process of the application.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="220" refid="220">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="0f29d9c16d281f3ff4562a5fce4608c2" data-text-hash="afcb18e26fe77772b0fad18450e51256" id="221" refid="221">
+<p> When running a Java application in your container, you may want to use an HTTP GET probe instead of an exec liveness probe that starts an entire JVM. The same applies to commands that require considerable computing resources.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="dcb1f1789cb6556c85636a41e357899d" data-text-hash="1e492c57cca5d0e2cf5077598bca6d5d" id="222" refid="222">
+<h4>Avoiding retry loops in your probe handlers</h4>
+</div>
+<div class="readable-text" data-hash="960dda442ce9306a284cb26f1007bf43" data-text-hash="06340c641d58396d758e49e0326b2f09" id="223" refid="223">
+<p>You&#8217;ve learned that the failure threshold for the probe is configurable. Instead of implementing a retry loop in your probe handlers, keep it simple and instead set the <code>failureThreshold</code> field to a higher value so that the probe must fail several times before the application is considered unhealthy. Implementing your own retry mechanism in the handler is a waste of effort and represents another potential point of failure.</p>
+</div>
+<div class="readable-text" data-hash="c19e8adae67ae0ae7aece64c6e42b86c" data-text-hash="cf5059a5af2f5e00348d24dde778592c" id="224" refid="224">
+<h2 id="sigil_toc_id_103">6.3&#160;Executing actions at container start-up and shutdown</h2>
+</div>
+<div class="readable-text" data-hash="2a54ebbfc2f8b5bea534590cd9fb1f86" data-text-hash="a54d804e1c8872fda28aef9e5cf014bf" id="225" refid="225">
+<p>In the previous chapter you learned that you could use init containers to run containers at the start of the pod lifecycle. You may also want to run additional processes every time a container starts and just before it stops. You can do this by adding <i>lifecycle hooks</i> to the container. Two types of hooks are currently supported:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="b0128f18c6c9bf9e687cef848c54c720" data-text-hash="9bc2b026efa6924e455e90f31f48c4ae" id="226" refid="226"><i>Post-start</i> hooks, which are executed when the container starts, and</li>
+<li class="readable-text" data-hash="dc0174b8563a200e169675928dcf76a1" data-text-hash="6b8265af20d010bb256323a347af9099" id="227" refid="227"><i>Pre-stop</i> hooks, which are executed shortly before the container stops.</li>
+</ul>
+<div class="readable-text" data-hash="30f29e410abee50f7c3172f027a30f5d" data-text-hash="5b439a058ab906929691655b13668691" id="228" refid="228">
+<p>These lifecycle hooks are specified per container, as opposed to init containers, which are specified at the pod level. The next figure should help you visualize how lifecycle hooks fit into the lifecycle of a container.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="abbf3faa7b3d83d9a47fa9c596f27c02" data-text-hash="91f8e95e3e2b286c71a3b404850ab041" id="229" refid="229">
+<h5>Figure 6.9 How the post-start and pre-stop hook fit into the container&#8217;s lifecycle</h5>
+<img alt="" data-processed="true" height="178" id="Picture_9" loading="lazy" src="EPUB/images/06image010.png" width="838">
+</div>
+<div class="readable-text" data-hash="36a65d5a3e94e064eff69fe459fd2d59" data-text-hash="6ee1c3af81f5754af848cb1d4c24f35e" id="230" refid="230">
+<p>Like liveness probes, lifecycle hooks can be used to either</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="d770fff343de85f0ffed6a9d4e6bb123" data-text-hash="d770fff343de85f0ffed6a9d4e6bb123" id="231" refid="231">execute a command inside the container, or</li>
+<li class="readable-text" data-hash="98b2d3dc16a697d676ca22587860f9e9" data-text-hash="98b2d3dc16a697d676ca22587860f9e9" id="232" refid="232">send an HTTP GET request to the application in the container.</li>
+</ul>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="233" refid="233">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f14b5945e41d42bdd0d459cc5b05a8ae" data-text-hash="4959e2fd9c9dc62442971c9e274b2a2c" id="234" refid="234">
+<p> The same as with liveness probes, lifecycle hooks can only be applied to regular containers and not to init containers. Unlike probes, lifecycle hooks do not support <code>tcpSocket</code> handlers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="1679d7c71735099a299da080c97abda1" data-text-hash="0d0b08b2e92fbf655cc1be6bb8c9cdaa" id="235" refid="235">
+<p>Let&#8217;s look at the two types of hooks individually to see what you can use them for.</p>
+</div>
+<div class="readable-text" data-hash="f1c5df9d34e8a1a3f1b7187b4267c2a2" data-text-hash="c3932f240b0a6de4cecd3273faf8a833" id="236" refid="236">
+<h3 id="sigil_toc_id_104">6.3.1&#160;Using post-start hooks to perform actions when the container starts</h3>
+</div>
+<div class="readable-text" data-hash="a29dd2d090220d22613bb51c71d6c415" data-text-hash="c7ce5e33c28db55bfae1148427343a57" id="237" refid="237">
+<p>The post-start lifecycle hook is invoked immediately after the container is created. You can use the <code>exec</code> type of the hook to execute an additional process as the main process starts, or you can use the <code>httpGet</code> hook to send an HTTP request to the application running in the container to perform some type of initialization or warm-up procedure.</p>
+</div>
+<div class="readable-text" data-hash="1754c90fcd4584ea135d5523d30ced6f" data-text-hash="8f12a028d6b1bc037d4026d48ff30347" id="238" refid="238">
+<p>If you&#8217;re the author of the application, you could perform the same operation within the application code itself, but if you need to add it to an existing application that you didn&#8217;t create yourself, you may not be able to do so. A post-start hook provides a simple alternative that doesn&#8217;t require you to change the application or its container image.</p>
+</div>
+<div class="readable-text" data-hash="965e33619e20b9c36aedaeeead89c291" data-text-hash="560e25af69911b3d752d6a0531806fac" id="239" refid="239">
+<p>Let&#8217;s look at an example of how a post-start hook can be used in a new service you&#8217;ll create.</p>
+</div>
+<div class="readable-text" data-hash="957332f9efca641950ddc72f2af0bec5" data-text-hash="e5565f70b8577ee46e9a53efd9f82007" id="240" refid="240">
+<h4>Introducing the Quote service</h4>
+</div>
+<div class="readable-text" data-hash="30a738e67463ee9bf9ccd3dc7bcc8162" data-text-hash="a2f5fd824f34d4ba9fb694a870637a17" id="241" refid="241">
+<p>You may remember from section 2.2.1 that the final version of the Kubernetes in Action Demo Application (Kiada) Suite will contain the Quote and Quiz services in addition to the Node.js application. The data from those two services will be used to show a random quote from the book and a multiple-choice pop quiz to help you test your Kubernetes knowledge. To refresh your memory, the following figure shows the three components that make up the Kiada Suite.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b555567e19f26362d9794eaa079ac300" data-text-hash="842570864b7c11a1debae965d4c98b6a" id="242" refid="242">
+<h5>Figure 6.10 The Kubernetes in Action Demo Application Suite</h5>
+<img alt="" data-processed="true" height="200" id="Picture_10" loading="lazy" src="EPUB/images/06image011.png" width="840">
+</div>
+<div class="readable-text" data-hash="1cd08db3a8172ec0ddeb6c725efe4612" data-text-hash="9ed779a23d9204a210e3c1baa41d144f" id="243" refid="243">
+<p>During my first steps with Unix in the 1990s, one of the things I found most amusing was the random, sometimes funny message that the <code>fortune</code> command displayed every time I logged into our high school&#8217;s Sun Ultra server. Nowadays, you&#8217;ll rarely see the <code>fortune</code> command installed on Unix/Linux systems anymore, but you can still install it and run it whenever you&#8217;re bored. Here&#8217;s an example of what it may display:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="55bf0a7a3fd82d87d11dbb16d9cf162c" data-text-hash="894f6fee3e62e85f4ed5660b672f9272" id="244" refid="244">
+<div class="code-area-container">
+<pre class="code-area">$ fortune
+Dinner is ready when the smoke alarm goes off.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c3b9b98962b0105ab0ee08c0b1169dbd" data-text-hash="a7a337432d1e5e16758edc20ff709793" id="245" refid="245">
+<p>The command gets the quotes from files that are packaged with it, but you can also use your own file(s). So why not use <code>fortune</code> to build the Quote service? Instead of using the default files, I&#8217;ll provide a file with quotes from this book.</p>
+</div>
+<div class="readable-text" data-hash="140a3b2a5a1aa7d7ff89eec74960fa0a" data-text-hash="45fb6ec3ece7928c32ced1591bffdff3" id="246" refid="246">
+<p>But one caveat exists. The <code>fortune</code> command prints to the standard output. It can&#8217;t serve the quote over HTTP. However, this isn&#8217;t a hard problem to solve. We can combine the <code>fortune</code> program with a web server such as Nginx to get the result we want.</p>
+</div>
+<div class="readable-text" data-hash="3f493aaf44e533a04a591625e3c75aaf" data-text-hash="c2deead0897528fd7f2b5b9d030ba7ce" id="247" refid="247">
+<h4>Using a post-start container lifecycle hook to run a command in the container</h4>
+</div>
+<div class="readable-text" data-hash="e1453e4cf0191e1fd3ebd6d6eb5782fd" data-text-hash="943666f8447aa07a9082a3196a0554d3" id="248" refid="248">
+<p>For the first version of the service, the container will run the <code>fortune</code> command when it starts up. The output will be redirected to a file in Nginx&#8217; web-root directory, so that it can serve it. Although this means that the same quote is returned in every request, this is a perfectly good start. You&#8217;ll later improve the service iteratively.</p>
+</div>
+<div class="readable-text" data-hash="99e3dffc5ef631f0dfb4de77b84eb922" data-text-hash="1870fe7f26174c69a243e6569b686973" id="249" refid="249">
+<p>The Nginx web server is available as a container image, so let&#8217;s use it. Because the <code>fortune</code> command is not available in the image, you&#8217;d normally build a new image that uses that image as the base and installs the <code>fortune</code> package on top of it. But we&#8217;ll keep things even simpler for now.</p>
+</div>
+<div class="readable-text" data-hash="ceab563652227faf4d70a66e38d4af4b" data-text-hash="db0e7ca85f3d1ce93ea181b2b4f0d715" id="250" refid="250">
+<p>Instead of building a completely new image you&#8217;ll use a post-start hook to install the <code>fortune</code> software package, download the file containing the quotes from this book, and finally run the <code>fortune</code> command and write its output to a file that Nginx can serve. The operation of the quote-poststart pod is presented in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ee501e0f0fc0b203dae629b34693519a" data-text-hash="ace9f62604027564acf8d75cc15d006f" id="251" refid="251">
+<h5>Figure 6.11 The operation of the quote-poststart pod</h5>
+<img alt="" data-processed="true" height="365" id="Picture_11" loading="lazy" src="EPUB/images/06image012.png" width="779">
+</div>
+<div class="readable-text" data-hash="1ba4b95670d86e403659faeccb936c22" data-text-hash="d59053938ff6e207d46ff8746cfd3b62" id="252" refid="252">
+<p>The following listing shows how to define the hook (file <code>pod.quote-poststart.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cdff139314e77422a788908fe9e8cd3f" data-text-hash="c422a6092a76496c474d6a761c7caa43" id="253" refid="253">
+<h5>Listing 6.3 Pod with a post-start lifecycle hook</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quote-poststart    #A
+spec:
+  containers:
+  - name: nginx    #B
+    image: nginx:alpine    #B
+    ports:    #C
+    - name: http    #C
+      containerPort: 80    #C
+    lifecycle:    #D
+      postStart:    #D
+        exec:    #D
+          command:    #D
+          - sh    #E
+          - -c    #F
+          - |    #G
+            apk add fortune &amp;&amp; \    #H
+            curl -O https://luksa.github.io/kiada/book-quotes.txt &amp;&amp; \    #H
+            curl -O https://luksa.github.io/kiada/book-quotes.txt.dat &amp;&amp; \    #H
+            fortune book-quotes.txt &gt; /usr/share/nginx/html/quote    #H</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgb2YgdGhpcyBwb2QgaXMgcXVvdGUtcG9zdHN0YXJ0LgojQiBUaGUgbmdpbng6YWxwaW5lIGNvbnRhaW5lciBpbWFnZSBpcyB1c2VkIGluIHRoaXMgc2luZ2xlLWNvbnRhaW5lciBwb2QuCiNDIFRoZSBOZ2lueCBzZXJ2ZXIgcnVucyBvbiBwb3J0IDgwLgojRCBBIHBvc3Qtc3RhcnQgbGlmZWN5Y2xlIGhvb2sgaXMgdXNlZCB0byBydW4gYSBjb21tYW5kIHdoZW4gdGhlIGNvbnRhaW5lciBzdGFydHMuCiNFIFRoaXMgaXMgdGhlIGNvbW1hbmQuCiNGIFRoaXMgaXMgaXRzIGZpcnN0IGFyZ3VtZW50LgojRyBUaGUgc2Vjb25kIGFyZ3VtZW50IGlzIHRoZSBtdWx0aS1saW5lIHN0cmluZyB0aGF0IGZvbGxvd3MuCiNIIFRoZSBzZWNvbmQgYXJndW1lbnQgY29uc2lzdHMgb2YgdGhlc2UgbGluZXMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e8000fb73f3437909606bc24ca1893ff" data-text-hash="0bdc370f58198ab819ce067d75b99e97" id="254" refid="254">
+<p>The YAML in the listing is not simple, so let me make sense of it. First, the easy parts. The pod is named <code>quote-poststart</code> and contains a single container based on the <code>nginx:alpine</code> image. A single port is defined in the container. A <code>postStart</code> lifecycle hook is also defined for the container. It specifies what command to run when the container starts. The tricky part is the definition of this command, but I&#8217;ll break it down for you.</p>
+</div>
+<div class="readable-text" data-hash="f3dc04468f1dce572f265a7e3f93876d" data-text-hash="0aa1d3897d9743187a2553460361b52f" id="255" refid="255">
+<p>It&#8217;s a list of commands that are passed to the <code>sh</code> command as an argument. The reason this needs to be so is because you can&#8217;t define multiple commands in a lifecycle hook. The solution is to invoke a shell as the main command and letting it run the list of commands by specifying them in the command string:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="48af56381b3f53b1c74d93ba76d7b53b" data-text-hash="f1b3a2bee4ec3d7ee0002d3eb7255689" id="256" refid="256">
+<div class="code-area-container">
+<pre class="code-area">sh -c "the command string"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c2389099612923ca6f785a90475abdaf" data-text-hash="6481f1bcb1f0b597b1e7692fc2b31137" id="257" refid="257">
+<p>In the previous listing, the third argument (the command string) is rather long, so it must be specified over multiple lines to keep the YAML legible. Multi-line string values in YAML can be defined by typing a pipeline character and following it with properly indented lines. The command string in the previous listing is therefore as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="13ffe80880f1a031cbdf5c6691094591" data-text-hash="fd8b8f33e82c1e012829ba803044b097" id="258" refid="258">
+<div class="code-area-container">
+<pre class="code-area">apk add fortune &amp;&amp; \
+curl -O https://luksa.github.io/kiada/book-quotes.txt &amp;&amp; \
+curl -O https://luksa.github.io/kiada/book-quotes.txt.dat &amp;&amp; \
+fortune book-quotes.txt &gt; /usr/share/nginx/html/quote</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a2611c1c5ec0b7a2305e532d5a71b5fb" data-text-hash="57668fdd8f1b1dc1df036d835569da39" id="259" refid="259">
+<p>As you can see, the command string consists of four commands. Here&#8217;s what they do:</p>
+</div>
+<ol>
+<li class="readable-text" data-hash="ddef5a7dee9dc9a67e57bf463ff54914" data-text-hash="4c0ed075e0777a6b1e288f2b77e94afb" id="260" refid="260">The <code class="codechar">apk add fortune</code> command runs the Alpine Linux package management tool, which is part of the image that <code class="codechar">nginx:alpine</code> is based on, to install the <code class="codechar">fortune</code> package in the container.</li>
+<li class="readable-text" data-hash="087d4fe76d1964c95d41660a1a0d32de" data-text-hash="19120b5883a0da8c8d0202d9082a013f" id="261" refid="261">The first <code>curl</code> command downloads the <code>book-quotes.txt</code> file.</li>
+<li class="readable-text" data-hash="92bdd5780548b9b31ff562b5e81286a8" data-text-hash="058d8031139b682676ad12c21f5ee6aa" id="262" refid="262">The second <code>curl</code> command downloads the <code>book-quotes.txt.dat</code> file.</li>
+<li class="readable-text" data-hash="fc53e3686d2aa86c8e6f7b178818b092" data-text-hash="03a68ed67c802d7f6631f29c5fd82e63" id="263" refid="263">The <code>fortune</code> command selects a random quote from the <code>book-quotes.txt</code> file and prints it to standard output. That output is redirected to the <code>/usr/share/nginx/html/quote</code> file.</li>
+</ol>
+<div class="readable-text" data-hash="db12b9b3e2df375b9ebc65e390910b09" data-text-hash="f6a43dd047b10b135e9808f8cc46a8ae" id="264" refid="264">
+<p>The lifecycle hook command runs parallel to the main process. The <code>postStart</code> name is somewhat misleading, because the hook isn&#8217;t executed after the main process is fully started, but as soon as the container is created, at around the same time the main process starts.</p>
+</div>
+<div class="readable-text" data-hash="dc8cfc0853270f7ac1916ba7005aad00" data-text-hash="05a8e634f52ca36ac964fbb63058dd04" id="265" refid="265">
+<p>When the <code>postStart</code> hook in this example completes, the quote produced by the <code>fortune</code> command is stored in the <code>/usr/share/nginx/html/quote</code> file and can be served by Nginx.</p>
+</div>
+<div class="readable-text" data-hash="b3c999435ad8b2c5dee62a97b05ca35c" data-text-hash="02887a790b696ad46207345adf59efa3" id="266" refid="266">
+<p>Use the <code>kubectl apply</code> command to create the pod from the <code>pod.quote-poststart.yaml</code> file, and you should then be able to use <code>curl</code> or your browser to get the quote at URI <code>/quote</code> on port <code>80</code> of the <code>quote-poststart</code> pod. You&#8217;ve already learned how to use the <code>kubectl port-forward</code> command to open a tunnel to the container, but you may want to refer to the sidebar because a caveat exists.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="cf79924dd7763220ea74ac09e5eb1050" data-text-hash="4148d2dd89fb5be51e0498506931f77f" id="267" refid="267">
+<h5>Accessing the quote-poststart pod</h5>
+</div>
+<div class="readable-text" data-hash="eacfc6da49c4b45a45ae84729597066e" data-text-hash="5327163b5924112f951b77293d5bc096" id="268" refid="268">
+<p>To retrieve the quote from the <code>quote-poststart</code> pod, you must first run the <code>kubectl port-forward</code> command, which may fail as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e599a50bbdfd7cdd1510c17a890bf85e" data-text-hash="129e00fe63595defd6c752ac6c62bf10" id="269" refid="269">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward quote-poststart 80
+Unable to listen on port 80: Listeners failed to create with the following errors: [unable to create listener: Error listen tcp4 127.0.0.1:80: bind: permission denied unable to create listener: Error listen tcp6 [::1]:80: bind: permission denied]
+error: unable to listen on any of the requested ports: [{80 80}]</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="745b35d2abab69f2f657a811fdfd4659" data-text-hash="48f628eacbae189f10347ca5d7327f76" id="270" refid="270">
+<p>The command fails if your operating system doesn&#8217;t allow you to run processes that bind to port numbers 0-1023. To fix this, you must use a higher local port number as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ab6237e9545b856ae81edcca1daf7546" data-text-hash="52614bccdd97011775f6d8a89b95eeb6" id="271" refid="271">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward quote-poststart 1080:80</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a2e82dbbd0731ab09cf62f37ae0c346d" data-text-hash="425cac383a75c885ed79720ebfd08c22" id="272" refid="272">
+<p>The last argument tells <code>kubectl</code> to use port <code>1080</code> locally and forward it to port <code>80</code> of the pod. You can now access the Quote service at <a href="localhost:1080.html">http://localhost:1080/quote</a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="31e6a6d69f1fe076cc20f44bd614d73c" data-text-hash="4d6332ace63105e7d29a0fd702f57883" id="273" refid="273">
+<p>If everything works as it should, the Nginx server will return a random quote from this book as in the following example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1997d04455b434320279640a87649ac7" data-text-hash="71c576b63fa406ea0d10e644aaa312a9" id="274" refid="274">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:1080/quote
+The same as with liveness probes, lifecycle hooks can only be applied to regular containers and 
+not to init containers. Unlike probes, lifecycle hooks do not support tcpSocket handlers.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="48c3278436d48ff6118201c8d2a38fd9" data-text-hash="c160395bccc8ead156d9f68fe6f98fe1" id="275" refid="275">
+<p>The first version of the Quote service is now done, but you&#8217;ll improve it in the next chapter. Now let&#8217;s learn about the caveats of using post-start hooks before we move on.</p>
+</div>
+<div class="readable-text" data-hash="1ee3f8a5956dae8cf2b07ab9e314b405" data-text-hash="5a7815c68b5928565b798408525789d2" id="276" refid="276">
+<h4>Understanding how a post-start hook affects the container</h4>
+</div>
+<div class="readable-text" data-hash="9df245f7958d0c715bb4e18783ada137" data-text-hash="f596fd51f84cabad0440eb80ba21718d" id="277" refid="277">
+<p>Although the post-start hook runs asynchronously with the main container process, it affects the container in two ways.</p>
+</div>
+<div class="readable-text" data-hash="4758dff5d3e937d968ebd6b74f55ec05" data-text-hash="1144f0be36e4c8ff822aae53c505a8ae" id="278" refid="278">
+<p>First, the container remains in the <code>Waiting</code> state with the reason <code>ContainerCreating</code> until the hook invocation is completed. The phase of the pod is <code>Pending</code>. If you run the <code>kubectl logs</code> command at this point, it refuses to show the logs, even though the container is running. The <code>kubectl port-forward</code> command also refuses to forward ports to the pod.</p>
+</div>
+<div class="readable-text" data-hash="f7b500d4262f9492ac4c73ccc2634ada" data-text-hash="3c136eff088a1253f9a06a93e4e68fd7" id="279" refid="279">
+<p>If you want to see this for yourself, deploy the <code>pod.quote-poststart-slow.yaml</code> pod manifest file. It defines a post-start hook that takes 60 seconds to complete. Immediately after the pod is created, inspect its state, and display the logs with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="efdf9c3cf2f6a07d9fc9274ccfc9bc24" data-text-hash="a8676e0f461616403997adf4db0d9f6c" id="280" refid="280">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs quote-poststart-slow
+Error from server (BadRequest): container "nginx" in pod "quote-poststart-slow" is waiting to start: ContainerCreating</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e8a3af9ceaeae625eff011a50b87c235" data-text-hash="8b57eda237aa9c89fb029e7636bffa1b" id="281" refid="281">
+<p>The error message returned implies that the container hasn&#8217;t started yet, which isn&#8217;t the case. To prove this, use the following command to list processes in the container:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1237a09823d0fee4615a45955065c4ce" data-text-hash="cd28e676b463262b6723dc04c245f0ae" id="282" refid="282">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec quote-poststart-slow -- ps x
+PID   USER     TIME  COMMAND
+  1 root      0:00 nginx: master process nginx -g daemon off;          #A
+  7 root      0:00 sh -c apk add fortune &amp;&amp; \ sleep 60 &amp;&amp; \ curl...    #B
+ 13 nginx     0:00 nginx: worker process                               #A
+...                                                                    #A
+ 20 nginx     0:00 nginx: worker process                               #A
+ 21 root      0:00 sleep 60                                            #B
+ 22 root      0:00 ps x</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTmdpbnggaXMgcnVubmluZwojQiBUaGUgcHJvY2Vzc2VzIHRoYXQgcnVuIGFzIHBhcnQgb2YgdGhlIHBvc3Qtc3RhcnQgaG9vaw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7b9d9c1791862cdabbd236749c45f9e9" data-text-hash="6660aa229e0a17c29c6a42e298d6ac9b" id="283" refid="283">
+<p>The other way a post-start hook could affect the container is if the command used in the hook can&#8217;t be executed or returns a non-zero exit code. If this happens, the entire container is restarted. To see an example of a post-start hook that fails, deploy the pod manifest <code>pod.quote-poststart-fail.yaml</code>.</p>
+</div>
+<div class="readable-text" data-hash="3fda98b9c6196312b0a7d0af1ffcaa65" data-text-hash="17f19cad0224f1d3a0d7eaa3dcf0409b" id="284" refid="284">
+<p>If you watch the pod&#8217;s status using <code>kubectl get pods -w</code>, you&#8217;ll see the following status:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0381fc6b30a62c03ba5e22d83fb27ad6" data-text-hash="71c8039e210cc0811212072a61a8fb42" id="285" refid="285">
+<div class="code-area-container">
+<pre class="code-area">quote-poststart-fail   0/1     PostStartHookError: command 'sh -c echo 'Emulating a post-start hook failure'; exit 1' exited with 1:</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="32e831416da64c514e39746143a309fd" data-text-hash="b33c6d7b41bdfd7828878f098e9b45ef" id="286" refid="286">
+<p>It shows the command that was executed and the code with which it terminated. When you review the pod events, you&#8217;ll see a <code>FailedPostStartHook</code> warning event that indicates the exit code and what the command printed to the standard or error output. This is the event:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ab1fca88bc8a21f06946ea56783fd284" data-text-hash="de0c5de7213a744b0cbf38c93f7e6c5a" id="287" refid="287">
+<div class="code-area-container">
+<pre class="code-area">Warning  FailedPostStartHook  Exec lifecycle hook ([sh -c ...]) for Container "nginx" in Pod "quote-poststart-fail_default(...)" failed - error: command '...' exited with 1: , message: "Emulating a post-start hook failure\n"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="475e7ac8c47dffbb05e205c7e7334040" data-text-hash="d2b4f678024c52d3f86349cbf2c5c950" id="288" refid="288">
+<p>The same information is also contained in the <code>containerStatuses</code> field in the pod&#8217;s <code>status</code> field, but only for a short time, as the container status changes to <code>CrashLoopBackOff</code> shortly afterwards.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="289" refid="289">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="4fd72d77ad98487249c36fe151782ada" data-text-hash="02dbf067fbab2ec9a41e0bf0aac86ca4" id="290" refid="290">
+<p> Because the state of a pod can change quickly, inspecting just its status may not tell you everything you need to know. Rather than inspecting the state at a particular moment in time, reviewing the pod&#8217;s events is usually a better way to get the full picture.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="7455ad95140b67f942280b9bb72640a4" data-text-hash="48428d622ad57d9472600de056bc4066" id="291" refid="291">
+<h4>Capturing the output produced by the process invoked via a post-start hook</h4>
+</div>
+<div class="readable-text" data-hash="34f0986de6b2ebcb4e786d870c4a3733" data-text-hash="cbcc678a61f783692bc5b2b99a0a4c38" id="292" refid="292">
+<p>As you&#8217;ve just learned, the output of the command defined in the post-start hook can be inspected if it fails. In cases where the command completes successfully, the output of the command is not logged anywhere. To see the output, the command must log to a file instead of the standard or error output. You can then view the contents of the file with a command like the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="15d73918c7b7f20922665794d15c54a0" data-text-hash="61f98b40d6f3edc19b808f4530453e49" id="293" refid="293">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec my-pod -- cat logfile.txt</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="56c779f89a8a76d98922be3307f767d8" data-text-hash="294580bd2002687546c7d3d73868c375" id="294" refid="294">
+<h4>Using an HTTP GET post-start hook</h4>
+</div>
+<div class="readable-text" data-hash="a7d210eada9c02faaf58d9ea74c1b39c" data-text-hash="d3d5bc3a9d152516485ef2d9c6cc41fa" id="295" refid="295">
+<p>In the previous example, you configured the post-start hook to execute a command inside the container. Alternatively, you can have Kubernetes send an HTTP GET request when it starts the container by using an <code>httpGet</code> post-start hook.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="296" refid="296">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="0197cd46e8900d33c08fe4b0dfaf742f" data-text-hash="1c06dcb62e01ef1c51b1dd1f8cef3769" id="297" refid="297">
+<p> You can&#8217;t specify both an <code>exec</code> and an <code>httpGet</code> post-start hook for a container. They are exclusive.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="925826ce2cea49e99195f31991ae9fbc" data-text-hash="b859189b1882fa918d4d7ff864d8a0c8" id="298" refid="298">
+<p>You can configure the lifecycle hook to send the request to a process running in the container itself, a different container in the pod, or a different host altogether.</p>
+</div>
+<div class="readable-text" data-hash="19ab790ae3a958c1a56ffebe73d58a0b" data-text-hash="a64536c38cc0eb4354477ee0cd6364aa" id="299" refid="299">
+<p>For example, you can use an <code>httpGet</code> post-start hook to tell another service about your pod. The following listing shows an example of a post-start hook definition that does this. You&#8217;ll find it in file <code>pod.poststart-httpget.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="08dc055ceb7c2a91de818a13f4c10de4" data-text-hash="87dbe89e011e510c3749c5f3cd77e389" id="300" refid="300">
+<h5>Listing 6.4 Using an httpGet post-start hook to warm up a web server</h5>
+<div class="code-area-container">
+<pre class="code-area">lifecycle:    #A
+      postStart:    #A
+        httpGet:    #A
+          host: myservice.example.com    #B
+          port: 80    #B
+          path: /container-started    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBhIHBvc3Qtc3RhcnQgbGlmZWN5Y2xlIGhvb2sgdGhhdCBzZW5kcyBhbiBIVFRQIEdFVCByZXF1ZXN0LgojQiBUaGUgaG9zdCBhbmQgcG9ydCB3aGVyZSB0aGUgcmVxdWVzdCBpcyBzZW50LgojQyBUaGUgVVJJIHJlcXVlc3RlZCBpbiB0aGUgSFRUUCByZXF1ZXN0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ae4d74c0285ceea7db4aecbab6b3505e" data-text-hash="4cd58617d3103cb3f4f3923752d24c06" id="301" refid="301">
+<p>The example in the listing shows an <code>httpGet</code> post-start hook that calls the following URL when the container starts: <code>http://myservice.example.com/container-started</code>.</p>
+</div>
+<div class="readable-text" data-hash="99ab93174217cfc96430ba9b0b8861a0" data-text-hash="db75bbe4890c26d3c0af708385d6003d" id="302" refid="302">
+<p>In addition to the <code>host</code>, <code>port</code>, and <code>path</code> fields shown in the listing, you can also specify the <code>scheme</code> (<code>HTTP</code> or <code>HTTPS</code>) and the <code>httpHeaders</code> to be sent in the request. The <code>host</code> field defaults to the pod IP. Don&#8217;t set it to <code>localhost</code> unless you want to send the request to the node hosting the pod. That&#8217;s because the request is sent from the host node, not from within the container.</p>
+</div>
+<div class="readable-text" data-hash="0dbb725b707e700f552c260ea95a0833" data-text-hash="f393c17a8ed79e389eb0c54d9e9d0cb8" id="303" refid="303">
+<p>As with command-based post-start hooks, the HTTP GET post-start hook is executed at the same time as the container&#8217;s main process. And this is what makes these types of lifecycle hooks applicable only to a limited set of use-cases.</p>
+</div>
+<div class="readable-text" data-hash="8dbad64f8ad16a9d9683c4117183379c" data-text-hash="b7432796bd3708bbc51d34b08df9c872" id="304" refid="304">
+<p>If you configure the hook to send the request to the container its defined in, you&#8217;ll be in trouble if the container&#8217;s main process isn&#8217;t yet ready to accept requests. In that case, the post-start hook fails, which then causes the container to be restarted. On the next run, the same thing happens. The result is a container that keeps being restarted.</p>
+</div>
+<div class="readable-text" data-hash="7f34c8a70e64db71e5f20bddb88d1dce" data-text-hash="cd002b78410c6eebff901f0e296f4f32" id="305" refid="305">
+<p>To see this for yourself, try creating the pod defined in <code>pod.poststart-httpget-slow.yaml</code>. I&#8217;ve made the container wait one second before starting the web server. This ensures that the post-start hook never succeeds. But the same thing could also happen if the pause didn&#8217;t exist. There is no guarantee that the web server will always start up fast enough. It might start fast on your own computer or a server that&#8217;s not overloaded, but on a production system under considerable load, the container may never start properly.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="306" refid="306">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="5a49446e4e90a23d5ab5fc4c1daae88c" data-text-hash="837a8d1031fd984f8e45223ca8ceff6b" id="307" refid="307">
+<p> Using an HTTP GET post-start hook might cause the container to enter an endless restart loop. Never configure this type of lifecycle hook to target the same container or any other container in the same pod.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="64251894cafed247d2808f4248b96e16" data-text-hash="e6e4239c1f8cd4208f6d3e92344889a2" id="308" refid="308">
+<p>Another problem with HTTP GET post-start hooks is that Kubernetes doesn&#8217;t treat the hook as failed if the HTTP server responds with status code such as <code>404 Not Found</code>. Make sure you specify the correct URI in your HTTP GET hook, otherwise you might not even notice that the post-start hook missed its mark.</p>
+</div>
+<div class="readable-text" data-hash="8f69d9dd77234d8a2016ddda86b270cb" data-text-hash="f6b2b91b602cccafb8f88ce138d64d37" id="309" refid="309">
+<h3 id="sigil_toc_id_105">6.3.2&#160;Using pre-stop hooks to run a process just before the container terminates</h3>
+</div>
+<div class="readable-text" data-hash="baea7552ead55fea13ecfe5947282b3f" data-text-hash="686465b30d159fe27ffc3fde29c5a4a4" id="310" refid="310">
+<p>Besides executing a command or sending an HTTP request at container startup, Kubernetes also allows the definition of a <i>pre-stop</i> hook in your containers.</p>
+</div>
+<div class="readable-text" data-hash="36c5cad47f4f7aed5febc75231c37c48" data-text-hash="ab5b3b76cc378f037bd033e038506461" id="311" refid="311">
+<p>A pre-stop hook is executed immediately before a container is terminated. To terminate a process, the <code>TERM</code> signal is usually sent to it. This tells the application to finish what it&#8217;s doing and shut down. The same happens with containers. Whenever a container needs to be stopped or restarted, the <code>TERM</code> signal is sent to the main process in the container. Before this happens, however, Kubernetes first executes the pre-stop hook, if one is configured for the container. The <code>TERM</code> signal is not sent until the pre-stop hook completes unless the process has already terminated due to the invocation of the pre-stop hook handler itself.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="312" refid="312">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d7f3cdda85d03b5be35c4f7f8c0fa5a7" data-text-hash="01b1f8e5bbcc2a967f60fa49eb70a7db" id="313" refid="313">
+<p> When container termination is initiated, the liveness and other probes are no longer invoked.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b7d4416891337f5ddf2d416b70f768e8" data-text-hash="009aa78ddd27056c8e20b7e17975e6f0" id="314" refid="314">
+<p>A pre-stop hook can be used to initiate a graceful shutdown of the container or to perform additional operations without having to implement them in the application itself. As with post-start hooks, you can either execute a command within the container or send an HTTP request to the application running in it.</p>
+</div>
+<div class="readable-text" data-hash="a245b5154b32ef004842b31f099790b1" data-text-hash="a1fb23597d100e0152f15617b62dee9e" id="315" refid="315">
+<h4>Using a pre-stop lifecycle hook to shut down a container gracefully</h4>
+</div>
+<div class="readable-text" data-hash="2389bddec5ecfcef8e7065c0b1427c19" data-text-hash="2d4ccef9ef1c5dce94360e522faee53b" id="316" refid="316">
+<p>The Nginx web server used in the quote pod responds to the <code>TERM</code> signal by immediately closing all open connections and terminating the process. This is not ideal, as the client requests that are being processed at this time aren&#8217;t allowed to complete.</p>
+</div>
+<div class="readable-text" data-hash="e81b11cf59adb78d22d9c28c171643b0" data-text-hash="87f68872a011d9e12ba395e5e0c271bd" id="317" refid="317">
+<p>Fortunately, you can instruct Nginx to shut down gracefully by running the command <code>nginx -s quit</code>. When you run this command, the server stops accepting new connections, waits until all in-flight requests have been processed, and then quits.</p>
+</div>
+<div class="readable-text" data-hash="f47a75a8227305a6be30b7e6035fadf8" data-text-hash="7ee37acc0608307530e38edd61f889be" id="318" refid="318">
+<p>When you run Nginx in a Kubernetes pod, you can use a pre-stop lifecycle hook to run this command and ensure that the pod shuts down gracefully. The following listing shows the definition of this pre-stop hook (you&#8217;ll find it in the file <code>pod.quote-prestop.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b5f5624212f160966ab1c48af02db440" data-text-hash="54e2d0f72ba62f78ac944708ee3d8452" id="319" refid="319">
+<h5>Listing 6.5 Defining a pre-stop hook for Nginx</h5>
+<div class="code-area-container">
+<pre class="code-area">lifecycle:    #A
+      preStop:    #A
+        exec:    #B
+          command:    #B
+          - nginx    #C
+          - -s    #C
+          - quit    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyBhIHByZS1zdG9wIGxpZmVjeWNsZSBob29rCiNCIEl0IGV4ZWN1dGVzIGEgY29tbWFuZAojQyBUaGlzIGlzIHRoZSBjb21tYW5kIHRoYXQgZ2V0cyBleGVjdXRlZA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c9c8a04dcf3babb36eab2bd7f30df456" data-text-hash="7f34426e94ff0645989d9ef031c96a07" id="320" refid="320">
+<p>Whenever a container using this pre-stop hook is terminated, the command <code>nginx -s quit</code> is executed in the container before the main process of the container receives the <code>TERM</code> signal.</p>
+</div>
+<div class="readable-text" data-hash="47700d1da487660ca0c8c27ee9e449d1" data-text-hash="9e915a0cb62835a2ed3e36d79e04cf5b" id="321" refid="321">
+<p>Unlike the post-start hook, the container is terminated regardless of the result of the pre-stop hook - a failure to execute the command or a non-zero exit code does not prevent the container from being terminated. If the pre-stop hook fails, you&#8217;ll see a <code>FailedPreStopHook</code> warning event among the pod events, but you might not see any indication of the failure if you are only monitoring the status of the pod.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="322" refid="322">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="3b2d96e2ea7fd490837a43feee61b3fc" data-text-hash="a2ac06c375c35f09bc7b63f45188f1bb" id="323" refid="323">
+<p> If successful completion of the pre-stop hook is critical to the proper operation of your system, make sure that it runs successfully. I&#8217;ve experienced situations where the pre-stop hook didn&#8217;t run at all, but the engineers weren&#8217;t even aware of it.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e5cefaef7acef58e8cc351d145fcb09d" data-text-hash="6b5afc06529e69b6573bf9353c020658" id="324" refid="324">
+<p>Like post-start hooks, you can also configure the pre-stop hook to send an HTTP GET request to your application instead of executing commands. The configuration of the HTTP GET pre-stop hook is the same as for a post-start hook. For more information, see section 6.3.1.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="b80dd4668624f23c8a2c0dfd845ca0de" data-text-hash="7e4f2c2c53d2b432fb3cbad398bc1849" id="325" refid="325">
+<h5>Why doesn&#8217;t my application receive the TERM signal<span>?</span></h5>
+</div>
+<div class="readable-text" data-hash="9536dabd1a36767a4110d9eb76eeda79" data-text-hash="06330129c3664f4688b1f1f1ce5f99fe" id="326" refid="326">
+<p>Many developers make the mistake of defining a pre-stop hook just to send a <code>TERM</code> signal to their applications in the pre-stop hook. They do this when they find that their application never receives the <code>TERM</code> signal. The root cause is usually not that the signal is never sent, but that it is swallowed by something inside the container. This typically happens when you use the <i>shell</i> form of the <code>ENTRYPOINT</code> or the <code>CMD</code> directive in your Dockerfile. Two forms of these directives exist.</p>
+</div>
+<div class="readable-text" data-hash="39e77ee6e8da7300acabb5d639e0d604" data-text-hash="16963e533b5a3e86898fa34110ac4d43" id="327" refid="327">
+<p>The <i>exec</i> form is: <code>ENTRYPOINT ["/myexecutable", "1st-arg", "2nd-arg"]</code></p>
+</div>
+<div class="readable-text" data-hash="50fc132a384000bd5ca76ccfd7d6f68e" data-text-hash="45e7b22024fab600e404bc15dc62de63" id="328" refid="328">
+<p>The <i>shell</i> form is: <code>ENTRYPOINT /myexecutable 1st-arg 2nd-arg</code></p>
+</div>
+<div class="readable-text" data-hash="dbe95508766a70fffa0e74311cda2743" data-text-hash="1017ae746b18799efacbe14661c247fd" id="329" refid="329">
+<p>When you use the exec form, the executable file is called directly. The process it starts becomes the root process of the container. When you use the shell form, a shell runs as the root process, and the shell runs the executable as its child process. In this case, the shell process is the one that receives the <code>TERM</code> signal. Unfortunately, it doesn&#8217;t pass this signal to the child process.</p>
+</div>
+<div class="readable-text" data-hash="5601dcc0fbf73996a8c5bfcbfdccdfda" data-text-hash="c5e433bd0c5fd694ac7cfdd8f1815061" id="330" refid="330">
+<p>In such cases, instead of adding a pre-stop hook to send the <code>TERM</code> signal to your app, the correct solution is to use the exec form of <code>ENTRYPOINT</code> or <code>CMD</code>.</p>
+</div>
+<div class="readable-text" data-hash="6a8a3bea4ae2e4391fb5849456b564a7" data-text-hash="bc789e7617d6b705a6a0f38c1867b7e8" id="331" refid="331">
+<p>Note that the same problem occurs if you use a shell script in your container to run the application. In this case, you must either intercept and pass signals to the application or use the <code>exec</code> shell command to run the application in your script.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a16f50aac8b92307f922ba970357fd8e" data-text-hash="b85de309868cb5a7ad1b72dfb196d254" id="332" refid="332">
+<p>Pre-stop hooks are only invoked when the container is requested to terminate, either because it has failed its liveness probe or because the pod has to shut down. They are not called when the process running in the container terminates by itself.</p>
+</div>
+<div class="readable-text" data-hash="b07cce5f6e6dc09f8798411ffb99b703" data-text-hash="a121ed1ffb872c69b2cfda5e312f3c8e" id="333" refid="333">
+<h4>Understanding that lifecycle hooks target containers, not pods</h4>
+</div>
+<div class="readable-text" data-hash="064a2aa2afbbbb28fac29f568259f369" data-text-hash="f890c0d0ef015900a9c126b0fca4cee3" id="334" refid="334">
+<p>As a final consideration on the post-start and pre-stop hooks, I would like to emphasize that these lifecycle hooks apply to containers and not to pods. You shouldn&#8217;t use a pre-stop hook to perform an action that needs to be performed when the entire pod is shut down, because pre-stop hooks run every time the container needs to terminate. This can happen several times during the pod&#8217;s lifetime, not just when the pod shuts down.</p>
+</div>
+<div class="readable-text" data-hash="082b036799cc3a24fff3a45e0c46c3d4" data-text-hash="ac7d2c27f0bc2144dc45a22edda80e4d" id="335" refid="335">
+<h2 id="sigil_toc_id_106">6.4&#160;Understanding the pod lifecycle</h2>
+</div>
+<div class="readable-text" data-hash="8c7cc003775a36c86cae4149dd76679d" data-text-hash="57a811126ad040ffea8a3789631ada9a" id="336" refid="336">
+<p>So far in this chapter you&#8217;ve learned a lot about how the containers in a pod run. Now let&#8217;s take a closer look at the entire lifecycle of a pod and its containers.</p>
+</div>
+<div class="readable-text" data-hash="336f17cb5dacc93aef501b9d73c73b95" data-text-hash="63e3ce17cbb6e74472cac533326001b3" id="337" refid="337">
+<p>When you create a pod object, Kubernetes schedules it to a worker node that then runs its containers. The pod&#8217;s lifecycle is divided into the three stages shown in the next figure:</p>
+</div>
+<div class="browsable-container figure-container" data-hash="707f060c3c0cd09a4b4413848abd3782" data-text-hash="4b4443fdc7988516c6e2f484d29b8c1c" id="338" refid="338">
+<h5>Figure 6.12 The three stages of the pod&#8217;s lifecycle</h5>
+<img alt="" data-processed="true" height="239" id="Picture_12" loading="lazy" src="EPUB/images/06image013.png" width="811">
+</div>
+<div class="readable-text" data-hash="3536a0cfaf6c19e0966a0400f02a8209" data-text-hash="b36b0d44c1f782e7238ceed64f8f5564" id="339" refid="339">
+<p>The three stages of the pod&#8217;s lifecycle are:</p>
+</div>
+<ol>
+<li class="readable-text" data-hash="cb1fe147748c0d4f7836e859eb952e4e" data-text-hash="cb1fe147748c0d4f7836e859eb952e4e" id="340" refid="340">The initialization stage, during which the pod&#8217;s init containers run.</li>
+<li class="readable-text" data-hash="7dab704c59daab534e9a4758aae7806e" data-text-hash="7dab704c59daab534e9a4758aae7806e" id="341" refid="341">The run stage, in which the regular containers of the pod run.</li>
+<li class="readable-text" data-hash="1ff391dd1ae6e7d055f3d1f76dd98631" data-text-hash="1ff391dd1ae6e7d055f3d1f76dd98631" id="342" refid="342">The termination stage, in which the pod&#8217;s containers are terminated.</li>
+</ol>
+<div class="readable-text" data-hash="574512eef09e279806cb1be9b16beb81" data-text-hash="daa5dc6aa987972afdfb6bad4a48b94c" id="343" refid="343">
+<p>Let&#8217;s see what happens in each of these stages.</p>
+</div>
+<div class="readable-text" data-hash="946592107f8805183bfeffe0f8d73578" data-text-hash="263c07135ff2245b4b7669c239d70566" id="344" refid="344">
+<h3 id="sigil_toc_id_107">6.4.1&#160;Understanding the initialization stage</h3>
+</div>
+<div class="readable-text" data-hash="ed92f0b86db265724c3685af2f6ce281" data-text-hash="9b3216e112485c40d2166dcd895557b9" id="345" refid="345">
+<p>As you&#8217;ve already learned, the pod&#8217;s init containers run first. They run in the order specified in the <code>initContainers</code> field in the pod&#8217;s <code>spec</code>. Let me explain everything that unfolds.</p>
+</div>
+<div class="readable-text" data-hash="43a21eb5339e4dd51c9825407c86be34" data-text-hash="df2bbfc164df62b834659e4abf60e2dc" id="346" refid="346">
+<h4>Pulling the container image</h4>
+</div>
+<div class="readable-text" data-hash="68dfa729fec4812b83a1377d937e8950" data-text-hash="a4f782c0fa075ad2df7a51a9aa6e7375" id="347" refid="347">
+<p>Before each init container is started, its container image is pulled to the worker node. The <code>imagePullPolicy</code> field in the container definition in the pod specification determines whether the image is pulled every time, only the first time, or never.</p>
+</div>
+<div class="browsable-container" data-hash="48e62c58d0380fc0cc124ec5e6486eca" data-text-hash="faec54a77bd0ea3828e8502ea4112f66" id="348" refid="348">
+<h5>Table 6.5 List of image-pull policies</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Image pull policy</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p>Not specified</p> </td>
+<td> <p>If the <code>imagePullPolicy</code> is not explicitly specified, it defaults to <code>Always</code> if the <code>:latest</code> tag is used in the image. For other image tags, it defaults to <code>IfNotPresent</code>.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Always
+</pre> </td>
+<td> <p>The image is pulled every time the container is (re)started. If the locally cached image matches the one in the registry, it is not downloaded again, but the registry still needs to be contacted.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Never
+</pre> </td>
+<td> <p>The container image is never pulled from the registry. It must exist on the worker node beforehand. Either it was stored locally when another container with the same image was deployed, or it was built on the node itself, or simply downloaded by someone or something else.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>IfNotPresent
+</pre> </td>
+<td> <p>Image is pulled if it is not already present on the worker node. This ensures that the image is only pulled the first time it&#8217;s required.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="98cd67bf40f5e3d61f196a80c115073a" data-text-hash="ed5ed7aee5e04824c7ab7834a9177f61" id="349" refid="349">
+<p>The image-pull policy is also applied every time the container is restarted, so a closer look is warranted. Examine the following figure to understand the behavior of these three policies.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="650fd716062634dfbe844e5f886df6e8" data-text-hash="3f2f59b89eee8658e8dc0b1a49c4828f" id="350" refid="350">
+<h5>Figure 6.13 An overview of the three different image-pull policies</h5>
+<img alt="" data-processed="true" height="434" id="Picture_13" loading="lazy" src="EPUB/images/06image014.png" width="873">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="351" refid="351">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="54fbc6432a3935bbc774224f40e4a58e" data-text-hash="8cf18aae532cff1f816e2ea907cc7702" id="352" refid="352">
+<p> If the <code>imagePullPolicy</code> is set to <code>Always</code> and the image registry is offline, the container will not run even if the same image is already stored locally. A registry that is unavailable may therefore prevent your application from (re)starting.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="959d64280ec3c81f34be079f26f56651" data-text-hash="6ebdc0429a34e09997071828c87729ac" id="353" refid="353">
+<h4>Running the containers</h4>
+</div>
+<div class="readable-text" data-hash="1856cc1855f96453357793f4e7133d69" data-text-hash="b15be5c0a3d0c2f512dc285bd76c6985" id="354" refid="354">
+<p>When the first container image is downloaded to the node, the container is started. When the first init container is complete, the image for the next init container is pulled and the container is started. This process is repeated until all init containers are successfully completed. Containers that fail might be restarted, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="6d49321894a4461ab0ed928c781cf188" data-text-hash="d4d008d8c5c2d0eb1bb4e2f93bbd605f" id="355" refid="355">
+<h5>Figure 6.14 All init containers must run to completion before the regular containers can start</h5>
+<img alt="" data-processed="true" height="237" id="Picture_14" loading="lazy" src="EPUB/images/06image015.png" width="862">
+</div>
+<div class="readable-text" data-hash="4aaddb640558158be1fbe9e6b41e433b" data-text-hash="15a9da64b332e762759925cbeb81f7c7" id="356" refid="356">
+<h4>Restarting failed init containers</h4>
+</div>
+<div class="readable-text" data-hash="4be73bb63ea254a8d518f3f1bea1c3b9" data-text-hash="ef837176995bebb3e7af51b7d26e9240" id="357" refid="357">
+<p>If an init container terminates with an error and the pod&#8217;s restart policy is set to <code>Always</code> or <code>OnFailure</code>, the failed init container is restarted. If the policy is set to <code>Never</code>, the subsequent init containers and the pod&#8217;s regular containers are never started. The pod&#8217;s status is displayed as <code>Init:Error</code> indefinitely. You must then delete and recreate the pod object to restart the application. To try this yourself, deploy the file <code>pod.kiada-init-fail-norestart.yaml</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="358" refid="358">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8bf877737a597d6fe3fbadec84297521" data-text-hash="d542fe90f3c1dde27bbeab51f24d3a7b" id="359" refid="359">
+<p> If the container needs to be restarted and <code>imagePullPolicy</code> is set to <code>Always</code>, the container image is pulled again. If the container had terminated due to an error and you push a new image with the same tag that fixes the error, you don&#8217;t need to recreate the pod, as the updated container image will be pulled before the container is restarted.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8314dc40ec8e1389a040c99c139523df" data-text-hash="cd2c83eae929bf7a1a7f2e10f2d4c072" id="360" refid="360">
+<h4>Re-executing the pod&#8217;s init containers</h4>
+</div>
+<div class="readable-text" data-hash="05d5353a6b7d6760ecde891221ebb0ca" data-text-hash="c194c14a2a528f79c59c5ec4f45b9078" id="361" refid="361">
+<p>Init containers are normally only executed once. Even if one of the pod&#8217;s main containers is terminated later, the pod&#8217;s init containers are not re-executed. However, in exceptional cases, such as when Kubernetes must restart the entire pod, the pod&#8217;s init containers might be executed again. This means that the operations performed by your init containers must be idempotent.</p>
+</div>
+<div class="readable-text" data-hash="9e06b9a6e40f0193b81fa348229efe11" data-text-hash="a6c9d3995a50b8d8bf318187fc13d57f" id="362" refid="362">
+<h3 id="sigil_toc_id_108">6.4.2&#160;Understanding the run stage</h3>
+</div>
+<div class="readable-text" data-hash="4a307be2a565af37b98b23d81cb90248" data-text-hash="a58051024c678f2376fed51d904d5610" id="363" refid="363">
+<p>When all init containers are successfully completed, the pod&#8217;s regular containers are all created in parallel. In theory, the lifecycle of each container should be independent of the other containers in the pod, but this is not quite true. See sidebar for more information.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="fbf3acf577ae08292efab299b519afea" data-text-hash="593e04cba8aa12eb8564f980dc57b724" id="364" refid="364">
+<h5>A container&#8217;s post-start hook blocks the creation of the subsequent container</h5>
+</div>
+<div class="readable-text" data-hash="87005eedd1b968d72f72b902937c5de2" data-text-hash="1b8751042a2b37b7be02aa9b420b0559" id="365" refid="365">
+<p>The Kubelet doesn&#8217;t start all containers of the pod at the same time. It creates and starts the containers synchronously in the order they are defined in the pod&#8217;s <code>spec</code>. If a post-start hook is defined for a container, it runs asynchronously with the main container process, but the execution of the post-start hook handler blocks the creation and start of the subsequent containers.</p>
+</div>
+<div class="readable-text" data-hash="20443e94e606b48926781d251d3c35bb" data-text-hash="7d83ef6b8a24458c8f85409d1d3a2a4e" id="366" refid="366">
+<p>This is an implementation detail that might change in the future.</p>
+</div>
+<div class="readable-text" data-hash="a36eb3e6f3dc8831c8132de06b26b860" data-text-hash="ad94ce5f5d74b9cf574f3f392305ea34" id="367" refid="367">
+<p>In contrast, the termination of containers is performed in parallel. A long-running pre-stop hook does block the shutdown of the container in which it is defined, but it does not block the shutdown of other containers. The pre-stop hooks of the containers are all invoked at the same time.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="be827d00739fb7b96302d53033f02ebe" data-text-hash="3556ec00c37ba2bf22caa3e53036b149" id="368" refid="368">
+<p>The following sequence runs independently for each container. First, the container image is pulled, and the container is started. When the container terminates, it is restarted, if this is provided for in the pod&#8217;s restart policy. The container continues to run until the termination of the pod is initiated. A more detailed explanation of this sequence is presented next.</p>
+</div>
+<div class="readable-text" data-hash="43a21eb5339e4dd51c9825407c86be34" data-text-hash="df2bbfc164df62b834659e4abf60e2dc" id="369" refid="369">
+<h4>Pulling the container image</h4>
+</div>
+<div class="readable-text" data-hash="b408fc6c0e2ee89a233345cd620ed046" data-text-hash="0b16063e43afff03791ce20cc55bce9c" id="370" refid="370">
+<p>Before the container is created, its image is pulled from the image registry, following the pod&#8217;s <code>imagePullPolicy</code>. Once the image is pulled, the container is created.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="371" refid="371">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="291f838152058d2efbbcc18c4f5ea4e2" data-text-hash="b6399daa5fdcd47274d0d5f91ca108a9" id="372" refid="372">
+<p> Even if a container image can&#8217;t be pulled, the other containers in the pod are started nevertheless.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="373" refid="373">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="9dea01a169f6652062fe7a28d28e131b" data-text-hash="0232f55341ff81d12259e3f17d3ade92" id="374" refid="374">
+<p> Containers don&#8217;t necessarily start at the same moment. If pulling the image takes time, the container may start long after all the others have already started. Consider this if a containers depends on others.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e134d76bf41ebc63757e7ca157ac38c4" data-text-hash="c3f1605c413109ab8a7a1db71fb4d8fe" id="375" refid="375">
+<h4>Running the container</h4>
+</div>
+<div class="readable-text" data-hash="ee95c5f44cfd7cccc0764c533654aba0" data-text-hash="a6a33782b8f28fae720cd54d1c957a94" id="376" refid="376">
+<p>The container starts when the main container process starts. If a post-start hook is defined in the container, it is invoked in parallel with the main container process. The post-start hook runs asynchronously and must be successful for the container to continue running.</p>
+</div>
+<div class="readable-text" data-hash="2bd47cfca6e740ef34045726c56d743c" data-text-hash="eb3d968a846c928e32e3b10f4ce8da28" id="377" refid="377">
+<p>Together with the main container and the potential post-start hook process, the startup probe, if defined for the container, is started. When the startup probe is successful, or if the startup probe is not configured, the liveness probe is started.</p>
+</div>
+<div class="readable-text" data-hash="5958a52c75af82a419dcd69ca57785bb" data-text-hash="7d112037196d87bf796918c22e6998f9" id="378" refid="378">
+<h4>Terminating and restarting the container on failures</h4>
+</div>
+<div class="readable-text" data-hash="4f8efc55463f97d678a35b7545745062" data-text-hash="8f41e7fedf2533c4d455114a8d64453d" id="379" refid="379">
+<p>If the startup or the liveness probe fails so often that it reaches the configured failure threshold, the container is terminated. As with init containers, the pod&#8217;s <code>restartPolicy</code> determines whether the container is then restarted or not.</p>
+</div>
+<div class="readable-text" data-hash="3f6422636d5b376139996c196003a246" data-text-hash="df331e8ed3816b3612ad4771ae67a818" id="380" refid="380">
+<p>Perhaps surprisingly, if the restart policy is set to <code>Never</code> and the startup hook fails, the pod&#8217;s status is shown as <code>Completed</code> even though the post-start hook failed. You can see this for yourself by creating the pod defined in the file <code>pod.quote-poststart-fail-norestart.yaml</code>.</p>
+</div>
+<div class="readable-text" data-hash="71e127c6ecafde7d33f456c0e903ee8b" data-text-hash="7c2b4b870bd4e10153c832eef01982b8" id="381" refid="381">
+<h4>Introducing the termination grace period</h4>
+</div>
+<div class="readable-text" data-hash="12a63c8776486ee64a78d7096e34684f" data-text-hash="cd176654cca2e4bf09b49bc1e7d29342" id="382" refid="382">
+<p>If a container must be terminated, the container&#8217;s pre-stop hook is called so that the application can shut down gracefully. When the pre-stop hook is completed, or if no pre-stop hook is defined, the <code>TERM</code> signal is sent to the main container process. This is another hint to the application that it should shut down.</p>
+</div>
+<div class="readable-text" data-hash="829c73b2b41c5fc81e68ef75dd241f5e" data-text-hash="f93fab497c73535b22374b10bacbc0d2" id="383" refid="383">
+<p>The application is given a certain amount of time to terminate. This time can be configured using the <code>terminationGracePeriodSeconds</code> field in the pod&#8217;s <code>spec</code> and defaults to 30 seconds. The timer starts when the pre-stop hook is called or when the <code>TERM</code> signal is sent if no hook is defined. If the process is still running after the termination grace period has expired, it&#8217;s terminated by force via the <code>KILL</code> signal. This terminates the container.</p>
+</div>
+<div class="readable-text" data-hash="df1ca4fde9a3dcf72dfaec93e7897d0e" data-text-hash="d76e8ef0e550580536fa214c4b1ea809" id="384" refid="384">
+<p>The following figure illustrates the container termination sequence.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="3a4ef7f719d534a59752a620784300fd" data-text-hash="6fc046de75107c89e9a7134803744846" id="385" refid="385">
+<h5>Figure 6.15 A container&#8217;s termination sequence</h5>
+<img alt="" data-processed="true" height="363" id="Picture_15" loading="lazy" src="EPUB/images/06image016.png" width="849">
+</div>
+<div class="readable-text" data-hash="33b2ce317c5ab5cf067dd8640c48b4c7" data-text-hash="3f2ebc5e0930b85c3eba06a6ebe2d4a3" id="386" refid="386">
+<p>After the container has terminated, it will be restarted if the pod&#8217;s restart policy allows it. If not, the container will remain in the <code>Terminated</code> state, but the other containers will continue running until the entire pod is shut down or until they fail as well.</p>
+</div>
+<div class="readable-text" data-hash="c5c2be51f469fb8490eb0b2bca7a26df" data-text-hash="08bc64fb4e1b5cc102876786f5660505" id="387" refid="387">
+<h3 id="sigil_toc_id_109">6.4.3&#160;Understanding the termination stage</h3>
+</div>
+<div class="readable-text" data-hash="554f9b56fc8cb6abbc730424642c503f" data-text-hash="e0e3123529536a111c45d2b3ad99941f" id="388" refid="388">
+<p>The pod&#8217;s containers continue to run until you finally delete the pod object. When this happens, termination of all containers in the pod is initiated and its status is changed to <code>Terminating</code>.</p>
+</div>
+<div class="readable-text" data-hash="a6009f8be909e445a4ea192e4098266f" data-text-hash="cfcd42110cd8948e4a586d6b0a2aadff" id="389" refid="389">
+<h4>Introducing the deletion grace period</h4>
+</div>
+<div class="readable-text" data-hash="9ccc65ed11e6ea24d9adbf4ccd520c54" data-text-hash="dce8fb05a768db207b320bed4a0c7523" id="390" refid="390">
+<p>The termination of each container at pod shutdown follows the same sequence as when the container is terminated because it has failed its liveness probe, except that instead of the termination grace period, the pod&#8217;s <i>deletion grace period</i> determines how much time is available to the containers to shut down on their own.</p>
+</div>
+<div class="readable-text" data-hash="6e59b59e2c5118e362bc9332b43c4679" data-text-hash="b387f9fef1166dd843fd4acc35c0411b" id="391" refid="391">
+<p>This grace period is defined in the pod&#8217;s <code>metadata.deletionGracePeriodSeconds</code> field, which gets initialized when you delete the pod. By default, it gets its value from the <code>spec.terminationGracePeriodSeconds</code> field, but you can specify a different value in the <code>kubectl</code> <code>delete</code> command. You&#8217;ll see how to do this later.</p>
+</div>
+<div class="readable-text" data-hash="bb20116492c4015e29ab21282f8f2c1d" data-text-hash="5874246f5d5b9300b5f113aecf5a74d2" id="392" refid="392">
+<h4>Understanding how the pod&#8217;s containers are terminated</h4>
+</div>
+<div class="readable-text" data-hash="5b58437c454265269d1726e1da546c54" data-text-hash="633e4d392361da2f2faf44e145be54ba" id="393" refid="393">
+<p>As shown in the next figure, the pod&#8217;s containers are terminated in parallel. For each of the pod&#8217;s containers, the container&#8217;s pre-stop hook is called, the <code>TERM</code> signal is then sent to the main container process, and finally the process is terminated using the <code>KILL</code> signal if the deletion grace period expires before the process stops by itself. After all the containers in the pod have stopped running, the pod object is deleted.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="28af7576d07f533984f6749f9a8c616c" data-text-hash="24e9e279033ab4084ba72728576f7883" id="394" refid="394">
+<h5>Figure 6.16 The termination sequence inside a pod</h5>
+<img alt="" data-processed="true" height="480" id="Picture_16" loading="lazy" src="EPUB/images/06image017.png" width="826">
+</div>
+<div class="readable-text" data-hash="36fa6e9d433854ad5ffc8887f2a70b53" data-text-hash="6e4c3e34ae950b4d5e03b0ac6c50b9c0" id="395" refid="395">
+<h4>Inspecting the slow shutdown of a pod</h4>
+</div>
+<div class="readable-text" data-hash="aa2586bdfb2ed8b361f04919dc0711ca" data-text-hash="fa21258a264941879f5d3aec6e77f66d" id="396" refid="396">
+<p>Let&#8217;s look at this last stage of the pod&#8217;s life on one of the pods you created previously. If the <code>kiada-ssl</code> pod doesn&#8217;t run in your cluster, please create it again. Now delete the pod by running <code>kubectl delete pod kiada-ssl</code>.</p>
+</div>
+<div class="readable-text" data-hash="2214c6ce9958562282b7d7880b13ad07" data-text-hash="a24251c6e2c43da61eef21be6e74143e" id="397" refid="397">
+<p>It takes surprisingly long to delete the pod, doesn&#8217;t it? I counted at least 30 seconds. This is neither normal nor acceptable, so let&#8217;s fix it.</p>
+</div>
+<div class="readable-text" data-hash="9a8ec8ff432a12ac4968813bdfb3035a" data-text-hash="e84e3458b30a19759211484f9b55632b" id="398" refid="398">
+<p>Considering what you&#8217;ve learned in this section, you may already know what&#8217;s causing the pod to take so long to finish. If not, let me help you analyze the situation.</p>
+</div>
+<div class="readable-text" data-hash="17dbfbf07209b5277d7b8f87ddf0c504" data-text-hash="b4a8b650a6f44fbd1027fd409327bfa4" id="399" refid="399">
+<p>The <code>kiada-ssl</code> pod has two containers. Both must stop before the pod object can be deleted. Neither container has a pre-stop hook defined, so both containers should receive the <code>TERM</code> signal immediately when you delete the pod. The 30s I mentioned earlier match the default termination grace period value, so it looks like one of the containers, if not both, doesn&#8217;t stop when it receives the <code>TERM</code> signal, and is killed after the grace period expires.</p>
+</div>
+<div class="readable-text" data-hash="8be4e0a3ad4ad0da4e212d883216c281" data-text-hash="053067c5a6945cebf0ef5de805efd13f" id="400" refid="400">
+<h4>Changing the termination grace period</h4>
+</div>
+<div class="readable-text" data-hash="bdd822c38313c95b290966c2cd992f95" data-text-hash="4da12c14f45413bb46ae525cdf52f7f0" id="401" refid="401">
+<p>You can try setting the pod&#8217;s <code>terminationGracePeriodSeconds</code> field to a lower value to see if it terminates sooner. The following manifest shows how to the field in the pod manifest (file <code>pod.kiada-ssl-shortgraceperiod.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a85e4811c190619c27682a7682c05ea6" data-text-hash="7734591bc0ef795ec239b19d7741036d" id="402" refid="402">
+<h5>Listing 6.6 Setting a lower terminationGracePeriodSeconds for faster pod shutdown</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl-shortgraceperiod
+spec:
+  terminationGracePeriodSeconds: 5    #A
+  containers:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2TigJlzIGNvbnRhaW5lcnMgaGF2ZSA1IHNlY29uZHMgdG8gdGVybWluYXRlIGFmdGVyIHJlY2VpdmluZyB0aGUgVEVSTSBzaWduYWwgb3IgdGhleSB3aWxsIGJlIGtpbGxlZA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3a0c9f64d095c8beb0f0dedcba5f6abf" data-text-hash="32977d533e42b4d446c032af9926a7e9" id="403" refid="403">
+<p>In the listing above, the pod&#8217;s <code>terminationGracePeriodSeconds</code> is set to <code>5</code>. If you create and then delete this pod, you&#8217;ll see that its containers are terminated within 5s of receiving the <code>TERM</code> signal.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="404" refid="404">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="53fb1be21ee80e08b08f31e8ac937153" data-text-hash="732169c58f74202960887b62a5775e4c" id="405" refid="405">
+<p> A reduction of the termination grace period is rarely necessary. However, it is advisable to extend it if the application usually needs more time to shut down gracefully.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4301f65d51d7599e8b597487c21cd150" data-text-hash="2d8315ead98bade799513a3b91266e9f" id="406" refid="406">
+<h4>Specifying the deletion grace period when deleting the pod</h4>
+</div>
+<div class="readable-text" data-hash="cb4fbaf40002fe2749ddc101beac8342" data-text-hash="61e19632e7b83574f3bb1943aba7cb99" id="407" refid="407">
+<p>Any time you delete a pod, the pod&#8217;s <code>terminationGracePeriodSeconds</code> determines the amount of time the pod is given to shut down, but you can override this time when you execute the <code>kubectl</code> <code>delete</code> command using the <code>--grace-period</code> command line option.</p>
+</div>
+<div class="readable-text" data-hash="72279014a7fdfbc3305322884650d5e3" data-text-hash="dfad4a2e0b36f7f74e384dbd6b0bcda9" id="408" refid="408">
+<p>For example, to give the pod 10s to shut down, you run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f3b7b9f95da5bbfabc996389ee81bced" data-text-hash="b5c27f68a6219d84311cc331343eef62" id="409" refid="409">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po kiada-ssl --grace-period 10</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="410" refid="410">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="dafd5c70043b88b89bbd79def2f5ba2e" data-text-hash="f5236189be0bc24ca8c242dc29aee40c" id="411" refid="411">
+<p> If you set this grace period to zero, the pod&#8217;s pre-stop hooks are not executed.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="796098bfc9e7c8b6df5e72d389a71ed5" data-text-hash="6b5cb5786bf4cb54eaa4e4e02a057a7b" id="412" refid="412">
+<h4>Fixing the shutdown behavior of the Kiada application</h4>
+</div>
+<div class="readable-text" data-hash="bf38e1bd719c1e32a7d7069c2aeeffaf" data-text-hash="502745f558d3e3556d8c2d56f2680a0c" id="413" refid="413">
+<p>Considering that the shortening of the grace period leads to a faster shutdown of the pod, it&#8217;s clear that at least one of the two containers doesn&#8217;t terminate by itself after it receives the <code>TERM</code> signal. To see which one, recreate the pod, then run the following commands to stream the logs of each container before deleting the pod again:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4f7dff0ed1739d107c17dd72a91097b6" data-text-hash="3a5a5b1673d1ea785f769db7e4b280ca" id="414" refid="414">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-ssl -c kiada -f
+$ kubectl logs kiada-ssl -c envoy -f</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ac770882cae68999543fbc0a525d5132" data-text-hash="ee4ea8c5bf1eac7dd10ad9f2b3150991" id="415" refid="415">
+<p>The logs show that the Envoy proxy catches the signal and immediately terminates, whereas the Node.js application doesn&#8217;t respond to the signal. To fix this, you need to add the code in the following listing to the end of your <code>app.js</code> file. You&#8217;ll find the updated file in Chapter06/kiada-0.3/app.js.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2f0f92873d3eab0628d78aae4ad7cf66" data-text-hash="3081b3607c6126ff8cc1a1dac9b61131" id="416" refid="416">
+<h5>Listing 6.7 Handling the TERM signal in the kiada application</h5>
+<div class="code-area-container">
+<pre class="code-area">process.on('SIGTERM', function () {
+  console.log("Received SIGTERM. Server shutting down...");
+  server.close(function () {
+    process.exit(0);
+  });
+});</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e9a5352e919b2a6abb19002808231d67" data-text-hash="5954be0c6e4f217f85386e6568c9a75e" id="417" refid="417">
+<p>After you make the change to the code, create a new container image with the tag <code>:0.3</code>, push it to your image registry, and deploy a new pod that uses the new image. You can also use the image <code>docker.io/luksa/kiada:0.3</code> that I&#8217;ve built. To create the pod, apply the manifest file <code>pod.kiada-ssl-0.3.yaml</code>.</p>
+</div>
+<div class="readable-text" data-hash="db975d99181358c58f2568a35413acc7" data-text-hash="2f759f47bb3b10e3a34f9b576d853f07" id="418" refid="418">
+<p>If you delete this new pod, you&#8217;ll see that it shuts down considerably faster. From the logs of the <code>kiada</code> container, you can see that it begins to shut down as soon as it receives the <code>TERM</code> signal.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="90ba996504b189776b490cb27e1ac229" data-text-hash="1eab470a6f707b92e15040773251a746" id="419" refid="419">
+<h5>TIP</h5>
+</div>
+<div class="readable-text" data-hash="f4bc8ba8e237660c4dc48881e37e944c" data-text-hash="e4e9a3c38384a629a71d6c3ecc5d576b" id="420" refid="420">
+<p> Don&#8217;t forget to ensure that your init containers also handle the <code>TERM</code> signal so that they shut down immediately if you delete the pod object while it&#8217;s still being initialized.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="437aa9ef1c5fcdce046f341c26e15b53" data-text-hash="8ed4116f5573e10746578d3e91b13e66" id="421" refid="421">
+<h3 id="sigil_toc_id_110">6.4.4&#160;Visualizing the full lifecycle of the pod&#8217;s containers</h3>
+</div>
+<div class="readable-text" data-hash="ca843834502140de6963722d8986c25d" data-text-hash="75931f6d4c9af0f36f61b638b322ffde" id="422" refid="422">
+<p>To conclude this chapter on what goes on in a pod, I present a final overview of everything that happens during the life of a pod. The following two figures summarize everything that has been explained in this chapter. The initialization of the pod is shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="1514789feb8ccb5d5cca3fa0c21ad724" data-text-hash="b117cdb59dd1d9fe3a5e3d11cff549fc" id="423" refid="423">
+<h5>Figure 6.17 Complete overview of the pod&#8217;s initialization stage</h5>
+<img alt="" data-processed="true" height="424" id="Picture_17" loading="lazy" src="EPUB/images/06image018.png" width="850">
+</div>
+<div class="readable-text" data-hash="bc1734086112363cd232018ca534bc95" data-text-hash="1fb36e82e24da2dbc6a71adedbfb649c" id="424" refid="424">
+<p>When initialization is complete, normal operation of the pod&#8217;s containers begins. This is shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="9e9507719ff3de0a8771442a50c3c96e" data-text-hash="8b59a7e37c67a372b18520a69fc32099" id="425" refid="425">
+<h5>Figure 6.18 Complete overview of the pod&#8217;s normal operation</h5>
+<img alt="" data-processed="true" height="500" id="Picture_18" loading="lazy" src="EPUB/images/06image019.png" width="858">
+</div>
+<div class="readable-text" data-hash="9c9ac070d5c1e1aa8c4857b8f77a6204" data-text-hash="a449b7d7ffe12d98cef894f92c05d7a1" id="426" refid="426">
+<h2 id="sigil_toc_id_111">6.5&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="dfdbc7a1410041b51c7283827030752f" data-text-hash="40caf5c915c6c11b47e1c99f898aba8f" id="427" refid="427">
+<p>In this chapter, you&#8217;ve learned:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="4a3fc38736f412f0c50726648cc8df42" data-text-hash="ba85c684e2fccca9b144b19b810c668c" id="428" refid="428">The status of the pod contains information about the phase of the pod, its conditions, and the status of each of its containers. You can view the status by running the <code class="codechar">kubectl describe</code> command or by retrieving the full pod manifest using the command <code class="codechar">kubectl get -o yaml</code>.</li>
+<li class="readable-text" data-hash="37a1c4803e28e18f54584eac620b8f53" data-text-hash="37a1c4803e28e18f54584eac620b8f53" id="429" refid="429">Depending on the pod&#8217;s restart policy, its containers can be restarted after they are terminated. In reality, a container is never actually restarted. Instead, the old container is destroyed, and a new container is created in its place.</li>
+<li class="readable-text" data-hash="3e6090776871b234be9358de35b54324" data-text-hash="3e6090776871b234be9358de35b54324" id="430" refid="430">If a container is repeatedly terminated, an exponentially increasing delay is inserted before each restart. There is no delay for the first restart, then the delay is 10 seconds and then doubles before each subsequent restart. The maximum delay is 5 minutes and is reset to zero when the container has been running properly for at least twice this time.</li>
+<li class="readable-text" data-hash="f687bd0f36e8db46df049e78cbf7933f" data-text-hash="f687bd0f36e8db46df049e78cbf7933f" id="431" refid="431">An exponentially increasing delay is also used after each failed attempt to download a container image.</li>
+<li class="readable-text" data-hash="2c84b66780f1466a6ffcd09911def9db" data-text-hash="2c84b66780f1466a6ffcd09911def9db" id="432" refid="432">Adding a liveness probe to a container ensures that the container is restarted when it stops responding. The liveness probe checks the state of the application via an HTTP GET request, by executing a command in the container, or opening a TCP connection to one of the network ports of the container.</li>
+<li class="readable-text" data-hash="e2626a56141a6e785a1c1186ad02797d" data-text-hash="e2626a56141a6e785a1c1186ad02797d" id="433" refid="433">If the application needs a long time to start, a startup probe can be defined with settings that are more forgiving than those in the liveness probe to prevent premature restarting of the container.</li>
+<li class="readable-text" data-hash="5bbfbb8f62a2a468702057add3bc89bf" data-text-hash="5bbfbb8f62a2a468702057add3bc89bf" id="434" refid="434">You can define lifecycle hooks for each of the pod&#8217;s main containers. A post-start hook is invoked when the container starts, whereas a pre-stop hook is invoked when the container must shut down. A lifecycle hook is configured to either send an HTTP GET request or execute a command within the container.</li>
+<li class="readable-text" data-hash="1b3490ced64c6f3071b52732696b5393" data-text-hash="c37d89fbcb2808f1d8edb4db82b22fbd" id="435" refid="435">If a pre-stop hook is defined in the container and the container must terminate, the hook is invoked first. The <code>TERM</code> signal is then sent to the main process in the container. If the process doesn&#8217;t stop within <code>terminationGracePeriodSeconds</code> after the start of the termination sequence, the process is killed.</li>
+<li class="readable-text" data-hash="cc6e92d831c14c495c27487c73650bb7" data-text-hash="9f641bd19d57ddc8430c7857a9905918" id="436" refid="436">When you delete a pod object, all its containers are terminated in parallel. The pod&#8217;s <code>deletionGracePeriodSeconds</code> is the time given to the containers to shut down. By default, it&#8217;s set to the termination grace period, but can be overridden with the <code>kubectl delete</code> command.</li>
+<li class="readable-text" data-hash="b27c7081b1847f7b004b674baf530cd4" data-text-hash="1369493f74c72d95c1d0857e199d3823" id="437" refid="437">If shutting down a pod takes a long time, it is likely that one of the processes running in it doesn&#8217;t handle the <code>TERM</code> signal. Adding a <code>TERM</code> signal handler is a better solution than shortening the termination or deletion grace period.</li>
+</ul>
+<div class="readable-text" data-hash="4196eedd1ed19db23a534a8295fdd143" data-text-hash="b2ef37e662f21a9aed04adb13a921c87" id="438" refid="438">
+<p>You now understand everything about the operation of containers in pods. In the next chapter you&#8217;ll learn about the other important component of pods - storage volumes.</p>
+</div></div>
+
+        </body>
+        
+        

@@ -1,0 +1,1429 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="a28e6af737930b43bcb559c95661e95e" data-text-hash="da3a66e23d10f5460d7bd8720710c944" id="1" refid="1">
+<h1>16 Deploying node agents and daemons with DaemonSets </h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="c861d8b8be656857880f06299999ea37" data-text-hash="c861d8b8be656857880f06299999ea37" id="2" refid="2">Running an agent Pod on each cluster node</li>
+<li class="readable-text" data-hash="c973d0d816740e8fdd78776fde075045" data-text-hash="c973d0d816740e8fdd78776fde075045" id="3" refid="3">Running agent Pods on a subset of nodes</li>
+<li class="readable-text" data-hash="436e75e098ccdb9cfc2cedea0741aa21" data-text-hash="436e75e098ccdb9cfc2cedea0741aa21" id="4" refid="4">Allowing Pods to access the host node&#8217;s resources</li>
+<li class="readable-text" data-hash="a82e51adbb8e9b99a98c9f656a0ea6c4" data-text-hash="a82e51adbb8e9b99a98c9f656a0ea6c4" id="5" refid="5">Assigning a priority class to a Pod</li>
+<li class="readable-text" data-hash="f7d3cf3a02e33be1bd5b9850f815177b" data-text-hash="f7d3cf3a02e33be1bd5b9850f815177b" id="6" refid="6">Communicating with the local agent Pod</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="c0962b1ce83d19216d5d887138ff8058" data-text-hash="78ab8b73362ee55d5edb510aaf3bdab3" id="7" refid="7">
+<p>In the previous chapters, you learned how to use Deployments or StatefulSets to distribute multiple replicas of a workload across the nodes of your cluster. But what if you want to run exactly one replica on each node? For example, you might want each node to run an agent or daemon that provides a system service such as metrics collection or log aggregation for that node. To deploy these types of workloads in Kubernetes, you use a DaemonSet.</p>
+</div>
+<div class="readable-text" data-hash="ae479785907e463aa782d5e81b700864" data-text-hash="537e22411fde22b54cbde7996fd4fe62" id="8" refid="8">
+<p>Before you begin, create the <span><code>kiada</code></span> Namespace, change to the <span><code>Chapter16/</code></span> directory, and apply all manifests in the <span><code>SETUP/</code></span> directory by running the following commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="88d5d3bd2ca8ff5ce7673efcd4ecc63b" data-text-hash="8da4cdd7753194c2a7f6a8501934287f" id="9" refid="9">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create ns kiada
+$ kubectl config set-context --current --namespace kiada
+$ kubectl apply -f SETUP -R</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="10" refid="10">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="b0390472a91bd1917b36f3abb4c3a698" data-text-hash="6a31f3283df7d28553ef2bbfc278a4aa" id="11" refid="11">
+<p> You can find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter16</a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="88dc7b28b875607410a9c5e4447eeb0b" data-text-hash="b3b6b4ea19486a7ff63dca9fb7f4e344" id="12" refid="12">
+<h2 id="sigil_toc_id_288">16.1&#160; Introducing DaemonSets</h2>
+</div>
+<div class="readable-text" data-hash="8b3e38edef43aa76e14d49da6a70529c" data-text-hash="8e8f6ecc793285b0a661ebe0d4db4cdd" id="13" refid="13">
+<p>A DaemonSet is an API object that ensures that exactly one replica of a Pod is running on each cluster node. By default, daemon Pods are deployed on every node, but you can use a node selector to restrict deployment to some of the nodes.</p>
+</div>
+<div class="readable-text" data-hash="4b21c3e365eb8da7e624daec0ede058f" data-text-hash="8f1e14e9536a48f00ac4c2342192074e" id="14" refid="14">
+<h3 id="sigil_toc_id_289">16.1.1&#160; Understanding the DaemonSet object</h3>
+</div>
+<div class="readable-text" data-hash="27f53a0895f2e84c9b6eeec0538a28c9" data-text-hash="ad9b6b1ec4e2b6d6d8513143d787df37" id="15" refid="15">
+<p>A DaemonSet contains a Pod template and uses it to create multiple Pod replicas, just like Deployments, ReplicaSets, and StatefulSets. However, with a DaemonSet, you don&#8217;t specify the desired number of replicas as you do with the other objects. Instead, the DaemonSet controller creates as many Pods as there are nodes in the cluster. It ensures that each Pod is scheduled to a different Node, unlike Pods deployed by a ReplicaSet, where multiple Pods can be scheduled to the same Node, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ac0d42fc9692e6eca37db7c4becbc9d9" data-text-hash="4fc72df94be8518a2961c2ebe9071602" id="16" refid="16">
+<h5>Figure 16.1 DaemonSets run a Pod replica on each node, whereas ReplicaSets scatter them around the cluster.</h5>
+<img alt="" data-processed="true" height="406" id="Picture_5" loading="lazy" src="EPUB/images/16.1.png" width="901">
+</div>
+<div class="readable-text" data-hash="1cf72cdd554f8f08ee3cf1a980d1132a" data-text-hash="bc38c45dab8046689bab1ae6730cf45f" id="17" refid="17">
+<h4>What type of workloads are deployed via DaemonSets and why</h4>
+</div>
+<div class="readable-text" data-hash="0351a16a687f1fda8bafa1f08d310592" data-text-hash="bc200b32b15b947d14ba7490ee4e2321" id="18" refid="18">
+<p>A DaemonSet is typically used to deploy infrastructure Pods that provide some sort of system-level service to each cluster node. Thes includes the log collection for the node&#8217;s system processes, as well as its Pods, daemons to monitor these processes, tools that provide the cluster&#8217;s network and storage, manage the installation and update of software packages, and services that provide interfaces to the various devices attached to the node.</p>
+</div>
+<div class="readable-text" data-hash="abd2e1f85ab954a50da53394cfe57238" data-text-hash="6cb56580c311385a4502108dd96ff8c1" id="19" refid="19">
+<p>The Kube Proxy component, which is responsible for routing traffic for the Service objects you create in your cluster, is usually deployed via a DaemonSet in the <span><code>kube-system</code></span> Namespace. The Container Network Interface (CNI) plugin that provides the network over which the Pods communicate is also typically deployed via a DaemonSet.</p>
+</div>
+<div class="readable-text" data-hash="5ef412b18744221507581b338e9e6af7" data-text-hash="f9760fd98d0c708e49eb23e652ce89ed" id="20" refid="20">
+<p>Although you could run system software on your cluster nodes using standard methods such as init scripts or systemd, using a DaemonSet ensures that you manage all workloads in your cluster in the same way.</p>
+</div>
+<div class="readable-text" data-hash="0c2a5d1a9dae6bb797d2ad1f29ead0bb" data-text-hash="7a66842872c9cb166a5850b85f047f9b" id="21" refid="21">
+<h4>Understanding the operation of the DaemonSet controller</h4>
+</div>
+<div class="readable-text" data-hash="68a05abc8b19ca9f12d0dbea7b396752" data-text-hash="da5e378c4feccd78599e5ece995c01c0" id="22" refid="22">
+<p>Just like ReplicaSets and StatefulSets, a DaemonSet contains a Pod template and a label selector that determines which Pods belong to the DaemonSet. In each pass of its reconciliation loop, the DaemonSet controller finds the Pods that match the label selector, checks that each node has exactly one matching Pod, and creates or removes Pods to ensure that this is the case. This is illustrated in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="9f0cc1fc312d70adf61f681e1bd9f474" data-text-hash="b83308919938053553528dc6d2584888" id="23" refid="23">
+<h5>Figure 16.2 The DaemonSet controller&#8217;s reconciliation loop</h5>
+<img alt="" data-processed="true" height="367" id="Picture_4" loading="lazy" src="EPUB/images/16.2.png" width="960">
+</div>
+<div class="readable-text" data-hash="03f4f6666defab721420ef56f5755400" data-text-hash="b3996335942dff92617f9ffd5156ef3c" id="24" refid="24">
+<p>When you add a Node to the cluster, the DaemonSet controller creates a new Pod and associates it with that Node. When you remove a Node, the DaemonSet deletes the Pod object associated with it. If one of these daemon Pods disappears, for example, because it was deleted manually, the controller immediately recreates it. If an additional Pod appears, for example, if you create a Pod that matches the label selector in the DaemonSet, the controller immediately deletes it.</p>
+</div>
+<div class="readable-text" data-hash="1c66a2211d122c8254a1b2a8bfa430a8" data-text-hash="67e3db4eb7161d42afba65cabd176774" id="25" refid="25">
+<h3 id="sigil_toc_id_290">16.1.2&#160; Deploying Pods with a DaemonSet</h3>
+</div>
+<div class="readable-text" data-hash="2e3dc7b25389fd6224fe6a4da205b110" data-text-hash="ee219c1ac5bc205f3de9fa5ed3cefa68" id="26" refid="26">
+<p>A DaemonSet object manifest looks very similar to that of a ReplicaSet, Deployment, or StatefulSet. Let&#8217;s look at a DaemonSet example called <span><code>demo</code></span>, which you can find in the book's code repository in the file <span><code>ds.demo.yaml</code></span>. The following listing shows the full manifest.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="19d8a86518adab48933cb7559bd09dd7" data-text-hash="e3bd3cc43ea1237ca4a4992421a14980" id="27" refid="27">
+<h5>Listing 16.1 A DaemonSet manifest example</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1    #A
+kind: DaemonSet    #A
+metadata:
+  name: demo    #B
+spec:
+  selector:    #C
+    matchLabels:    #C
+      app: demo    #C
+  template:    #D
+    metadata:    #D
+      labels:    #D
+        app: demo    #D
+    spec:    #D
+      containers:    #D
+      - name: demo    #D
+        image: busybox    #D
+        command:    #D
+        - sleep    #D
+        - infinity    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRGFlbW9uU2V0cyBhcmUgaW4gdGhlIGFwcHMvdjEgQVBJIGdyb3VwIGFuZCB2ZXJzaW9uLgojQiBUaGlzIERhZW1vblNldCBpcyBjYWxsZWQgZGVtby4KI0MgQSBsYWJlbCBzZWxlY3RvciBkZWZpbmVzIHdoaWNoIFBvZHMgYmVsb25nIHRvIHRoaXMgRGFlbW9uU2V0LgojRCBUaGlzIGlzIHRoZSBQb2QgdGVtcGxhdGUgdXNlZCB0byBjcmVhdGUgdGhlIFBvZHMgZm9yIHRoaXMgRGFlbW9uU2V0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="41ae5ded2c8467de3e5c247054328a75" data-text-hash="e777c2e434336951388dd9f07f89b249" id="28" refid="28">
+<p>The <span><code>DaemonSet</code></span> object kind is part of the <span><code>apps/v1</code></span> API group/version. In the object's <span><code>spec</code></span>, you specify the label <span><code>selector</code></span> and a Pod <span><code>template</code></span>, just like a ReplicaSet for example. The <span><code>metadata</code></span> section within the <span><code>template</code></span> must contain <span><code>labels</code></span> that match the <span><code>selector</code></span>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="29" refid="29">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="07ae7911bd753f66476d3e91ee550b74" data-text-hash="d88f2048bb5efbc1f35871566fe97fae" id="30" refid="30">
+<p> The selector is immutable, but you can change the labels as long as they still match the selector. If you need to change the selector, you must delete the DaemonSet and recreate it. You can use the <span><code>--cascade=orphan</code></span> option to preserve the Pods while replacing the DaemonSet.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4518500889e5ce2a2eb598b871cee62d" data-text-hash="aed8a19652ab06488bb52e19f5c00abb" id="31" refid="31">
+<p>As you can see in the listing, the <span><code>demo</code></span> DaemonSet deploys Pods that do nothing but execute the <span><code>sleep</code></span> command. That&#8217;s because the goal of this exercise is to observe the behavior of the DaemonSet itself, not its Pods. Later in this chapter, you&#8217;ll create a DaemonSet whose Pods actually do something.</p>
+</div>
+<div class="readable-text" data-hash="b23f480f14895a3afc3076c82fcd656f" data-text-hash="78eaabe3839550dab7ce4969d6a10171" id="32" refid="32">
+<h4>Quickly inspecting a DaemonSet</h4>
+</div>
+<div class="readable-text" data-hash="a0c520c0684abf8a9f5093a7fe2fc7fa" data-text-hash="5d57b5b6f117beb1cb8c2551869e65b0" id="33" refid="33">
+<p>Create the DaemonSet by applying the <span><code>ds.demo.yaml</code></span> manifest file with <span><code>kubectl apply</code></span> and then list all DaemonSets in the current Namespace as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="160b4a3d33481be5e5e08fa196e2b2df" data-text-hash="d282251e0c5047b8d66c48657c913315" id="34" refid="34">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds
+NAME   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+demo   2         2         2       2            2           &lt;none&gt;          7s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="35" refid="35">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="87c4d6ae1a6cf55a030644c03437161e" data-text-hash="d4b3a3d1df8d2b8c2e4d6336cb38ab9e" id="36" refid="36">
+<p> The shorthand for DaemonSet is <span><code>ds</code></span>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0d2909e8a92806cd5c6fcaa739308bab" data-text-hash="d9e6c0a755a1d6117115cb3c61aebf35" id="37" refid="37">
+<p>The command&#8217;s output shows that two Pods were created by this DaemonSet. In your case, the number may be different because it depends on the number and type of Nodes in your cluster, as I&#8217;ll explain later in this section.</p>
+</div>
+<div class="readable-text" data-hash="5c1d10d2e21099a97074c07544ccc044" data-text-hash="3079ea04b9f5a631f70b24f408512d77" id="38" refid="38">
+<p>Just as with ReplicaSets, Deployments, and StatefulSets, you can run <span><code>kubectl get</code></span> with the <span><code>-o wide</code></span> option to also display the names and images of the containers and the label selector.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d4444b7020af103ff49aeab186002556" data-text-hash="be6e7f0975113d42209a8173f25f3510" id="39" refid="39">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds -o wide
+NAME   DESIRED   CURRENT   ...   CONTAINERS   IMAGES    SELECTOR
+Demo   2         2         ...   demo         busybox   app=demo</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b3e918d1412bd9e79b897c86465840a1" data-text-hash="9712a0bda6c8ab1b49814940038c4ea4" id="40" refid="40">
+<h4>Inspecting a DaemonSet in detail</h4>
+</div>
+<div class="readable-text" data-hash="10649af3b8ed8a995a1fdc4ad62984e5" data-text-hash="9b334c76cf0816b9cf9cf0549999c887" id="41" refid="41">
+<p>The <span><code>-o wide</code></span> option is the fastest way to see what&#8217;s running in the Pods created by each DaemonSet. But if you want to see even more details about the DaemonSet, you can use the <span><code>kubectl describe</code></span> command, which gives the following output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9ded32f3af72d703656ace15f4e8e49d" data-text-hash="da63d758d801ee720e4087527671769c" id="42" refid="42">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe ds demo
+Name:           demo    #A
+Selector:       app=demo    #B
+Node-Selector:  &lt;none&gt;    #C
+Labels:         &lt;none&gt;    #D
+Annotations:    deprecated.daemonset.template.generation: 1    #E
+Desired Number of Nodes Scheduled: 2    #F
+Current Number of Nodes Scheduled: 2    #F
+Number of Nodes Scheduled with Up-to-date Pods: 2    #F
+Number of Nodes Scheduled with Available Pods: 2    #F
+Number of Nodes Misscheduled: 0    #F
+Pods Status:  2 Running / 0 Waiting / 0 Succeeded / 0 Failed    #F
+Pod Template:    #G
+  Labels:  app=demo    #G
+  Containers:    #G
+   demo:    #G
+    Image:      busybox    #G
+    Port:       &lt;none&gt;    #G
+    Host Port:  &lt;none&gt;    #G
+    Command:    #G
+      sleep    #G
+      infinity    #G
+    Environment:  &lt;none&gt;    #G
+    Mounts:       &lt;none&gt;    #G
+  Volumes:        &lt;none&gt;    #G
+Events:    #H
+  Type    Reason            Age   From                  Message    #H
+  ----    ------            ----  ----                  -------    #H
+  Normal  SuccessfulCreate  40m   daemonset-controller  Created pod: demo-wqd22    #H
+  Normal  SuccessfulCreate  40m   daemonset-controller  Created pod: demo-w8tgm    #H</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgb2YgdGhlIERhZW1vblNldC4KI0IgVGhlIGxhYmVsIHNlbGVjdG9yIHRvIGZpbmQgdGhlIFBvZHMgYmVsb25naW5nIHRvIHRoaXMgRGFlbW9uU2V0LgojQyBBbm90aGVyIGxhYmVsIHNlbGVjdG9yLCBidXQgZm9yIE5vZGVzLiBJdCBkZXRlcm1pbmVzIHRvIHdoaWNoIE5vZGVzIHRoaXMgRGFlbW9uU2V04oCZcyBQb2RzIGdldCBkZXBsb3llZC4gVGhpcyBpcyBleHBsYWluZWQgaW4gdGhlIG5leHQgc2VjdGlvbi4KI0QgVGhlIGxhYmVscyBvZiB0aGlzIERhZW1vblNldCAobm90IG9mIGl0cyBQb2RzKS4KI0UgVGhlIGFubm90YXRpb25zIG9mIHRoaXMgRGFlbW9uU2V0LgojRiBUaGUgbnVtYmVyIGFuZCBzdGF0dXMgb2YgdGhlIGFzc29jaWF0ZWQgUG9kcy4KI0cgVGhlIHRlbXBsYXRlIHVzZWQgdG8gY3JlYXRlIHRoZSBQb2RzLgojSCBUaGUgRXZlbnRzIGFzc29jaWF0ZWQgd2l0aCB0aGlzIERhZW1vblNldC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="55c2592d8823a33a9ab7fec2f68465c9" data-text-hash="a273914f631ca1a350e17c7ac885be45" id="43" refid="43">
+<p>The output of the <span><code>kubectl describe</code></span> commands includes information about the object&#8217;s labels and annotations, the label selector used to find the Pods of this DaemonSet, the number and state of these Pods, the template used to create them, and the Events associated with this DaemonSet.</p>
+</div>
+<div class="readable-text" data-hash="cc8d7789113fb643efb9f2f39a969101" data-text-hash="467c0079e8edf6e9eb76e2180fab5839" id="44" refid="44">
+<h4>Understanding a DaemonSet&#8217;s status</h4>
+</div>
+<div class="readable-text" data-hash="73f068f57be783094a841b1402ddc711" data-text-hash="b91f2d33e97a94fa161f883ca81c37be" id="45" refid="45">
+<p>During each reconciliation, the DaemonSet controller reports the state of the DaemonSet in the object&#8217;s <span><code>status</code></span> section. Let&#8217;s look at the <span><code>demo</code></span> DaemonSet&#8217;s status. Run the following command to print the object&#8217;s YAML manifest:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="25e17aea9b5c72e7552d900952396eea" data-text-hash="e31f0bfc7706892261db4848beae9828" id="46" refid="46">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds demo -o yaml
+...
+status:
+  currentNumberScheduled: 2
+  desiredNumberScheduled: 2
+  numberAvailable: 2
+  numberMisscheduled: 0
+  numberReady: 2
+  observedGeneration: 1
+  updatedNumberScheduled: 2</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f5f9e59e5110c8265ba3908249f85a8d" data-text-hash="1721f154277fd18fbc1cfa8e7b19e72f" id="47" refid="47">
+<p>As you can see, the <span><code>status</code></span> of a DaemonSet consists of several integer fields. The following table explains what the numbers in those fields mean.</p>
+</div>
+<div class="browsable-container" data-hash="31cb507f99c1a681d29ceddac6269f1e" data-text-hash="48967f1f84c13ae71d7dda585b75053b" id="48" refid="48">
+<h5>Table 16.1 DaemonSet status fields</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Value</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>currentNumberScheduled</code></span></p> </td>
+<td> <p>The number of Nodes that run at least one Pod associated with this DaemonSet.</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>desiredNumberScheduled</code></span></p> </td>
+<td> <p>The number of Nodes that should run the daemon Pod, regardless of whether they actually run it.</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>numberAvailable</code></span></p> </td>
+<td> <p>The number of Nodes that run at least one daemon Pod that&#8217;s available.</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>numberMisscheduled</code></span></p> </td>
+<td> <p>The number of Nodes that are running a daemon Pod but shouldn&#8217;t be running it.</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>numberReady</code></span></p> </td>
+<td> <p>The number of Nodes that have at least one daemon Pod running and ready</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>updatedNumberScheduled</code></span></p> </td>
+<td> <p>The number of Nodes whose daemon Pod is current with respect to the Pod template in the DaemonSet.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="098992e5d9d0f0715fd9f74fa65ddb64" data-text-hash="2445e069d00e5ae8d2509bed512cc35e" id="49" refid="49">
+<p>The <span><code>status</code></span> also contains the <span><code>observedGeneration</code></span> field, which has nothing to do with DaemonSet Pods. You can find this field in virtually all other objects that have a <span><code>spec</code></span> and a <span><code>status</code></span>. You&#8217;ll learn about this field in chapter 20, so ignore it for now.</p>
+</div>
+<div class="readable-text" data-hash="8705f572c080e6d09ff84a0f07088ed4" data-text-hash="b930d17bb7e41d49ef00634e5acfefd9" id="50" refid="50">
+<p>You&#8217;ll notice that all the <span><code>status</code></span> fields explained in the previous table indicate the number of Nodes, not Pods. Some field descriptions also imply that more than one daemon Pod could be running on a Node, even though a DaemonSet is supposed to run exactly one Pod on each Node. The reason for this is that when you update the DaemonSet&#8217;s Pod template, the controller runs a new Pod alongside the old Pod until the new Pod is available. When you observe the status of a DaemonSet, you aren&#8217;t interested in the total number of Pods in the cluster, but in the number of Nodes that the DaemonSet serves.</p>
+</div>
+<div class="readable-text" data-hash="2c24dabe3f70171c7aee2212ed1405e9" data-text-hash="d1251c42573b0c8044ba70d0d4464539" id="51" refid="51">
+<h4>Understanding why there are fewer daemon Pods than Nodes</h4>
+</div>
+<div class="readable-text" data-hash="74d6f6532036fc8fa08922acbbc3249a" data-text-hash="944ae27129c4664e50ba296eba320a68" id="52" refid="52">
+<p>In the previous section, you saw that the DaemonSet status indicates that two Pods are associated with the <span><code>demo</code></span> DaemonSet. This is unexpected because my cluster has three Nodes, not just two.</p>
+</div>
+<div class="readable-text" data-hash="59fbdeddb01cd71c51efa084f6b602c5" data-text-hash="4eefafd6a736abea1185dac8c52bef63" id="53" refid="53">
+<p>I mentioned that you can use a node selector to restrict the Pods of a DaemonSet to some of the Nodes. However, the demo DaemonSet doesn&#8217;t specify a node selector, so you&#8217;d expect three Pods to be created in a cluster with three Nodes. What&#8217;s going on here? Let&#8217;s get to the bottom of this mystery by listing the daemon Pods with the same label selector defined in the DaemonSet.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="54" refid="54">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8cd8a1d9e0d820ae131b24c3a857e52a" data-text-hash="f0e1bcdc146b69207c84d84ae99f27d8" id="55" refid="55">
+<p> Don&#8217;t confuse the label selector with the node selector; the former is used to associate Pods with the DaemonSet, while the latter is used to associate Pods with Nodes.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="982b746c514d725923082b7af630fb80" data-text-hash="f3391f750b0a560b2c1045cae9b786c1" id="56" refid="56">
+<p>The label selector in the DaemonSet is <span><code>app=demo</code></span>. Pass it to the <span><code>kubectl get</code></span> command with the <span><code>-l</code></span> (or <span><code>--selector</code></span>) option. Additionally, use the <span><code>-o wide</code></span> option to display the Node for each Pod. The full command and its output are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9ab4dd5700baeb5cd352cd7865ec610c" data-text-hash="478346e515d3502f4f4d088a87081754" id="57" refid="57">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo -o wide
+NAME         READY   STATUS    RESTARTS   AGE   IP            NODE           ...
+demo-w8tgm   1/1     Running   0          80s   10.244.2.42   kind-worker    ...
+demo-wqd22   1/1     Running   0          80s   10.244.1.64   kind-worker2   ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dae7a2cb06c259d2f8799d273d522b17" data-text-hash="744fee5d291b3792da0c37857eb57cb5" id="58" refid="58">
+<p>Now list the Nodes in the cluster and compare the two lists:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9d211ff85c6579d42af4fb21b3c5297a" data-text-hash="51a3471f1216419e3944aa46e91dbb52" id="59" refid="59">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get nodes
+NAME                 STATUS   ROLES                  AGE   VERSION
+kind-control-plane   Ready    control-plane,master   22h   v1.23.4
+kind-worker          Ready    &lt;none&gt;                 22h   v1.23.4
+kind-worker2         Ready    &lt;none&gt;                 22h   v1.23.4</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e2c5a2b9e6b0df1027f5c7a6638d1a87" data-text-hash="bd20248f937e05c62455e3f63f65e2b8" id="60" refid="60">
+<p>It looks like the DaemonSet controller has only deployed Pods on the worker Nodes, but not on the master Node running the cluster&#8217;s control plane components. Why is that?</p>
+</div>
+<div class="readable-text" data-hash="a48d74a676a5fd10a8fbcf5c10fa9b28" data-text-hash="ddb68cfd912e991349f8f179f3cce8d8" id="61" refid="61">
+<p>In fact, if you&#8217;re using a multi-node cluster, it&#8217;s very likely that none of the Pods you deployed in the previous chapters were scheduled to the Node hosting the control plane, such as the <span><code>kind-control-plane</code></span> Node in a cluster created with the kind tool. As the name implies, this Node is meant to only run the Kubernetes components that control the cluster. In chapter 2, you learned that containers help isolate workloads, but this isolation isn&#8217;t as good as when you use multiple separate virtual or physical machines. A misbehaving workload running on the control plane Node can negatively affect the operation of the entire cluster. For this reason, Kubernetes only schedules workloads to control plane Nodes if you explicitly allow it. This rule also applies to workloads deployed through a DaemonSet.</p>
+</div>
+<div class="readable-text" data-hash="091d0614d55d7337b1d0d660c2354251" data-text-hash="347825eff2b23babe1bcc08818e4942f" id="62" refid="62">
+<h4>Deploying daemon Pods on control plane Nodes</h4>
+</div>
+<div class="readable-text" data-hash="618b43956a8088a70abf502ed737afd7" data-text-hash="f030d8a4cabd4dfb38c805ca01516171" id="63" refid="63">
+<p>The mechanism that prevents regular Pods from being scheduled to control plane Nodes is called <span>Taints and Tolerations</span>. You&#8217;ll learn more about it in chapter 23. Here, you&#8217;ll only learn how to get a DaemonSet to deploy Pods to all Nodes. This may be necessary if the daemon Pods provide a critical service that needs to run on all nodes in the cluster. Kubernetes itself has at least one such service&#8212;the Kube Proxy. In most clusters today, the Kube Proxy is deployed via a DaemonSet. You can check if this is the case in your cluster by listing DaemonSets in the <span><code>kube-system</code></span> namespace as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ce008435a6210276d049e48bc1ab2ef6" data-text-hash="0b0d422078ff76bda9e0214b1d8da70f" id="64" refid="64">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds -n kube-system
+NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR      AGE
+kindnet      3         3         3       3            3           &lt;none&gt;             23h
+kube-proxy   3         3         3       3            3           kubernetes.io...   23h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ebe28611c11334c6e0d631a09dd26281" data-text-hash="e49d0316e8157b56954136e0a70c3fc8" id="65" refid="65">
+<p>If, like me, you use the kind tool to run your cluster, you&#8217;ll see two DaemonSets. Besides the <span><code>kube-proxy</code></span> DaemonSet, you&#8217;ll also find a DaemonSet called <span><code>kindnet</code></span>. This DaemonSet deploys the Pods that provide the network between all the Pods in the cluster via CNI, the Container Network Interface, which you&#8217;ll learn more about in chapter 19.</p>
+</div>
+<div class="readable-text" data-hash="6079d38a344d7c125ce9fc7c398d7986" data-text-hash="9d1ee6c2e40d1f71ca28a74ee7e38b18" id="66" refid="66">
+<p>The numbers in the output of the previous command indicate that the Pods of these DaemonSets are deployed on all cluster nodes. Their manifests reveal how they do this. Display the manifest of the <span><code>kube-proxy</code></span> DaemonSet as follows and look for the lines I&#8217;ve highlighted:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="88e6cf1f72359af61115cb1ed3a7b562" data-text-hash="c4f4f5b4a52d1f5138000da2a0ac7d89" id="67" refid="67">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds kube-proxy -n kube-system -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+...
+spec:
+  template:
+    spec:
+      ...
+      tolerations:    #A
+      - operator: Exists    #A
+      volumes:
+      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB0ZWxscyBLdWJlcm5ldGVzIHRoYXQgdGhlIFBvZHMgY3JlYXRlZCB3aXRoIHRoaXMgdGVtcGxhdGUgdG9sZXJhdGUgYWxsIG5vZGUgdGFpbnRzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="74889540c8e5b47c7c3df873dd246f78" data-text-hash="e028aedff116066f285a01a55822a0c0" id="68" refid="68">
+<p>The highlighted lines aren&#8217;t self-explanatory and it&#8217;s hard to explain them without going into the details of taints and tolerations. In short, some Nodes may specify taints, and a Pod must tolerate a Node&#8217;s taints to be scheduled to that Node. The two lines in the previous example allow the Pod to tolerate all possible taints, so consider them a way to deploy daemon Pods on absolutely all Nodes.</p>
+</div>
+<div class="readable-text" data-hash="75f5a154aaf766b9aef5ec7a17375394" data-text-hash="70f66e20c160b9b9f6a0c3b1285e7c9a" id="69" refid="69">
+<p>As you can see, these lines are part of the Pod template and not direct properties of the DaemonSet. Nevertheless, they&#8217;re considered by the DaemonSet controller, because it wouldn&#8217;t make sense to create a Pod that the Node rejects.</p>
+</div>
+<div class="readable-text" data-hash="9ebf85f0612c469a2df1c2f76b5cc5a0" data-text-hash="ad095d7a5e293f6d39368c5382016142" id="70" refid="70">
+<h4>Inspecting a daemon Pod</h4>
+</div>
+<div class="readable-text" data-hash="43f95ad7b238b0380446e5ed8c4f4651" data-text-hash="4d2bfcf5eb15f69df8908a4a6da23246" id="71" refid="71">
+<p>Now let&#8217;s turn back to the <span><code>demo</code></span> DaemonSet to learn more about the Pods that it creates. Take one of these Pods and display its manifest as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fb58a9c72daf2e8df0fdaecf695d8a2d" data-text-hash="abb32fa687789a124e6d459d56693ee4" id="72" refid="72">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po demo-w8tgm -o yaml    #A
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2022-03-23T19:50:35Z"
+  generateName: demo-
+  labels:    #B
+    app: demo    #B
+    controller-revision-hash: 8669474b5b    #B
+    pod-template-generation: "1"    #B
+  name: demo-w8tgm
+  namespace: bookinfo
+  ownerReferences:    #C
+  - apiVersion: apps/v1    #C
+    blockOwnerDeletion: true    #C
+    controller: true    #C
+    kind: DaemonSet    #C
+    name: demo    #C
+    uid: 7e1da779-248b-4ff1-9bdb-5637dc6b5b86    #C
+  resourceVersion: "67969"
+  uid: 2d044e7f-a237-44ee-aa4d-1fe42c39da4e
+spec:
+  affinity:    #D
+    nodeAffinity:    #D
+      requiredDuringSchedulingIgnoredDuringExecution:    #D
+        nodeSelectorTerms:    #D
+        - matchFields:    #D
+          - key: metadata.name    #D
+            operator: In    #D
+            values:    #D
+            - kind-worker    #D
+  containers:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGFjZSB0aGUgUG9kIG5hbWUgd2l0aCBhIFBvZCBpbiB5b3VyIGNsdXN0ZXIuCiNCIE9uZSBsYWJlbCBpcyBmcm9tIHRoZSBQb2QgdGVtcGxhdGUsIHdoZXJlYXMgdHdvIGFyZSBhZGRlZCBieSB0aGUgRGFlbW9uU2V0IGNvbnRyb2xsZXIuCiNDIERhZW1vbiBQb2RzIGFyZSBvd25lZCBieSB0aGUgRGFlbW9uU2V0IGRpcmVjdGx5LgojRCBFYWNoIFBvZCBoYXMgYWZmaW5pdHkgZm9yIGEgcGFydGljdWxhciBOb2RlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dcf7b4005d2a9e0a9524d0672a0e9ed4" data-text-hash="8ad0b538df1943f8c5c1f2bcc652c6ad" id="73" refid="73">
+<p>Each Pod in a DaemonSet gets the labels you define in the Pod template, plus some additional labels that the DaemonSet controller itself adds. You can ignore the <span><code>pod-template-generation</code></span> label because it&#8217;s obsolete. It&#8217;s been replaced by the label <span><code>controller-revision-hash</code></span>. You may remember seeing this label in StatefulSet Pods in the previous chapter. It serves the same purpose&#8212;it allows the controller to distinguish between Pods created with the old and the new Pod template during updates.</p>
+</div>
+<div class="readable-text" data-hash="ef578c984d325164473bb2f68ed53b06" data-text-hash="7293a352cf3d3864384b338ef519dee7" id="74" refid="74">
+<p>The <span><code>ownerReferences</code></span> field indicates that daemon Pods belong directly to the DaemonSet object, just as stateful Pods belong to the StatefulSet object. There's no object between the DaemonSet and the Pods, as is the case with Deployments and their Pods.</p>
+</div>
+<div class="readable-text" data-hash="cc0e65adb4de07e3c950de8ce6198bef" data-text-hash="a9498d5e1b8ddc199ec4d3f358c95c5d" id="75" refid="75">
+<p>The last item in the manifest of a daemon Pod I want you to draw your attention to is the <span><code>spec.affinity</code></span> section. You'll learn more about Pod affinity in chapter 23, where I explain Pod scheduling in detail, but you should be able to tell that the <span><code>nodeAffinity</code></span> field indicates that this particular Pod needs to be scheduled to the Node <span><code>kind-worker</code></span>. This part of the manifest isn&#8217;t included in the DaemonSet&#8217;s Pod template, but is added by the DaemonSet controller to each Pod it creates. The node affinity of each Pod is configured differently to ensure that the Pod is scheduled to a specific Node.</p>
+</div>
+<div class="readable-text" data-hash="a2e48fa4c0c364e2f01e7a2225281ccd" data-text-hash="a2a2bd885f80df7bb4e34a4c1abc1faf" id="76" refid="76">
+<p>In older versions of Kubernetes, the DaemonSet controller specified the target node in the Pod&#8217;s <span><code>spec.nodeName</code></span> field, which meant that the DaemonSet controller scheduled the Pod directly without involving the Kubernetes Scheduler. Now, the DaemonSet controller sets the <span><code>nodeAffinity</code></span> field and leaves the <span><code>nodeName</code></span> field empty. This leaves scheduling to the Scheduler, which also takes into account the Pod&#8217;s resource requirements and other properties.</p>
+</div>
+<div class="readable-text" data-hash="acf0d49ef0531550d2ca2e82ca0421ec" data-text-hash="9fa3eafb7da6e6dd1dd043e8acc4dcda" id="77" refid="77">
+<h3 id="sigil_toc_id_291">16.1.3&#160; Deploying to a subset of Nodes with a node selector</h3>
+</div>
+<div class="readable-text" data-hash="1128893335658b4bd8f25b49565b817d" data-text-hash="85c15540c7a630befe5eeeb02b2a4166" id="78" refid="78">
+<p>A DaemonSet deploys Pods to all cluster nodes that don&#8217;t have taints that the Pod doesn&#8217;t tolerate, but you may want a particular workload to run only on a subset of those nodes. For example, if only some of the nodes have special hardware, you might want to run the associated software only on those nodes and not on all of them. With a DaemonSet, you can do this by specifying a node selector in the Pod template. Note the difference between a node selector and a pod selector. The DaemonSet controller uses the former to filter eligible Nodes, whereas it uses the latter to know which Pods belong to the DaemonSet. As shown in the following figure, the DaemonSet creates a Pod for a particular Node only if the Node's labels match the node selector.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="35dc39308c823f22951cdf1e121d597f" data-text-hash="a4b7d518266136d2eb6b526e394d8e02" id="79" refid="79">
+<h5>Figure 16.3 A node selector is used to deploy DaemonSet Pods on a subset of cluster nodes.</h5>
+<img alt="" data-processed="true" height="332" id="Picture_6" loading="lazy" src="EPUB/images/16.3.png" width="745">
+</div>
+<div class="readable-text" data-hash="7be2ecbfdec7085c96eaa7384c067728" data-text-hash="98c298d09f2af7fe47ff272244ee3d12" id="80" refid="80">
+<p>The figure shows a DaemonSet that deploys Pods only on Nodes that contain a CUDA-enabled GPU and are labelled with the label <span><code>gpu: cuda</code></span>. The DaemonSet controller deploys the Pods only on Nodes B and C, but ignores node A, because its label doesn&#8217;t match the node selector specified in the DaemonSet.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="81" refid="81">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ae5c0a72d739d0de1d60213801f7f767" data-text-hash="5b2c97d8f65b447512508e26d870ad8c" id="82" refid="82">
+<p> CUDA or Compute Unified Device Architecture is a parallel computing platform and API that allows software to use compatible Graphics Processing Units (GPUs) for general purpose processing.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="9f20b8674f6e65a2be5ded3344bc7e75" data-text-hash="0ce93c0d5dcc35210ed724a50f23fa59" id="83" refid="83">
+<h4>Specifying a node selector in the DaemonSet</h4>
+</div>
+<div class="readable-text" data-hash="40873206b279e7a829c654913f7cf388" data-text-hash="4ed48bf371ed9413726d4d28b86e43e1" id="84" refid="84">
+<p>You specify the node selector in the <span><code>spec.nodeSelector</code></span> field in the Pod template. The following listing shows the same <span><code>demo</code></span> DaemonSet you created earlier, but with a <span><code>nodeSelector</code></span> configured so that the DaemonSet only deploys Pods to Nodes with the label <span><code>gpu: cuda</code></span>. You can find this manifest in the file <span><code>ds.demo.nodeSelector.yaml</code></span>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="44ee7b2b027e6b74fda6abee7ecd3ed5" data-text-hash="e8e4aa3120976fc52d18b5358dd90f58" id="85" refid="85">
+<h5>Listing 16.2 A DaemonSet with a node selector</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: demo
+  labels:
+    app: demo
+spec:
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      nodeSelector:    #A
+        gpu: cuda    #A
+      containers:
+      - name: demo
+        image: busybox
+        command:
+        - sleep
+        - infinity</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUG9kcyBvZiB0aGlzIERhZW1vblNldCBhcmUgZGVwbG95ZWQgb25seSBvbiBOb2RlcyB0aGF0IGhhdmUgdGhpcyBsYWJlbC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0c0dc66ba25176098575eb58714de218" data-text-hash="ec6f020f56e47827b686ac07ffe26886" id="86" refid="86">
+<p>Use the <span><code>kubectl apply</code></span> command to update the <span><code>demo</code></span> DaemonSet with this manifest file. Use the <span><code>kubectl get</code></span> command to see the status of the DaemonSet:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a05d57d509ee12da6ec55255188aa593" data-text-hash="c39ee4885e2f15591624e66c854f2490" id="87" refid="87">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds
+NAME   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+demo   0         0         0       0            0           gpu=cuda        46m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBEYWVtb25TZXQgZGVwbG95cyBQb2RzIG9ubHkgb24gTm9kZXMgdGhhdCBtYXRjaCB0aGUgbm9kZSBzZWxlY3Rvci4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c3a9708891986d8b0b8ffbe6a11ce58c" data-text-hash="c23da2fede08883d70fcebb19e5b8df5" id="88" refid="88">
+<p>As you can see, there are now no Pods deployed by the <span><code>demo</code></span> DaemonSet because no nodes match the node selector specified in the DaemonSet. You can confirm this by listing the Nodes with the node selector as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ef95cc2f3b7e8375f8257a93a1fcef0f" data-text-hash="a705e2dd4db4e244405a85a7eed545c0" id="89" refid="89">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get nodes -l gpu=cuda
+No resources found</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2fe35b12419330235618b1e38e96f08a" data-text-hash="fd23abe059b1c7d6106f8006926fe21a" id="90" refid="90">
+<h4>Moving Nodes in and out of scope of a DaemonSet by changing their labels</h4>
+</div>
+<div class="readable-text" data-hash="9b1caf7e32ad0d589daca5c8b7d44819" data-text-hash="10cb9babc555a437a4b32b7c47781517" id="91" refid="91">
+<p>Now imagine you just installed a CUDA-enabled GPU to the Node <span><code>kind-worker2</code></span>. You add the label to the Node as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a882a57f1b717946d4d27e0f3b7da7a0" data-text-hash="9b35e959354b4877769c725138b6d6cd" id="92" refid="92">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label node kind-worker2 gpu=cuda
+node/kind-worker2 labeled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d5e20f37ac084504f7347c95b2cf8788" data-text-hash="cbd376dcd47c880d276cf11cd8fd3d3e" id="93" refid="93">
+<p>The DaemonSet controller watches not just DaemonSet and Pod, but also Node objects. When it detects a change in the labels of the <span><code>kind-worker2</code></span> Node, it runs its reconciliation loop and creates a Pod for this Node, since it now matches the node selector. List the Pods to confirm:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1d9d8acc2f7d8fe3a06357dfb1dced8d" data-text-hash="2ef3516b01bc07581a59d35e8c09988d" id="94" refid="94">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo -o wide
+NAME         READY   STATUS    RESTARTS   AGE   IP            NODE           ...
+demo-jbhqg   1/1     Running   0          16s   10.244.1.65   kind-worker2   ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="eb78a6cb313e503756484b5246000ed3" data-text-hash="e449ea379b2734cc39f95fad290c0b12" id="95" refid="95">
+<p>When you remove the label from the Node, the controller deletes the Pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9fe617fc389ac2470a4158ae180af504" data-text-hash="7b21a69aadfcd58f822f0666d20c15f7" id="96" refid="96">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label node kind-worker2 gpu-    #A
+node/kind-worker2 unlabeled
+ 
+$ kubectl get pods -l app=demo
+NAME         READY   STATUS        RESTARTS   AGE
+demo-jbhqg   1/1     Terminating   0          71s    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgWW91IHJlbW92ZSB0aGUgZ3B1IGxhYmVsIGZyb20gdGhlIE5vZGUuCiNCIFRoZSBEYWVtb25TZXQgY29udHJvbGxlciBkZWxldGVzIHRoZSBQb2Qu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="83b66b55ea2c0179118f6f7a707d675c" data-text-hash="2bc127d2f493cc317212f87aa215f1a0" id="97" refid="97">
+<h4>Using standard Node labels in DaemonSets</h4>
+</div>
+<div class="readable-text" data-hash="adb5da15cd1d851160a7cc911e2840f9" data-text-hash="2127497ea8651c2426c03069ff19cbfd" id="98" refid="98">
+<p>Kubernetes automatically adds some standard labels to each Node. Use the <span><code>kubectl describe</code></span> command to see them. For example, the labels of my <span><code>kind-worker2</code></span> node are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a4c29600b0a61bea025d2380004f1cf3" data-text-hash="8e2971c5618c6663895bd2769dd2d57a" id="99" refid="99">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe node kind-worker2
+Name:               kind-worker2
+Roles:              &lt;none&gt;
+Labels:             gpu=cuda
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=kind-worker2
+                    kubernetes.io/os=linux</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="af849ec62421c0ccb816ca56a8b64ffa" data-text-hash="bd7d77580d680e2c93a135343d30bb14" id="100" refid="100">
+<p>You can use these labels in your DaemonSets to deploy Pods based on the properties of each Node. For example, if your cluster consists of heterogeneous Nodes that use different operating systems or architectures, you configure a DaemonSet to target a specific OS and/or architecture by using the <span><code>kubernetes.io/arch</code></span> and <span><code>kubernetes.io/os</code></span> labels in its node selector.</p>
+</div>
+<div class="readable-text" data-hash="7d1916682e88b1471d8becdf1f1526e8" data-text-hash="7f22dfde16d74dd294395836948b2248" id="101" refid="101">
+<p>Suppose your cluster consists of AMD- and ARM-based Nodes. You have two versions of your node agent container image. One is compiled for AMD CPUs and the other is compiled for ARM CPUs. You can create a DaemonSet to deploy the AMD-based image to the AMD nodes, and a separate DaemonSet to deploy the ARM-based image to the other nodes. The first DaemonSet would use the following node selector:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0ce6d825b77b21f594d53503e65219de" data-text-hash="00a64337017ae13d77a4376534d333e2" id="102" refid="102">
+<div class="code-area-container">
+<pre class="code-area">nodeSelector:
+        kubernetes.io/arch: amd64</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ab86a36f64ad04d2afbeed19da0127d4" data-text-hash="9eeb405e44b88561f48502fd4801472d" id="103" refid="103">
+<p>The other DaemonSet would use the following node selector:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="57f0459aecae2b17df533996671cc794" data-text-hash="59e607d138c286508862983e055baea4" id="104" refid="104">
+<div class="code-area-container">
+<pre class="code-area">nodeSelector:
+        kubernetes.io/arch: arm</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1ae4b7d4a5e436e5d5b37d8c98d9a2a1" data-text-hash="a7eb696942151274aaae0816c9bde21a" id="105" refid="105">
+<p>This multiple DaemonSets approach is ideal if the configuration of the two Pod types differs not only in the container image, but also in the amount of compute resources you want to provide to each container. You can read more about this in chapter 22.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="106" refid="106">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3e40d74667557125ad0f7a278b5e324e" data-text-hash="cfe3cb689e8e9428dee77eebc3fc494d" id="107" refid="107">
+<p> You don&#8217;t need multiple DaemonSets if you just want each node to run the correct variant of your container image for the node&#8217;s architecture and there are no other differences between the Pods. In this case, using a single DaemonSet with multi-arch container images is the better option.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ce54962952b8fd439e543c2097187fa4" data-text-hash="ffe9c2e163015a285b63b286c4ac7d69" id="108" refid="108">
+<h4>Updating the node selector</h4>
+</div>
+<div class="readable-text" data-hash="800bc4718b989ea1092f33a9f2070dab" data-text-hash="95c852180849675e618fb07f37dbfc0d" id="109" refid="109">
+<p>Unlike the Pod label selector, the node selector is mutable. You can change it whenever you want to change the set of Nodes that the DaemonSet should target. One way to change the selector is to use the <span><code>kubectl patch</code></span> command. In chapter 14, you learned how to patch an object by specifying the part of the manifest that you want to update. However, you can also update an object by specifying a list of patch operations using the JSON patch format. You can learn more about this format at <a href="jsonpatch.com.html">jsonpatch.com</a>. Here I show you an example of how to use JSON patch to remove the <span><code>nodeSelector</code></span> field from the object manifest of the <span><code>demo</code></span> DaemonSet:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f4baccf064b51703f567539b9144f20f" data-text-hash="dea9ad5271d6780ce1135ef2e17a20ab" id="110" refid="110">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch ds demo --type='json' -p='[{ "op": "remove", "path": "/spec/template/spec/nodeSelector"}]'daemonset.apps/demo patched</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="059e41e4c622fe685975dc002d1d463e" data-text-hash="90b964814681e0d9d064966d67c713a2" id="111" refid="111">
+<p>Instead of providing an updated portion of the object manifest, the JSON patch in this command specifies that the <span><code>spec.template.spec.nodeSelector</code></span> field should be removed.</p>
+</div>
+<div class="readable-text" data-hash="b5e09634fdc492b715b2f1262291d065" data-text-hash="dceeefd3d471dd2221daaa9a75addea7" id="112" refid="112">
+<h3 id="sigil_toc_id_292">16.1.4&#160; Updating a DaemonSet</h3>
+</div>
+<div class="readable-text" data-hash="6d200920a139ee6f12aa6fca8c6b6933" data-text-hash="5b9df0575ba81cfbfc2cb2309d2b2729" id="113" refid="113">
+<p>As with Deployments and StatefulSets, when you update the Pod template in a DaemonSet, the controller automatically deletes the Pods that belong to the DaemonSet and replaces them with Pods created with the new template.</p>
+</div>
+<div class="readable-text" data-hash="e24af5a24d4bb03de100e20b7e49eb80" data-text-hash="8a47df4a1fa508cda19c888fdc8744d0" id="114" refid="114">
+<p>You can configure the update strategy to use in the <span><code>spec.updateStrategy</code></span> field in the DaemonSet object&#8217;s manifest, but the <span><code>spec.minReadySeconds</code></span> field also plays a role, just as it does for Deployments and StatefulSets. At the time of writing, DaemonSets support the strategies listed in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="ee2c655732c697f9a75c3e96d9e21d82" data-text-hash="17d9a47b1d5f8971ca839d6560d4ddf7" id="115" refid="115">
+<h5>Table 16.2 The supported DaemonSet update strategies</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Value</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>RollingUpdate</code></span></p> </td>
+<td> <p>In this update strategy, Pods are replaced one by one. When a Pod is deleted and recreated, the controller waits until the new Pod is ready. Then it waits an additional amount of time, specified in the <span><code>spec.minReadySeconds</code></span> field of the DaemonSet, before updating the Pods on the other Nodes. This is the default strategy.</p> </td>
+</tr>
+<tr>
+<td> <p><span><code>OnDelete</code></span></p> </td>
+<td> <p>The DaemonSet controller performs the update in a semi-automatic way. It waits for you to manually delete each Pod, and then replaces it with a new Pod from the updated template. With this strategy, you can replace Pods at your own pace.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="82378488df29a21d0e3a6d72904d7605" data-text-hash="2048a6bd26f85c6c041b9e6f891ea60c" id="116" refid="116">
+<p>The <span><code>RollingUpdate</code></span> strategy is similar to that in Deployments, and the <span><code>OnDelete</code></span> strategy is just like that in StatefulSets. As in Deployments, you can configure the RollingUpdate strategy with the <span><code>maxSurge</code></span> and <span><code>maxUnavailable</code></span> parameters, but the default values for these parameters in DaemonSets are different. The next section explains why.</p>
+</div>
+<div class="readable-text" data-hash="84b67fb28482a6afe03ee97767c548c4" data-text-hash="6f7609a6d0037e62617fe93fcd14941b" id="117" refid="117">
+<h4>The RollingUpdate strategy</h4>
+</div>
+<div class="readable-text" data-hash="0b44c59e8e48cd36d5c290a850ebf819" data-text-hash="95bd60ad827a3afa24413a1ac7ba80da" id="118" refid="118">
+<p>To update the Pods of the <span><code>demo</code></span> DaemonSet, use the <span><code>kubectl apply</code></span> command to apply the manifest file <span><code>ds.demo.v2.rollingUpdate.yaml</code></span>. Its contents are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1b0e2881c13fae207fd0e1b74ecf16ba" data-text-hash="116a52b1c80cc892e5fe8401ac45d56a" id="119" refid="119">
+<h5>Listing 16.3 Specifying the RollingUpdate strategy in a DaemonSet</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: demo
+spec:
+  minReadySeconds: 30    #A
+  updateStrategy:    #B
+    type: RollingUpdate    #B
+    rollingUpdate:    #B
+      maxSurge: 0    #B
+      maxUnavailable: 1    #B
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+        ver: v2    #C
+    spec:
+      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRWFjaCBQb2QgbXVzdCBiZSByZWFkeSBmb3IgMzAgc2Vjb25kcyBiZWZvcmUgaXQncyBjb25zaWRlcmVkIGF2YWlsYWJsZS4KI0IgVGhlIHJvbGxpbmcgdXBkYXRlIHN0cmF0ZWd5IGlzIHVzZWQsIHdpdGggdGhlIHNwZWNpZmllZCBwYXJhbWV0ZXJzLgojQyBUaGUgdXBkYXRlZCBQb2QgdGVtcGxhdGUgYWRkcyBhIHZlcnNpb24gbGFiZWwgdG8gdGhlIFBvZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="88142bdfd59bb9115ad25a8485f3770c" data-text-hash="226693b48373035b6348089cb3c14344" id="120" refid="120">
+<p>In the listing, the <span><code>type</code></span> of <span><code>updateStrategy</code></span> is <span><code>RollingUpdate</code></span>, with <span><code>maxSurge</code></span> set to <span><code>0</code></span> and <span><code>maxUnavailable</code></span> set to <span><code>1</code></span>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="121" refid="121">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="6bae7b53bda8d839f623a4129ece3c60" data-text-hash="4eda676410464d7f7cc20ccfd2addde7" id="122" refid="122">
+<p> These are the default values, so you can also remove the <span><code>updateStrategy</code></span> field completely and the update is performed the same way.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6d8e7ec59809bc9198a1d4ff55e10bd5" data-text-hash="09440dd2f316ee89b23f414fb8b661d8" id="123" refid="123">
+<p>When you apply this manifest, the Pods are replaced as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cba03ef15729b27b640e021b0e1c7f7a" data-text-hash="5e138ee5602d490b1b920dacae6c74fd" id="124" refid="124">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS        RESTARTS   AGE   VER
+demo-5nrz4   1/1     Terminating   0          10m         #A
+demo-vx27t   1/1     Running       0          11m         #A
+ 
+$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS        RESTARTS   AGE   VER
+demo-k2d6k   1/1     Running       0          36s   v2    #B
+demo-vx27t   1/1     Terminating   0          11m         #B
+ 
+$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS    RESTARTS   AGE   VER
+demo-k2d6k   1/1     Running   0          126s  v2        #C
+demo-s7hsc   1/1     Running   0          62s   v2        #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRmlyc3QsIG9uZSBQb2Qgb24gb25lIE5vZGUgaXMgZGVsZXRlZC4KI0IgQWZ0ZXIgdGhlIHJlcGxhY2VtZW50IFBvZCBvbiB0aGUgZmlyc3QgTm9kZSBpcyByZWFkeSBmb3IgMzBzLCB0aGUgUG9kIG9uIHRoZSBuZXh0IE5vZGUgaXMgZGVsZXRlZC4KI0MgV2hlbiB0aGUgcmVwbGFjZW1lbnQgUG9kIG9uIHRoZSBzZWNvbmQgTm9kZSBpcyByZWFkeSBmb3IgMzBzLCB0aGUgdXBkYXRlIGlzIGNvbXBsZXRlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e3e4614c8dfbf5575389152cacb66018" data-text-hash="14d285ed37a2e68cc1b48122ab13a247" id="125" refid="125">
+<p>Since <span><code>maxSurge</code></span> is set to zero, the DaemonSet controller first stops the existing daemon Pod before creating a new one. Coincidentally, zero is also the default value for <span><code>maxSurge</code></span>, since this is the most reasonable behavior for daemon Pods, considering that the workloads in these Pods are usually node agents and daemons, of which only a single instance should run at a time.</p>
+</div>
+<div class="readable-text" data-hash="44a576c2947ac1ef7194a3238c966f65" data-text-hash="e7cdee7f62732e1fe1f2aedae07d55ed" id="126" refid="126">
+<p>If you set <span><code>maxSurge</code></span> above zero, two instances of the Pod run on the Node during an update for the time specified in the <span><code>minReadySeconds</code></span> field. Most daemons don't support this mode because they use locks to prevent multiple instances from running simultaneously. If you tried to update such a daemon in this way, the new Pod would never be ready because it couldn&#8217;t obtain the lock, and the update would fail.</p>
+</div>
+<div class="readable-text" data-hash="c56c65f168803def5aff549882700729" data-text-hash="9ea9e532bb6319d8812dfea3ce343610" id="127" refid="127">
+<p>The <span><code>maxUnavailable</code></span> parameter is set to one, which means that the DaemonSet controller updates only one Node at a time. It doesn&#8217;t start updating the Pod on the next Node until the Pod on the previous node is ready and available. This way, only one Node is affected if the new version of the workload running in the new Pod can&#8217;t be started.</p>
+</div>
+<div class="readable-text" data-hash="79e15d07f8fd5280dd8d48d2af7f2b00" data-text-hash="55c33bdc17592626848a0d0e7e1c9f4e" id="128" refid="128">
+<p>If you want the Pods to update at a higher rate, increase the <span><code>maxUnavailable</code></span> parameter. If you set it to a value higher than the number of Nodes in your cluster, the daemon Pods will be updated on all Nodes simultaneously, like the <span><code>Recreate</code></span> strategy in Deployments.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="129" refid="129">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="594b0aefabca92e410541f6eed566ec3" data-text-hash="984576e513c330daa35ca91151aa6fb8" id="130" refid="130">
+<p> To implement the <span><code>Recreate</code></span> update strategy in a DaemonSet, set the <span><code>maxSurge</code></span> parameter to <span><code>0</code></span> and <span><code>maxUnavailable</code></span> to <span><code>10000</code></span> or more, so that this value is always higher than the number of Nodes in your cluster.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="d07a89c56ff0586103dbac7cd5634838" data-text-hash="8ce638b4c7dfd7f0b419f2c8c6bd97ca" id="131" refid="131">
+<p>An important caveat to rolling DaemonSet updates is that if the readiness probe of an existing daemon Pod fails, the DaemonSet controller immediately deletes the Pod and replaces it with a Pod with the updated template. In this case, the <span><code>maxSurge</code></span> and <span><code>maxUnavailable</code></span> parameters are ignored.</p>
+</div>
+<div class="readable-text" data-hash="272b7477605069e9eba691679f79be07" data-text-hash="0111ee0fa9db736362de5a2d5e1c4237" id="132" refid="132">
+<p>Likewise, if you delete an existing Pod during a rolling update, it's replaced with a new Pod. The same thing happens if you configure the DaemonSet with the <span><code>OnDelete</code></span> update strategy. Let's take a quick look at this strategy as well.</p>
+</div>
+<div class="readable-text" data-hash="0c6be542c3e0e298681ce668024a8765" data-text-hash="07a238830ab74f68d150d4d988ff8fcd" id="133" refid="133">
+<h4>The OnDelete update strategy</h4>
+</div>
+<div class="readable-text" data-hash="160f321b23dc422e1466ea30606c230c" data-text-hash="292d293e584d42c23c70308e5424d35d" id="134" refid="134">
+<p>An alternative to the <span><code>RollingUpdate</code></span> strategy is <span><code>OnDelete</code></span>. As you know from the previous chapter on StatefulSets, this is a semi-automatic strategy that allows you to work with the DaemonSet controller to replace the Pods at your discretion, as shown in the next exercise. The following listing shows the contents of the manifest file <span><code>ds.demo.v3.onDelete.yaml</code></span>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9c59422c1574c21dbb22affcc4c116b0" data-text-hash="54778372234754885db0daa2d19e06d7" id="135" refid="135">
+<h5>Listing 16.4 Setting the DaemonSet update strategy</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: demo
+spec:
+  updateStrategy:    #A
+    type: OnDelete    #A
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+        ver: v3    #B
+    spec:
+      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIE9uRGVsZXRlIHVwZGF0ZSBzdHJhdGVneSBpcyB1c2VkLiBUaGlzIHN0cmF0ZWd5IGhhcyBubyBwYXJhbWV0ZXJzIHRoYXQgeW91IGNhbiBzZXQuCiNCIFRoZSBQb2QgdGVtcGxhdGUgaXMgdXBkYXRlZCB0byBzZXQgdGhlIHZlcnNpb24gbGFiZWwgdG8gdjMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="23551ab86455c5388ef9f0da43329ac9" data-text-hash="becc02632ecc1649f8037bfd94930c15" id="136" refid="136">
+<p>The <span><code>OnDelete</code></span> strategy has no parameters you can set to affect how it works, since the controller only updates the Pods you manually delete. Apply this manifest file with <span><code>kubectl apply</code></span> and then check the DaemonSet as follows to see that no action is taken by the DaemonSet controller:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="82a92e113397131af3ce2baa93997c46" data-text-hash="926474859330e0b7c66a275c7b5a97cd" id="137" refid="137">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds
+NAME   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+demo   2         2         2       0            2           &lt;none&gt;          80m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d6c0449948009d672280db2f7fbcf467" data-text-hash="5e8e39da19fb92b27b663941be0ba6d7" id="138" refid="138">
+<p>The output of the <span><code>kubectl get ds</code></span> command shows that neither Pod in this DaemonSet is up to date. This is to be expected since you updated the Pod template in the DaemonSet, but the Pods haven't yet been updated, as you can see when you list them:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="51007e7220769037b1fbafb5b1db2a4e" data-text-hash="c16f62dc10dcc091d751265a460a951c" id="139" refid="139">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS    RESTARTS   AGE   VER
+demo-k2d6k   1/1     Running   0          10m   v2        #A
+demo-s7hsc   1/1     Running   0          10m   v2        #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQm90aCBQb2RzIGFyZSBzdGlsbCBhdCB2MiwgYnV0IHRoZSB2ZXJzaW9uIGxhYmVsIHZhbHVlIGluIHRoZSBQb2QgdGVtcGxhdGUgaXMgdjMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b8e06eee15134c3408282dd779062ace" data-text-hash="956e99ee1a6b603f5034ccae9fa1e98d" id="140" refid="140">
+<p>To update the Pods, you must delete them manually. You can delete as many Pod as you want and in any order, but let's delete only one for now. Select a Pod and delete it as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2fe539aef3fd74c75226595f857a91e2" data-text-hash="07701e7cbb40cf551e0cb901d69517cd" id="141" refid="141">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po demo-k2d6k --wait=false    #A
+pod "demo-k2d6k" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGFjZSB0aGUgUG9kIG5hbWUgd2l0aCBvbmUgb2YgeW91ciBQb2RzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5b01ee71abaeb787d9828c6f223eaae2" data-text-hash="a6d5454a70e3812b583f793e11a5badb" id="142" refid="142">
+<p>You may recall that, by default, the <span><code>kubectl delete</code></span> command doesn't exit until the deletion of the object is complete. If you use the <span><code>--wait=false</code></span> option, the command marks the object for deletion and exits without waiting for the Pod to actually be deleted. This way, you can keep track of what happens behind the scenes by listing Pods several times as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1492c81544a07b73ec1046d97fb0b6cf" data-text-hash="17f42de768bfe6ba6a6362352a006ed2" id="143" refid="143">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS        RESTARTS   AGE   VER
+demo-k2d6k   1/1     Terminating   0          10m   v2        #A
+demo-s7hsc   1/1     Running       0          10m   v2        #A
+ 
+$ kubectl get pods -l app=demo -L ver
+NAME         READY   STATUS    RESTARTS   AGE   VER
+demo-4gf5h   1/1     Running   0          15s   v3    #B
+demo-s7hsc   1/1     Running   0          11m   v2    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFBvZCB0aGF0IHlvdSBkZWxldGVkIGlzIGJlaW5nIHRlcm1pbmF0ZWQuCiNCIFRoZSBQb2QgdGhhdCB5b3UgZGVsZXRlZCB3YXMgcmVwbGFjZWQgYnkgYSBQb2Qgd2l0aCB2ZXJzaW9uIDMsIGJ1dCB0aGUgb3RoZXIgUG9kIGlzIHN0aWxsIGF0IHYyLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9304b1f37091fbaf895dacd14dc28fb5" data-text-hash="fd525fc44a52504728e428938342174c" id="144" refid="144">
+<p>If you list the DaemonSets with the <span><code>kubectl get</code></span> command as follows, you&#8217;ll see that only one Pod has been updated:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fe422fee72d6ac7f3b819081fb97df1b" data-text-hash="6963c8906ce9cb025e606ff5abdd314b" id="145" refid="145">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds
+NAME   DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+demo   2         2         2       1            2           &lt;none&gt;          91m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgT25lIFBvZCBoYXMgYmVlbiB1cGRhdGVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b4e845cbf69c580f451405430a1d87e1" data-text-hash="00bdac57d58a8a2ce2988570c02f75b8" id="146" refid="146">
+<p>Delete the remaining Pod(s) to complete the update.</p>
+</div>
+<div class="readable-text" data-hash="b2c242beefcc2cc1e0becd47825a605e" data-text-hash="d8af40064338abb967f0fd86e78212a4" id="147" refid="147">
+<h4>Considering the use of the OnDelete strategy for critical daemon Pods</h4>
+</div>
+<div class="readable-text" data-hash="27fcc8895f472d1097e80aac8371cf23" data-text-hash="2c5d97aeb3e191e9aac5a4d32118e41b" id="148" refid="148">
+<p>With this strategy, you can update cluster-critical Pods with much more control, albeit with more effort. This way, you can be sure that the update won&#8217;t break your entire cluster, as might happen with a fully automated update if the readiness probe in the daemon Pod can&#8217;t detect all possible problems.</p>
+</div>
+<div class="readable-text" data-hash="c1bfbd6c56f50a782703c12d4eeaee46" data-text-hash="c1362835eba510c20c2ea9d40d2b5d91" id="149" refid="149">
+<p>For example, the readiness probe defined in the DaemonSet probably doesn&#8217;t check if the other Pods on the same Node are still working properly. If the updated daemon Pod is ready for <span><code>minReadySeconds</code></span>, the controller will proceed with the update on the next Node, even if the update on the first Node caused all other Pods on the Node to fail. The cascade of failures could bring down your entire cluster. However, if you perform the update using the <span><code>OnDelete</code></span> strategy, you can verify the operation of the other Pods after updating each daemon Pod and before deleting the next one.</p>
+</div>
+<div class="readable-text" data-hash="28267ea47e4fd3450bbed603fc84f90b" data-text-hash="32a817a82b2d601fe312a11437c84fd0" id="150" refid="150">
+<h3 id="sigil_toc_id_293">16.1.5&#160; Deleting the DaemonSet</h3>
+</div>
+<div class="readable-text" data-hash="2eed98aad8f933c349e345444518b91b" data-text-hash="821e07566322a813b53cd75da73f5231" id="151" refid="151">
+<p>To finish this introduction to DaemonSets, delete the <span><code>demo</code></span> DaemonSet as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="913561c864310f166ef22e9acf6ff049" data-text-hash="1b2a4661d297af8ef255e499290457c4" id="152" refid="152">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete ds demo
+daemonset.apps "demo" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0775590191aa51f74bde072c5257331d" data-text-hash="bd13d3e0094c1df2d2c2cb6595e3a381" id="153" refid="153">
+<p>As you&#8217;d expect, doing so will also delete all <span><code>demo</code></span> Pods. To confirm, list the Pods as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="045181bcc76e1e04d1d7fa4c1bece366" data-text-hash="d524ba985615d6a4282ee61f96655b9e" id="154" refid="154">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=demo
+NAME         READY   STATUS        RESTARTS   AGE
+demo-4gf5h   1/1     Terminating   0          2m22s
+demo-s7hsc   1/1     Terminating   0          6m53s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="69c11c0316cfb19468a441999e3affea" data-text-hash="eafc09a580c1e778c5e622465c9f2395" id="155" refid="155">
+<p>This concludes the explanation of DaemonSets themselves, but Pods deployed via DaemonSets differ from Pods deployed via Deployments and StatefulSets in that they often access the host node&#8217;s file system, its network interface(s), or other hardware. You&#8217;ll learn about this in the next section.</p>
+</div>
+<div class="readable-text" data-hash="c36512fff39c5480b7f7fa25c29c20f7" data-text-hash="34ded3c13f6521175e896f5e025c6dfb" id="156" refid="156">
+<h2 id="sigil_toc_id_294">16.2&#160; Special features in Pods running node agents and daemons</h2>
+</div>
+<div class="readable-text" data-hash="1fa932d999fc75f57457eae86590acde" data-text-hash="61e58aac88664a8ffcdf745a4fe19884" id="157" refid="157">
+<p>Unlike regular workloads, which are usually isolated from the node they run on, node agents and daemons typically require greater access to the node. As you know, the containers running in a Pod can&#8217;t access the devices and files of the node, or all the system calls to the node&#8217;s kernel because they live in their own Linux namespaces (see chapter 2). If you want a daemon, agent, or other workload running in a Pod to be exempt from this restriction, you must specify this in the Pod manifest.</p>
+</div>
+<div class="readable-text" data-hash="5cdf30b6e735f515d5fe2f3d81123eda" data-text-hash="cfedc3051f65ca26bf463f7f8cd10b6b" id="158" refid="158">
+<p>To explain how you can do this, look at the DaemonSets in the <span><code>kube-system</code></span> namespace. If you run Kubernetes via kind, your cluster should contain the two DaemonSets as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ce008435a6210276d049e48bc1ab2ef6" data-text-hash="0b0d422078ff76bda9e0214b1d8da70f" id="159" refid="159">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get ds -n kube-system
+NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR      AGE
+kindnet      3         3         3       3            3           &lt;none&gt;             23h
+kube-proxy   3         3         3       3            3           kubernetes.io...   23h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d33c8b36af37c5bc722578657473a873" data-text-hash="df9a31db56a6c3436d97ee07cd75903c" id="160" refid="160">
+<p>If you don&#8217;t use kind, the list of DaemonSets in <span><code>kube-system</code></span> may look different, but you should find the <span><code>kube-proxy</code></span> DaemonSet in most clusters, so I&#8217;ll focus on this one.</p>
+</div>
+<div class="readable-text" data-hash="50779bf4d809243ff18309132d2bda78" data-text-hash="9929c0c262a62865880a4ee39f7e4638" id="161" refid="161">
+<h3 id="sigil_toc_id_295">16.2.1&#160; Giving containers access to the OS kernel</h3>
+</div>
+<div class="readable-text" data-hash="5c60509a683eb4bdaac421ce12d8308a" data-text-hash="ec56ddb15eb9c1a053f192eb3208d133" id="162" refid="162">
+<p>The operating system kernel provides system calls that programs can use to interact with the operating system and hardware. Some of these calls are harmless, while others could negatively affect the operation of the node or the other containers running on it. For this reason, containers are not allowed to execute these calls unless explicitly allowed to do so. This can be achieved in two ways. You can give the container full access to the kernel or to groups of system calls by specifying the capabilities to be given to the container.</p>
+</div>
+<div class="readable-text" data-hash="9096b4b8fce66ede876bf48bc10fd904" data-text-hash="938db9bfb9747c3b4db0c9278a9ccabb" id="163" refid="163">
+<h4>Running a privileged container</h4>
+</div>
+<div class="readable-text" data-hash="f6850b67f0055ebf2af665d771606ad1" data-text-hash="8897ef6cd0f14278ebe134d0626b68a3" id="164" refid="164">
+<p>If you want to give a process running in a container full access to the operating system kernel, you can mark the container as privileged. You can see how to do this by inspecting the Pod template in the <span><code>kube-proxy</code></span> DaemonSet as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="291e6e1733a8d3f748bd4e36b8ee58dd" data-text-hash="e0bc02ac30466d261f06f16b9a2e878f" id="165" refid="165">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get ds kube-proxy -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+spec:
+  template:
+    spec:
+      containers:
+      - name: kube-proxy
+        securityContext:    #A
+          privileged: true    #A
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGt1YmUtcHJveHkgY29udGFpbmVyIGlzIG1hcmtlZCBhcyBwcml2aWxlZ2VkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1eda55ed6786a955b80d10aad56ab8ca" data-text-hash="04dd31f214665e03584ee5bfadd12e5f" id="166" refid="166">
+<p>The <span><code>kube-proxy</code></span> DaemonSet runs Pods with a single container, also called <span><code>kube-proxy</code></span>. In the <span><code>securityContext</code></span> section of this container&#8217;s definition, the <span><code>privileged</code></span> flag is set to <span><code>true</code></span>. This gives the process running in the <span><code>kube-proxy</code></span> container root access to the host&#8217;s kernel and allows it to modify the node&#8217;s network packet filtering rules. As you&#8217;ll learn in chapter 19, Kubernetes Services are implemented this way.</p>
+</div>
+<div class="readable-text" data-hash="83667fed99dfa561d99f5a5d6d85dbae" data-text-hash="5e4ad7a5bc710cd76c30201ad7536255" id="167" refid="167">
+<h4>Giving a container access to specific capabilities</h4>
+</div>
+<div class="readable-text" data-hash="57aa90a9a1fa60efe81f980cc8237e23" data-text-hash="62131dfb2e639a219e5c9b740f18ae37" id="168" refid="168">
+<p>A privileged container bypasses all kernel permission checks and thus has full access to the kernel, whereas a node agent or daemon typically only needs access to a subset of the system calls provided by the kernel. From a security perspective, running such workloads as privileged is far from ideal. Instead, you should grant the workload access to only the minimum set of system calls it needs to do its job. You achieve this by specifying the capabilities that it needs in the container definition.</p>
+</div>
+<div class="readable-text" data-hash="0faab9d2b4bd7ae061cacdb80f8e11e2" data-text-hash="39e605bf9be8590b574d04e1870433c9" id="169" refid="169">
+<p>The <span><code>kube-proxy</code></span> DaemonSet doesn&#8217;t use capabilities, but other DaemonSets in the <span><code>kube-system</code></span> namespace may do so. An example is the <span><code>kindnet</code></span> DaemonSet, which sets up the pod network in a kind-provisioned cluster. The capabilities listed in the Pod template are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ae442d2564c3b7800c7e05569657900b" data-text-hash="c42c682c09cb8c41701c7f4bedb9b919" id="170" refid="170">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get ds kindnet -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+spec:
+  template:
+    spec:
+      containers:
+      - name: kindnet-cni
+        securityContext:    #A
+          capabilities:    #A
+            add:    #A
+            - NET_RAW    #A
+            - NET_ADMIN    #A
+          privileged: false    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIE5FVF9SQVcgYW5kIE5FVF9BRE1JTiBjYXBhYmlsaXRpZXMgYXJlIGFkZGVkIHRvIHRoZSBjb250YWluZXIuCiNCIFRoZSBjb250YWluZXIgaXMgbm90IHByaXZpbGVnZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="357597714cfdca3d931421dc644c3dc0" data-text-hash="330675fd97fc030bfee6221a952ccaf8" id="171" refid="171">
+<p>Instead of being fully privileged, the capabilities <span><code>NET_RAW</code></span> and <span><code>NET_ADMIN</code></span> are added to the container. According to the capabilities man pages, which you can display with the <span><code>man capabilities</code></span> command on a Linux system, the <span><code>NET_RAW</code></span> capability allows the container to use special socket types and bind to any address, while the <span><code>NET_ADMIN</code></span> capability allows various privileged network-related operations such as interface configuration, firewall management, changing routing tables, and so on. Things you&#8217;d expect from a container that sets up the networking for all other Pods on a Node.</p>
+</div>
+<div class="readable-text" data-hash="dce2410a4396d85afe0f2f8e3a3fb3c3" data-text-hash="b42f6954c28b94105f185fc04a06d1f4" id="172" refid="172">
+<h3 id="sigil_toc_id_296">16.2.2&#160; Accessing the node&#8217;s filesystem</h3>
+</div>
+<div class="readable-text" data-hash="21126c4a7c2699759365f2064507cca7" data-text-hash="1aa06fdcd8ce986f48e4d708f8296429" id="173" refid="173">
+<p>A node agent or daemon may need to access the host node&#8217;s file system. For example, a node agent deployed through a DaemonSet could be used to install software packages on all cluster nodes.</p>
+</div>
+<div class="readable-text" data-hash="4add2c79034d1d2e7c5cda2d04d6193d" data-text-hash="291f7a20756d3ccf27c9e3d316b9be9f" id="174" refid="174">
+<p>You already learned in chapter 7 how to give a Pod&#8217;s container access to the host node&#8217;s file system via the <span><code>hostPath</code></span> volume, so I won&#8217;t go into it again, but it&#8217;s interesting to see how this volume type is used in the context of a daemon pod.</p>
+</div>
+<div class="readable-text" data-hash="2d125792718b278934fab2d1a0dfcebe" data-text-hash="4841d2a32dd5a8481a03f295f6a1fb92" id="175" refid="175">
+<p>Let&#8217;s take another look at the <span><code>kube-proxy</code></span> DaemonSet. In the Pod template, you&#8217;ll find two <span><code>hostPath</code></span> volumes, as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3b1a384257000f18d9e29194201dc57a" data-text-hash="2aff82593dde51af74b569067b16ba11" id="176" refid="176">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get ds kube-proxy -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+spec:
+  template:
+    spec:
+      volumes:
+      - hostPath:    #A
+          path: /run/xtables.lock    #A
+          type: FileOrCreate    #A
+        name: xtables-lock    #A
+      - hostPath:    #B
+          path: /lib/modules    #B
+          type: ""    #B
+        name: lib-modules    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB2b2x1bWUgYWxsb3dzIHRoZSBwcm9jZXNzIGluIHRoZSBjb250YWluZXIgdG8gYWNjZXNzIHRoZSBub2Rl4oCZcyB4dGFibGVzLmxvY2sgZmlsZS4KI0IgVGhpcyB2b2x1bWUgYWxsb3dzIGl0IHRvIGFjY2VzcyB0aGUgZGlyZWN0b3J5IGNvbnRhaW5pbmcgdGhlIGtlcm5lbCBtb2R1bGVzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1c5147f6fcd81a0390705f848c375de9" data-text-hash="04537730283c58d5ba5f79df48eb02c7" id="177" refid="177">
+<p>The first volume allows the process in the <span><code>kube-proxy</code></span> daemon Pod to access the node&#8217;s <span><code>xtables.lock</code></span> file, which is used by the <span><code>iptables</code></span> or <span><code>nftables</code></span> tools that the process uses to manipulate the node&#8217;s IP packet filtering. The other <span><code>hostPath</code></span> volume allows the process to access the kernel modules that are installed on the node.</p>
+</div>
+<div class="readable-text" data-hash="f7d8f758dc3e30178ce7a6404bdaf62d" data-text-hash="32066c3cbe81c4e510bee085488fb0e5" id="178" refid="178">
+<h3 id="sigil_toc_id_297">16.2.3&#160; Using the node&#8217;s network and other namespaces</h3>
+</div>
+<div class="readable-text" data-hash="312934ee10d39dd8e865e86f83fbbaf8" data-text-hash="2059b811f8919be0835671db5daad101" id="179" refid="179">
+<p>As you know, each Pod gets its own network interface. However, you may want some of your Pods, especially those deployed through a DaemonSet, to use the node&#8217;s network interface(s) instead of having their own. The Pods deployed through the <span><code>kube-proxy</code></span> DaemonSet use this approach. You can see this by examining the Pod template as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="02fd75ac8e9f432f3e83d91d82b13840" data-text-hash="ed7827eac1c332c00887f0eeacbd50b1" id="180" refid="180">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get ds kube-proxy -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+spec:
+  template:
+    spec:
+      dnsPolicy: ClusterFirst
+      hostNetwork: true    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGt1YmUtcHJveHkgUG9kcyB1c2UgdGhlIG5vZGXigJlzIG5ldHdvcmsgaW50ZXJmYWNlKHMpIGluc3RlYWQgb2YgdGhlaXIgb3duLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d3197e2c780568640f6775052a95bd31" data-text-hash="e00a628607188a8d1740942df35975e5" id="181" refid="181">
+<p>In the Pod&#8217;s <span><code>spec</code></span>, the <span><code>hostNetwork</code></span> field is set to <span><code>true</code></span>. This causes the Pod to use the host Node&#8217;s network environment (devices, stacks, and ports) instead of having its own, just like all other processes that run directly on the node and not in a container. This means that the Pod won&#8217;t even get its own IP address but will use the Node&#8217;s address(es). If you list the Pods in the <span><code>kube-system</code></span> Namespace with the <span><code>-o wide</code></span> option as follows, you&#8217;ll see that the IPs of the <span><code>kube-proxy</code></span> Pods match the IPs of their respective host Nodes.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="479f726a73e6c758de3786dde790e838" data-text-hash="8c089d981ff53e4fd2baae976302e49c" id="182" refid="182">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get po -o wide
+NAME               READY   STATUS    RESTARTS   AGE   IP           ...                
+kube-proxy-gj9pd   1/1     Running   0          90m   172.18.0.4   ...    #A
+kube-proxy-rhjqr   1/1     Running   0          90m   172.18.0.2   ...    #A
+kube-proxy-vq5g8   1/1     Running   0          90m   172.18.0.3   ...    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRWFjaCBQb2TigJlzIElQIG1hdGNoZXMgdGhlIElQIG9mIHRoZSBub2RlIGl0IHJ1bnMgb24u"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="765ce7d2174b91a84241db115845dc1f" data-text-hash="50438244bd6e7caab4a4e2973477721e" id="183" refid="183">
+<p>Configuring daemon Pods to use the host node&#8217;s network is useful when the process running in the Pod needs to be accessible through a network port at the node&#8217;s IP address.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="184" refid="184">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c3b8c8d1e56213d8391a8d70cb27c52c" data-text-hash="d8c3cbc89991846ff4e42fcaae4f994b" id="185" refid="185">
+<p> Another option is for the Pod to use its own network, but forward one or more host ports to the container by using the <span><code>hostPort</code></span> field in the container&#8217;s port list. You&#8217;ll learn how to do this later.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="92cc9038784d06f0382f2e29c1570c79" data-text-hash="71deb876e0b5287516d759c5f30c0b34" id="186" refid="186">
+<p>Containers in a Pod configured with <span><code>hostNetwork: true</code></span> continue to use the other namespace types, so they remain isolated from the node in other respects. For example, they use their own IPC and PID namespaces, so they can&#8217;t see the other processes or communicate with them via inter-process communication. If you want a daemon Pod to use the node&#8217;s IPC and PID namespaces, you can configure this using the <span><code>hostIPC</code></span> and <span><code>hostPID</code></span> properties in the Pod&#8217;s <span><code>spec</code></span>.</p>
+</div>
+<div class="readable-text" data-hash="8557ef11a18b0b59e81a2750328de4a7" data-text-hash="bfc79ed73db40990bd254ebd0cf03a52" id="187" refid="187">
+<h3 id="sigil_toc_id_298">16.2.4&#160; Marking daemon Pods as critical</h3>
+</div>
+<div class="readable-text" data-hash="bd330f2bd472939679c47d19e0c919bb" data-text-hash="2449049fd0a646e10cbab2801cf96e46" id="188" refid="188">
+<p>A node can run a few system Pods and many Pods with regular workloads. You don&#8217;t want Kubernetes to treat these two groups of Pods the same, as the system Pods are probably more important than the non-system Pods. For example, if a system Pod can&#8217;t be scheduled to a Node because the Node is already full, Kubernetes should evict some of the non-system Pods to make room for the system Pod.</p>
+</div>
+<div class="readable-text" data-hash="c32b88a1f923075c49c492aeba439937" data-text-hash="7af6b905e31516ba34ce23ca205e584a" id="189" refid="189">
+<h4>Introducing Priority Classes</h4>
+</div>
+<div class="readable-text" data-hash="613c5d7dce06c90359a31cb6ee03fbee" data-text-hash="ba5e0605d84406458ffb1a8bd945258d" id="190" refid="190">
+<p>By default, Pods deployed via a DaemonSet are no more important than Pods deployed via Deployments or StatefulSets. To mark your daemon Pods as more or less important, you use Pod priority classes. These are represented by the PriorityClass object. You can list them as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1d6cd836d1068df1051651fa18ad9893" data-text-hash="ac341d4101f4e3cc265d68ab8fdbb90b" id="191" refid="191">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get priorityclasses
+NAME                      VALUE        GLOBAL-DEFAULT   AGE
+system-cluster-critical   2000000000   false            9h
+system-node-critical      2000001000   false            9h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f8dbf2f9c16a25043cb3c6874fdd745b" data-text-hash="9692bcdaa990ce3d13305e3880e02506" id="192" refid="192">
+<p>Each cluster usually comes with two priority classes: <span><code>system-cluster-critical</code></span> and <span><code>system-node-critical</code></span>, but you can also create your own. As the name implies, Pods in the <span><code>system-cluster-critical</code></span> class are critical to the operation of the cluster. Pods in the <span><code>system-node-critical</code></span> class are critical to the operation of individual nodes, meaning they can&#8217;t be moved to a different node.</p>
+</div>
+<div class="readable-text" data-hash="78b2f8c869348b44659c9b10932d8751" data-text-hash="9ca55945095c32a7f9bc3b789d557043" id="193" refid="193">
+<p>You can learn more about the priority classes defined in your cluster by using the <span><code>kubectl describe priorityclasses</code></span> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="80e7c67f9d6e7323dcbb3dd599c59208" data-text-hash="2774c5a0ed318cf3b457b4a46439d393" id="194" refid="194">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe priorityclasses
+Name:           system-cluster-critical
+Value:          2000000000
+GlobalDefault:  false
+Description:    Used for system critical pods that must run in the cluster, but can be moved to another node if necessary.
+Annotations:    &lt;none&gt;
+Events:         &lt;none&gt;
+ 
+Name:           system-node-critical
+Value:          2000001000
+GlobalDefault:  false
+Description:    Used for system critical pods that must not be moved from their current node.
+Annotations:    &lt;none&gt;
+Events:         &lt;none&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7d0bc5cf0b50ba80d0f9954a2ff85c8f" data-text-hash="e43e974b548a04e6c24de3bf588bdb35" id="195" refid="195">
+<p>As you can see, each priority class has a value. The higher the value, the higher the priority. The preemption policy in each class determines whether or not Pods with lower priority should be evicted when a Pod with that class is scheduled to an overbooked Node.</p>
+</div>
+<div class="readable-text" data-hash="2569a7c17a48c9c19e47b2bbe033f67b" data-text-hash="d20d2032a4a6e17c013017a898eda5e7" id="196" refid="196">
+<p>You specify which priority class a Pod belongs to by specifying the class name in the <span><code>priorityClassName</code></span> field of the Pod&#8217;s <span><code>spec</code></span> section. For example, the <span><code>kube-proxy</code></span> DaemonSet sets the priority class of its Pods to <span><code>system-node-critical</code></span>. You can see this as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="48b959c7c1f2d7d3a10aa10e7195a5d5" data-text-hash="874a185f552fed002f87856adbb3928a" id="197" refid="197">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl -n kube-system get ds kube-proxy -o yaml
+apiVersion: apps/v1
+kind: DaemonSet
+spec:
+  template:
+    spec:
+      priorityClassName: system-node-critical    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGt1YmUtcHJveHkgUG9kcyBiZWxvbmcgdG8gdGhlIHN5c3RlbS1ub2RlLWNyaXRpY2FsIHByaW9yaXR5IGNsYXNzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="02c732e4bb1eb1d93afbf28f85a22047" data-text-hash="8af119f86c6c15046976fa044ce12183" id="198" refid="198">
+<p>The priority class of the <span><code>kube-proxy</code></span> Pods ensures that the kube-proxy Pods have a higher priority than the other Pods, since a node can&#8217;t function properly without a <span><code>kube-proxy</code></span> Pod (Pods on the Node can&#8217;t use Kubernetes Services).</p>
+</div>
+<div class="readable-text" data-hash="045b1ed4199ded5deb4fc192a7e12b75" data-text-hash="ca3d225200e2a82f1a43d328806e8d1d" id="199" refid="199">
+<p>When you create your own DaemonSets to run other node agents that are critical to the operation of a node, remember to set the <span><code>priorityClassName</code></span> appropriately.</p>
+</div>
+<div class="readable-text" data-hash="54900a3df489922f733625e4ddcde1fa" data-text-hash="9abef653a12655b1cb57241a25260612" id="200" refid="200">
+<h2 id="sigil_toc_id_299">16.3&#160; Communicating with the local daemon Pod</h2>
+</div>
+<div class="readable-text" data-hash="61711a21daabf3f971561b703e66e8af" data-text-hash="d7f6b565114ef0fa08cc55afb8a7bf84" id="201" refid="201">
+<p>A daemon Pod often provides a service to the other Pods running on the same node. The workloads running in these Pods must connect to the locally running daemon, not one running on another node. In chapter 11, you learned that Pods communicate via Services. However, when a Service receives traffic from a client Pod, it forwards it to a random Pod that may or may not be running on the same Node as the client.</p>
+</div>
+<div class="readable-text" data-hash="890fc620e4aba1247ac5736e97d7919b" data-text-hash="a10a75ef23359010223e1d62ea383571" id="202" refid="202">
+<p>How do you ensure that a Pod always connects to a daemon Pod running on the same Node, as shown in the next figure? In this section, you&#8217;ll learn several ways to do that.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c41ee3d5b916082b3bf190d6012b22dd" data-text-hash="4501063a7f0d7c9e38e3e0ba40025a34" id="203" refid="203">
+<h5>Figure 16.4 How do we get client pods to only talk to the locally-running daemon Pod?</h5>
+<img alt="" data-processed="true" height="309" id="Picture_1" loading="lazy" src="EPUB/images/16.4.png" width="831">
+</div>
+<div class="readable-text" data-hash="05a196894094d7370f1f86520ba9627f" data-text-hash="bb375fbc571f5db31271ca6da621534b" id="204" refid="204">
+<p>In the following examples, you&#8217;ll use a demo node agent written in Go that allows clients to retrieve system information such as uptime and average node utilization over HTTP. This allows Pods like Kiada to retrieve information from the agent instead of retrieving it directly from the node.</p>
+</div>
+<div class="readable-text" data-hash="c97d00a157b44260cac59fdc7cca8f82" data-text-hash="eb8cf7b7aa1cc5011ef2532479bc2a64" id="205" refid="205">
+<p>The source code for the node agent can be found in the <span><code>Chapter16/node-agent-0.1/</code></span> directory. Either build the container image yourself or use the prebuilt image at <span><code>luksa/node-agent:0.1</code></span>.</p>
+</div>
+<div class="readable-text" data-hash="7630fa82e0372f8d2e46a14c21668847" data-text-hash="9786122f650059fb314810d8ec62955f" id="206" refid="206">
+<p>In <span><code>Chapter16/kiada-0.9</code></span> you&#8217;ll find version <span><code>0.9</code></span> of the Kiada application. This version connects to the node agent, retrieves the node information, and displays it along with the other pod and node information that was displayed in earlier versions.</p>
+</div>
+<div class="readable-text" data-hash="f7f062139438527577ce2453e9d6fed4" data-text-hash="668787692ad23f3c252edfc8651d2a7f" id="207" refid="207">
+<h3 id="sigil_toc_id_300">16.3.1&#160; Binding directly to a host port</h3>
+</div>
+<div class="readable-text" data-hash="f603c005c42ba6640d9503d11f9d6f58" data-text-hash="e61747688cd336055fba41f45ca47df8" id="208" refid="208">
+<p>One way to ensure that clients can connect to the local daemon Pod on a given Node is to forward a network port on the host node to a port on the daemon Pod and configure the client to connect to it. To do this, you specify the desired port number of the host node in the list of ports in the Pod manifest using the <span><code>hostPort</code></span> field, as shown in the following listing. You can find this example in the file <span><code>ds.node-agent.hostPort.yaml</code></span>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c0eeb40ae6350c20bfe12c4811d63aac" data-text-hash="cb1d99724c88b7a63873c7681da437c0" id="209" refid="209">
+<h5>Listing 16.5 Forwarding a host port to a container</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  ...
+spec:
+  template:
+    spec:
+      containers:
+      - name: node-agent
+        image: luksa/node-agent:0.1
+        args:    #B
+        - --listen-address    #B
+        - :80    #B
+        ...
+        ports:    #A
+        - name: http
+          containerPort: 80    #B
+          hostPort: 11559    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGxpc3Qgb2YgcG9ydHMgZXhwb3NlZCBieSB0aGUgUG9kcyBjcmVhdGVkIGJ5IHRoaXMgRGFlbW9uU2V0LgojQiBUaGUgbm9kZSBhZ2VudCBwcm9jZXNzIHJ1bm5pbmcgaW4gdGhlIFBvZOKAmXMgY29udGFpbmVyIGlzIHJlYWNoYWJsZSBvbiBwb3J0IDgwIG9mIHRoZSBQb2TigJlzIG5ldHdvcmsgaW50ZXJmYWNlKHMpLgojQyBUaGlzIG1ha2VzIHRoZSBQb2QgcmVhY2hhYmxlIGFsc28gb24gcG9ydCAxMTU1OSBvZiB0aGUgaG9zdCBOb2Rl4oCZcyBuZXR3b3JrIGludGVyZmFjZShzKS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7bf5d8543f461ec17295cc164b6d07b5" data-text-hash="b4c066a91a4e8a0fef1b65d765485193" id="210" refid="210">
+<p>The manifest defines a DaemonSet that deploys node agent Pods listening on port <span><code>80</code></span> of the Pod&#8217;s network interface. However, in the list of <span><code>ports</code></span>, the container&#8217;s port <span><code>80</code></span> is also accessible through port <span><code>11559</code></span> of the host Node. The process in the container binds only to port <span><code>80</code></span>, but Kubernetes ensures that traffic received by the host Node on port <span><code>11559</code></span> is forwarded to port <span><code>80</code></span> within the <span><code>node-agent</code></span> container, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="f0d40319eb0b2ff67d6c76aeaff2d5d1" data-text-hash="a8067a75d59361259aaf38ca149c8ebe" id="211" refid="211">
+<h5>Figure 16.5 Exposing a daemon Pod via a host port</h5>
+<img alt="" data-processed="true" height="359" id="Picture_2" loading="lazy" src="EPUB/images/16.5.png" width="948">
+</div>
+<div class="readable-text" data-hash="149586a9c216f16df6c4ea70560b7de5" data-text-hash="fc6fc3f15f16c6ed451db7c41c4c557d" id="212" refid="212">
+<p>As you can see in the figure, each Node forwards traffic from the host port only to the local agent Pod. This is different from the NodePort Service explained in chapter 11, where a client connection to the node port is forwarded to a random Pod in the cluster, possibly one running on another Node. It also means that if no agent Pod is deployed on a Node, the attempt to connect to the host port will fail.</p>
+</div>
+<div class="readable-text" data-hash="246d607302a927d81c6392bd7b63150e" data-text-hash="895e834e3863e6d1a9a953c430df4ec6" id="213" refid="213">
+<h4>Deploying the agent and checking its connectivity</h4>
+</div>
+<div class="readable-text" data-hash="5c31e4767cc85a89e86a7d320e99f5d4" data-text-hash="a8e61291183d9823830d05463cc27321" id="214" refid="214">
+<p>Deploy the <span><code>node-agent</code></span> DaemonSet by applying the <span><code>ds.node-agent.hostPort.yaml</code></span> manifest. Verify that the number of Pods matches the number of Nodes in your cluster and that all Pods are running.</p>
+</div>
+<div class="readable-text" data-hash="db55ca429964b97897e1add9c7f5a262" data-text-hash="d62110ec66d38e6c39c8a5d3bf071ad0" id="215" refid="215">
+<p>Check if the node agent Pod responds to requests. Select one of the Nodes, find its IP address, and send a <span><code>GET /</code></span> request to its port <span><code>11559</code></span>. For example, if you&#8217;re using kind to provision your cluster, you can find the IP of the kind-worker node as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="61b76eef46164754bfb43618ab4b0331" data-text-hash="0786d1ba6262421d7b974ea120e3bce0" id="216" refid="216">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node kind-worker -o wide
+NAME          STATUS   ROLES    AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   ...
+kind-worker   Ready    &lt;none&gt;   26m   v1.23.4   172.18.0.2    &lt;none&gt;        ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7aac5fb6fbdcb5b3d8856df357fed8aa" data-text-hash="0c054e255162cc317af7a170219a220f" id="217" refid="217">
+<p>In my case, the IP of the Node is <span><code>172.18.0.2</code></span>. To send the <span><code>GET</code></span> request, I run <span><code>curl</code></span> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6f1957889a1e7ca4cc67349c18a0ea98" data-text-hash="ca12a9d92623ca32e44533d4ae8a65f2" id="218" refid="218">
+<div class="code-area-container">
+<pre class="code-area">$ curl 172.18.0.2:11559
+kind-worker uptime: 5h58m10s, load average: 1.62, 1.83, 2.25, active/total threads: 2/3479</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="43c968b5973a90296c03454abbeb4417" data-text-hash="47e25e7e05cbb38ccb31572398317800" id="219" refid="219">
+<p>If access to the Node is obstructed by a firewall, you may need to connect to the Node via SSH and access the port via <span><code>localhost</code></span>, as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ff27a306a94ef7c56cbda8fa83ecf56e" data-text-hash="6235839a9c8f9b15e5122c53405bdc24" id="220" refid="220">
+<div class="code-area-container">
+<pre class="code-area">root@kind-worker:/# curl localhost:11559
+kind-worker uptime: 5h59m20s, load average: 1.53, 1.77, 2.20, active/total threads: 2/3521</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ab2d0b52eca9e8781a864eba29639acb" data-text-hash="5b1c7c11307eadd97391f116138e8aff" id="221" refid="221">
+<p>The HTTP response shows that the node-agent Pod is working. You can now deploy the Kiada app and let it connect to the agent. But how do you tell Kiada where to find the local node-agent Pod?</p>
+</div>
+<div class="readable-text" data-hash="8748971c405132acb9b3888e2d4ee149" data-text-hash="20ddf358232b5645eb1479feb691a90a" id="222" refid="222">
+<h4>Pointing the Kiada application to the agent via the Node&#8217;s IP address</h4>
+</div>
+<div class="readable-text" data-hash="74e179b9057fb2191c519bc6de46f5d4" data-text-hash="6c6c2e23baab9904b3cd7c15a88454d2" id="223" refid="223">
+<p>Kiada searches for the node agent URL using the environment variable <span><code>NODE_AGENT_URL</code></span>. For the application to connect to the local agent, you must pass the IP of the host node and port 11559 in this variable. Of course, this IP depends on which Node the individual Kiada Pod is scheduled, so you can&#8217;t just specify a fixed IP address in the Pod manifest. Instead, you use the Downward API to get the local Node IP, as you learned in chapter 9. The following listing shows the part of the <span><code>deploy.kiada.0.9.hostPort.yaml</code></span> manifest where the <span><code>NODE_AGENT_URL</code></span> environment variable is set.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="15e64c8c0a23d6d99a59a7dc99053926" data-text-hash="691d0340ad2d8592f43d727b91ffece8" id="224" refid="224">
+<h5>Listing 16.6 Using the DownwardAPI to set the NODE_AGENT_URL variable</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiada
+spec:
+  template:
+    spec:
+      containers:
+      - name: kiada
+        image: luksa/kiada:0.9
+        imagePullPolicy: Always
+        env:
+        ...
+        - name: NODE_IP    #A
+          valueFrom:    #A
+            fieldRef:    #A
+              fieldPath: status.hostIP    #A
+        - name: NODE_AGENT_URL    #B
+          value: http://$(NODE_IP):11559    #B
+      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGhvc3Qgbm9kZSBJUCBpcyBleHBvc2VkIHZpYSB0aGUgRG93bndhcmQgQVBJIGluIHRoZSBOT0RFX0lQIGVudmlyb25tZW50IHZhcmlhYmxlLgojQiBUaGUgTk9ERV9JUCB2YXJpYWJsZSBpcyByZWZlcmVuY2VkIGluIHRoZSBOT0RFX0FHRU5UX1VSTCB2YXJpYWJsZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ebaaa76835441f239c6336ff02730dcd" data-text-hash="7c6d6d5b621812534c355e74b0f6e63c" id="225" refid="225">
+<p>As you can see in the listing, the environment variable <span><code>NODE_AGENT_URL</code></span> references the variable <span><code>NODE_IP</code></span>, which is initialized via the Downward API. The host port <span><code>11559</code></span> that the agent is bound to is hardcoded.</p>
+</div>
+<div class="readable-text" data-hash="39ec0028188ddf8a599f563bdd4d4977" data-text-hash="26356483ef90b2c2f24d42781200afdd" id="226" refid="226">
+<p>Apply the <span><code>deploy.kiada.0.9.hostPort.yaml</code></span> manifest and call the Kiada application to see if it retrieves and displays the node information from the local node agent, as shown here:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="278406595b0170736a4cfe0ed3e4aa14" data-text-hash="7d4b867be37865a6ce77a7d803a6951a" id="227" refid="227">
+<div class="code-area-container">
+<pre class="code-area">$ curl http://kiada.example.com
+...
+Request processed by Kiada 0.9 running in pod "kiada-68fbb5fcb9-rp7hc" on node "kind-worker2".
+...
+Node info: kind-worker2 uptime: 6h17m48s, load average: 0.87, 1.29, 1.61,    #A
+           active/total threads: 5/4283    #A
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGFwcGxpY2F0aW9uIHJldHJpZXZlcyB0aGlzIGluZm9ybWF0aW9uIGZyb20gdGhlIGxvY2FsIG5vZGUtYWdlbnQgZGFlbW9uIFBvZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="843a18d44bf20e2122ce59de0a279096" data-text-hash="c4345cf8a772ae862aa0083412147ae0" id="228" refid="228">
+<p>The response shows that the request was processed by a Kiada Pod running on the node <span><code>kind-worker2</code></span>. The <span><code>Node info</code></span> line indicates that the node information was retrieved from the agent on the same node. Every time you press refresh in your browser or run the <span><code>curl</code></span> command, the node name in the <span><code>Node info</code></span> line should always match the node in the <span><code>Request processed by</code></span> line. This shows that each Kiada pod gets the node information from its local agent and never from an agent on another node.</p>
+</div>
+<div class="readable-text" data-hash="3a30622653add2c5145fd6bcba6a1af4" data-text-hash="bb128c8060cf8db9ead83e4bbcf14243" id="229" refid="229">
+<h3 id="sigil_toc_id_301">16.3.2&#160; Using the node&#8217;s network stack</h3>
+</div>
+<div class="readable-text" data-hash="0d6fd7bc7163b807a793aaaa923f6040" data-text-hash="e156048d878cfeee91e382f3b5728050" id="230" refid="230">
+<p>A similar approach to the previous section is for the agent Pod to directly use the Node&#8217;s network environment instead of having its own, as described in section 16.2.3. In this case, the agent is reachable through the node&#8217;s IP address via the port to which it binds. When the agent binds to port 11559, client Pods can connect to the agent through this port on the node&#8217;s network interface, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b3388d8973c15e34ccf0ebf52253f0e4" data-text-hash="28139b479b87684264a1626b032a371a" id="231" refid="231">
+<h5>Figure 16.6 Exposing a daemon Pod by using the host node&#8217;s network namespace</h5>
+<img alt="" data-processed="true" height="378" id="Picture_7" loading="lazy" src="EPUB/images/16.6.png" width="797">
+</div>
+<div class="readable-text" data-hash="56bceb5ab023fa507b0f03773ed36d0a" data-text-hash="419dd8fe3354db6aea75b0d3ad60cf69" id="232" refid="232">
+<p>The following listing shows the <span><code>ds.node-agent.hostNetwork.yaml</code></span> manifest, in which the Pod is configured to use the host node&#8217;s network environment instead of its own. The agent is configured to listen on port <span><code>11559</code></span>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="35f327df99cef379491716395c9be36a" data-text-hash="689c6a89a5ae1781f527cfcc20b0179a" id="233" refid="233">
+<h5>Listing 16.7 Exposing a node agent by letting the Pod use the host node&#8217;s network</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  ...
+spec:
+  template:
+    spec:
+      hostNetwork: true    #A
+      ...
+      containers:
+      - name: node-agent
+        image: luksa/node-agent:0.1
+        imagePullPolicy: Always
+        args:
+        - --listen-address    #B
+        - :11559    #B
+        ...
+        ports:    #C
+        - name: http    #C
+          containerPort: 11559    #C
+        readinessProbe:
+          failureThreshold: 1
+          httpGet:
+            port: 11559
+            scheme: HTTP</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBQb2QgdXNlcyB0aGUgaG9zdCBub2Rl4oCZcyBpbnN0ZWFkIG9mIGl0cyBvd24gbmV0d29yay4KI0IgVGhlIG5vZGUtYWdlbnQgcHJvY2VzcyBsaXN0ZW5zIG9uIHBvcnQgMTE1NTkuCiNDIFVzZSBvZiBob3N0UG9ydCBub3QgbmVlZGVkLCBzaW5jZSB0aGUgY29udGFpbmVy4oCZcyBhbmQgdGhlIGhvc3TigJlzIHBvcnRzIGFyZSBvbmUgYW5kIHRoZSBzYW1lLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="67c3c722fed492832c3292c4e30028e2" data-text-hash="3e23d6457d119204bb83999b76774d3b" id="234" refid="234">
+<p>Since the node agent is configured to bind to port <span><code>11559</code></span> via the <span><code>--listen-address</code></span> argument, the agent is reachable via this port on the node&#8217;s network interface(s). From the client&#8217;s point of view, this is exactly like using the <span><code>hostPort</code></span> field in the previous section, but from the agent&#8217;s point of view, it&#8217;s different because the agent was previously bound to port <span><code>80</code></span> and traffic from the node&#8217;s port <span><code>11559</code></span> was forwarded to the container&#8217;s port <span><code>80</code></span>, whereas now it&#8217;s bound directly to port <span><code>11559</code></span>.</p>
+</div>
+<div class="readable-text" data-hash="b57abdfe90f8641cb48f3e05a5cc99cf" data-text-hash="eb7aabdd6fcfb029a08868d66063a0e2" id="235" refid="235">
+<p>Use the <span><code>kubectl apply</code></span> command to update the DaemonSet to see this in action. Since nothing has changed from the client&#8217;s point of view, the Kiada application you used in the previous section should still be able to get the node information from the agent. You can check this by reloading the application in your browser or making a new request with the <span><code>curl</code></span> command.</p>
+</div>
+<div class="readable-text" data-hash="8bb3c97b25729b3559fdea6942d795f4" data-text-hash="0060143a7f3e134214359bcd51c64e1a" id="236" refid="236">
+<h3 id="sigil_toc_id_302">16.3.3&#160; Using a local Service</h3>
+</div>
+<div class="readable-text" data-hash="051459a5a90591a136e82850a2b2a159" data-text-hash="333a09c515ffd3fcf84305aaebc1d443" id="237" refid="237">
+<p>The two approaches to connecting to a local daemon Pod described in the previous sections aren&#8217;t ideal because they require that the daemon Pod be reachable through the Node&#8217;s network interface, which means that client pods must look up the Node&#8217;s IP address. These approaches also don&#8217;t prevent external clients from accessing the agent.</p>
+</div>
+<div class="readable-text" data-hash="a768399285159e2a4288d86a09a11439" data-text-hash="38aa48d7d5888dd4819df90bdc5d1cf7" id="238" refid="238">
+<p>If you don&#8217;t want the daemon to be visible to the outside world, or if you want client Pods to access the daemon the same way they access other Pods in the cluster, you can make the daemon Pods accessible through a Kubernetes Service. However, as you know, this results in connections being forwarded to a random daemon Pod that&#8217;s not necessarily running on the same Node as the client. Fortunately, as you learned in chapter 11, you can configure a Service to forward traffic only within the same node by setting the <span><code>internalTrafficPolicy</code></span> in the Service manifest to <span><code>Local</code></span>.</p>
+</div>
+<div class="readable-text" data-hash="c1888ba94fd9038223fda4856b30f733" data-text-hash="da5f2cf495ea369e981b1e2ed7658038" id="239" refid="239">
+<p>The following figure shows how this type of Service is used to expose the node-agent Pods so that their clients always connect to the agent running on the same Node as the client.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="05327b364265f128a485e82e5b100923" data-text-hash="228ce1aed0dc1355f57e194e57558ee3" id="240" refid="240">
+<h5>Figure 16.7 Exposing daemon Pods via a Service with internal traffic policy set to Local</h5>
+<img alt="" data-processed="true" height="369" id="Picture_3" loading="lazy" src="EPUB/images/16.7.png" width="836">
+</div>
+<div class="readable-text" data-hash="4c602d4d74e50f45881704b6fba7738c" data-text-hash="d598c3116e0b39a6ab283b8497bb2ed2" id="241" refid="241">
+<p>As explained in chapter 11, a Service whose <span><code>internalTrafficPolicy</code></span> is set to <span><code>Local</code></span> behaves like multiple per-Node Services, each backed only by the Pods running on that Node. For example, when clients on Node A connect to the Service, the connection is forwarded only to the Pods on Node A. Clients on Node B only connect to Pods on Node B. In the case of the node-agent Service, there&#8217;s only one such Pod on each Node.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="242" refid="242">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="89c51e0b41e76318c0e6e44cfed99a24" data-text-hash="ed860bad75ea3df44c47146b3f383bfb" id="243" refid="243">
+<p> If the DaemonSet through which agent Pods are deployed uses a Node selector, some Nodes may not have an agent running. If a Service with <span><code>internalTrafficPolicy</code></span> set to <span><code>Local</code></span> is used to expose the local agent, a client&#8217;s connection to the Service on that Node will fail.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b7983be2824487c47fd944dceb612051" data-text-hash="c1755c63e0a40083213072c038fb53e4" id="244" refid="244">
+<p>To try this approach, update your <span><code>node-agent</code></span> DaemonSet, create the Service, and configure the Kiada application to use it, as explained next.</p>
+</div>
+<div class="readable-text" data-hash="4b1569b4cf9914eba334e61da7ee389f" data-text-hash="2f3897d83e80069375d6430a64caad5f" id="245" refid="245">
+<h4>Updating the node-agent DaemonSet</h4>
+</div>
+<div class="readable-text" data-hash="fb80e204e4c1320b4162526161eee387" data-text-hash="e08c3aa6520304e9ef4edc9a4e9c5beb" id="246" refid="246">
+<p>In the <span><code>ds.noge-agent.yaml</code></span> file, you&#8217;ll find a DaemonSet manifest that deploys ordinary Pods that don&#8217;t use the <span><code>hostPort</code></span> or <span><code>hostNetwork</code></span> fields. The agent in the Pod simply binds to port 80 of the container&#8217;s IP address.</p>
+</div>
+<div class="readable-text" data-hash="dc5fc5017aa233caa428e2f0de3f690d" data-text-hash="50af362358d97ca17d387c1984c90dbc" id="247" refid="247">
+<p>When you apply this manifest to your cluster, the Kiada application can no longer access the node agent because it&#8217;s no longer bound to port <span><code>11559</code></span> of the node. To fix this, you need to create a Service called <span><code>node-agent</code></span> and reconfigure the Kiada application to access the agent through this Service.</p>
+</div>
+<div class="readable-text" data-hash="13bc302180a219b889a14fd7642617f1" data-text-hash="c7038e5321ace7414793412eaecafafb" id="248" refid="248">
+<h4>Creating the Service with internal traffic policy set to Local</h4>
+</div>
+<div class="readable-text" data-hash="6bfe16158c1b9433c7e47869e4de66c1" data-text-hash="d14fbdeac44e67d9c772c4099c1c598e" id="249" refid="249">
+<p>The following listing shows the Service manifest, which you can find in the file <span><code>svc.node-agent.yaml</code></span>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="079fffb7fba218f573ffca0b0a7d81e9" data-text-hash="eeee5a96f3a16c013838209008d40196" id="250" refid="250">
+<h5>Listing 16.8 Exposing daemon Pods via a Service using the Local internal traffic policy</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Service
+metadata:
+  name: node-agent
+  labels:
+    app: node-agent
+spec:
+  internalTrafficPolicy: Local    #A
+  selector:    #B
+    app: node-agent    #B
+  ports:    #C
+  - name: http    #C
+    port: 80    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFNlcnZpY2UgaXMgY29uZmlndXJlZCB0byBmb3J3YXJkIHRyYWZmaWMgb25seSB0byBQb2RzIHJ1bm5pbmcgb24gdGhlIE5vZGUgcmVjZWl2aW5nIHRoZSBzZXJ2aWNlIHRyYWZmaWMuCiNCIFRoZSBTZXJ2aWNl4oCZcyBsYWJlbCBzZWxlY3RvciBtYXRjaGVzIHRoZSBQb2RzIGRlcGxveWVkIGJ5IHRoZSBub2RlLWFnZW50IERhZW1vblNldC4KI0MgVGhlIFNlcnZpY2UgZXhwb3NlcyBwb3J0IDgwLiBTaW5jZSB0aGUgdGFyZ2V0IHBvcnQgaXNu4oCZdCBzcGVjaWZpZWQsIGl0IGRlZmF1bHRzIHRvIHRoZSBzYW1lIG51bWJlci4gVGhhdOKAmXMgYWxzbyB0aGUgcG9ydCB0aGUgZGFlbW9uIFBvZHMgbGlzdGVuIG9uLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7f642856490f5cd7ed9fa94174e46fa1" data-text-hash="8a461c8b8d2ef7c7bfd1f8b7893a946f" id="251" refid="251">
+<p>The selector in the Service manifest is configured to match Pods with the label <span><code>app: node-agent</code></span>. This corresponds to the label assigned to agent Pods in the DaemonSet Pod template. Since the Service&#8217;s <span><code>internalTrafficPolicy</code></span> is set to <span><code>Local</code></span>, the Service forwards traffic only to Pods with this label on the same Node. Pods on the other nodes are ignored even if their label matches the selector.</p>
+</div>
+<div class="readable-text" data-hash="58451d34b1502c01f325052fc9c1c332" data-text-hash="c77038e9d0a6b60c785976548f2485d6" id="252" refid="252">
+<h4>Configuring Kiada to connect to the node-agent Service</h4>
+</div>
+<div class="readable-text" data-hash="f1d909e255f30581cb8025727e3d4a2b" data-text-hash="0c871cbca0ac19f63ba15f334948ead6" id="253" refid="253">
+<p>Once you&#8217;ve created the Service, you can reconfigure the Kiada application to use it, as shown in the following listing. The full manifest can be found in the <span><code>deploy.kiada.0.9.yaml</code></span> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c64c106e155bd14b3414c77fedeb23c5" data-text-hash="d3c272a86f9a062c00786694a5e5ecca" id="254" refid="254">
+<h5>Listing 16.9 Configuring the Kiada app to access the node agent via the local Service</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kiada
+spec:
+  template:
+    spec:
+      containers:
+      - name: kiada
+        image: luksa/kiada:0.9
+        env:
+        ...
+        - name: NODE_AGENT_URL    #A
+          value: http://node-agent    #A
+        ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5vZGUgYWdlbnQgVVJMIHBvaW50cyB0byB0aGUgbm9kZS1hZ2VudCBTZXJ2aWNlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="028344a94f7a8e2bc2f7e4b30d9aa78c" data-text-hash="31a568fb04adc2378d6d1cbddc963825" id="255" refid="255">
+<p>The environment variable <span><code>NODE_AGENT_URL</code></span> is now set to <span><code>http://node-agent</code></span>. This is the name of the Service defined in the <span><code>svc.node-agent.local.yaml</code></span> manifest file earlier.</p>
+</div>
+<div class="readable-text" data-hash="cf8596e671da199e4819508ba59feaea" data-text-hash="d4fecd102c7e12dc1d53f85bd96904ac" id="256" refid="256">
+<p>Apply the Service and the updated Deployment manifest and confirm that each Kiada Pod uses the local agent to display the node information, just as in the previous approaches.</p>
+</div>
+<div class="readable-text" data-hash="05a9aff29538bbf045df809e12c7d720" data-text-hash="5aa9793508312dc9c702508feaf50646" id="257" refid="257">
+<h4>Deciding which approach to use</h4>
+</div>
+<div class="readable-text" data-hash="e643e025a4f5e549ed7f91a59e38409c" data-text-hash="b831d137d2c3b47fe82819191f62eeca" id="258" refid="258">
+<p>You may be wondering which of these three approaches to use. The approach described in this section, using a local Service, is the cleanest and least invasive because it doesn&#8217;t affect the node&#8217;s network and doesn&#8217;t require special permissions. Use the <span><code>hostPort</code></span> or <span><code>hostNetwork</code></span> approach only if you need to reach the agent from outside the cluster.</p>
+</div>
+<div class="readable-text" data-hash="060e3a4814bad253ffbfc4be0613d066" data-text-hash="bf1b7f22d766363fd472f3d2d134a940" id="259" refid="259">
+<p>If the agent exposes multiple ports, you may think it&#8217;s easier to use <span><code>hostNetwork</code></span> instead of <span><code>hostPort</code></span> so you don&#8217;t have to forward each port individually, but that&#8217;s not ideal from a security perspective. If the Pod is configured to use the host network, an attacker can use the Pod to bind to any port on the Node, potentially enabling man-in-the-middle attacks.</p>
+</div>
+<div class="readable-text" data-hash="b2a66ee75478d274ccff08b0b0b05408" data-text-hash="16490292d809e1625d02d3dd83283dff" id="260" refid="260">
+<h2 id="sigil_toc_id_303">16.4&#160; Summary</h2>
+</div>
+<div class="readable-text" data-hash="7497ff3bbac160089484df0bc2c2c2f4" data-text-hash="0eb8fd76d01f0953fc51908148ee837d" id="261" refid="261">
+<p>In this chapter, you learned how to run daemons and node agents. You learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="d231b93d1a8f88479269bbb2a3b4b515" data-text-hash="d231b93d1a8f88479269bbb2a3b4b515" id="262" refid="262">A DaemonSet object represents a set of daemon Pods distributed across the cluster Nodes so that exactly one daemon Pod instance runs on each node.</li>
+<li class="readable-text" data-hash="95154edfdae654c55644994b75a50295" data-text-hash="95154edfdae654c55644994b75a50295" id="263" refid="263">A DaemonSet is used to deploy daemons and agents that provide system-level services such as log collection, process monitoring, node configuration, and other services required by each cluster Node.</li>
+<li class="readable-text" data-hash="ebf0e663453dfb2799079209d3db1afb" data-text-hash="ebf0e663453dfb2799079209d3db1afb" id="264" refid="264">When you add a node selector to a DaemonSet, the daemon Pods are deployed only on a subset of all cluster Nodes.</li>
+<li class="readable-text" data-hash="0e6a0dcb52ab0485026361cca0abf736" data-text-hash="0e6a0dcb52ab0485026361cca0abf736" id="265" refid="265">A DaemonSet doesn't deploy Pods to control plane Nodes unless you configure the Pod to tolerate the Nodes' taints.</li>
+<li class="readable-text" data-hash="c78bcc26ff329013889d4a3864f61336" data-text-hash="c78bcc26ff329013889d4a3864f61336" id="266" refid="266">The DaemonSet controller ensures that a new daemon Pod is created when a new Node is added to the cluster, and that it&#8217;s removed when a Node is removed.</li>
+<li class="readable-text" data-hash="6ad9fa1470d1c419e7997befe1dc023f" data-text-hash="c871f4d3cf8508dc5a2ed8ee92946452" id="267" refid="267">Daemon Pods are updated according to the update strategy specified in the DaemonSet. The <span><code>RollingUpdate</code></span> strategy updates Pods automatically and in a rolling fashion, whereas the <span><code>OnDelete</code></span> strategy requires you to manually delete each Pod for it to be updated.</li>
+<li class="readable-text" data-hash="ff435aefb004fdd43aad828fdfca4776" data-text-hash="ff435aefb004fdd43aad828fdfca4776" id="268" refid="268">If Pods deployed through a DaemonSet require extended access to the Node's resources, such as the file system, network environment, or privileged system calls, you configure this in the Pod template in the DaemonSet.</li>
+<li class="readable-text" data-hash="cf3c84a98871cd6e2e009d65c03052f8" data-text-hash="cf3c84a98871cd6e2e009d65c03052f8" id="269" refid="269">Daemon Pods should generally have a higher priority than Pods deployed via Deployments. This is achieved by setting a higher PriorityClass for the Pod.</li>
+<li class="readable-text" data-hash="bb23e032952ab9e82f8fddb250926b17" data-text-hash="2d4436abdfc4d27a670899313dc820e0" id="270" refid="270">Client Pods can communicate with local daemon Pods through a Service with <span><code>internalTrafficPolicy</code></span> set to <span><code>Local</code></span>, or through the Node's IP address if the daemon Pod is configured to use the node's network environment (<span><code>hostNetwork</code></span>) or a host port is forwarded to the Pod (<span><code>hostPort</code></span>).</li>
+</ul>
+<div class="readable-text" data-hash="f1f44eb4474f26ececf96987aa32b4a8" data-text-hash="4fc02d9b30b5fd03d6a04254fba5adcd" id="271" refid="271">
+<p>In the next chapter, you&#8217;ll learn how to run batch workloads with the Job and CronJob object types.</p>
+</div></div>
+
+        </body>
+        
+        

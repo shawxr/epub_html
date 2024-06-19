@@ -1,0 +1,2227 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="af6719497f9ba2b2da0b38df1125c177" data-text-hash="f02876a3f22776133bb7e0df0a47ec3e" id="1" refid="1">
+<h1>17 Running finite workloads with Jobs and CronJobs</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="15c77732ade0481d3613598e11816802" data-text-hash="15c77732ade0481d3613598e11816802" id="2" refid="2">Running finite tasks with Jobs</li>
+<li class="readable-text" data-hash="9b1dab3c638966b71cc79c0b0227bbe5" data-text-hash="9b1dab3c638966b71cc79c0b0227bbe5" id="3" refid="3">Handling Job failures</li>
+<li class="readable-text" data-hash="845b706b163eb4752392e62473966249" data-text-hash="845b706b163eb4752392e62473966249" id="4" refid="4">Parameterizing Pods created through a Job</li>
+<li class="readable-text" data-hash="1ab5327c7f88ef5ca3017e3b932cfde0" data-text-hash="1ab5327c7f88ef5ca3017e3b932cfde0" id="5" refid="5">Processing items in a work queue</li>
+<li class="readable-text" data-hash="6a5739fe9eeaddaa3b421eb342a2221a" data-text-hash="6a5739fe9eeaddaa3b421eb342a2221a" id="6" refid="6">Enabling communication between a Job&#8217;s Pods</li>
+<li class="readable-text" data-hash="17920f7983a45ff19997b24a7435d1a6" data-text-hash="17920f7983a45ff19997b24a7435d1a6" id="7" refid="7">Using CronJobs to run Jobs at a specific time or at regular intervals</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="119e1797bb039d3682740b20995fbc16" data-text-hash="1af7900a3427e037e9c4cd4d9fa0f761" id="8" refid="8">
+<p>As you learned in the previous chapters, a Pod created via a Deployment, StatefulSet, or DaemonSet, runs continuously. When the process running in one of the Pod&#8217;s containers terminates, the Kubelet restarts the container. The Pod never stops on its own, but only when you delete the Pod object. Although this is ideal for running web servers, databases, system services, and similar workloads, it&#8217;s not suitable for finite workloads that only need to perform a single task.</p>
+</div>
+<div class="readable-text" data-hash="38d8f0ca235989755c833e8846cc7c18" data-text-hash="8e424fbda69dfc8e8d93fa81ba07fb6a" id="9" refid="9">
+<p>A finite workload doesn&#8217;t run continuously, but lets a task run to completion. In Kubernetes, you run this type of workload using the <i>Job</i> resource. However, a Job always runs its Pods immediately, so you can&#8217;t use it for scheduling tasks. For that, you need to wrap the Job in a <i>CronJob</i> object. This allows you to schedule the task to run at a specific time in the future or at regular intervals.</p>
+</div>
+<div class="readable-text" data-hash="ddb170ace382678f378ebc0c2f486945" data-text-hash="79330d70264fdc8ec1d14b48ddea1c2c" id="10" refid="10">
+<p>In this chapter you&#8217;ll learn everything about Jobs and CronJobs. Before you begin, create the <code>kiada</code> Namespace, change to the <code>Chapter17/</code> directory, and apply all the manifests in the <code>SETUP/</code> directory by running the following commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="88d5d3bd2ca8ff5ce7673efcd4ecc63b" data-text-hash="8da4cdd7753194c2a7f6a8501934287f" id="11" refid="11">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create ns kiada
+$ kubectl config set-context --current --namespace kiada
+$ kubectl apply -f SETUP -R</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="12" refid="12">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="ae5a2e1d522799f15a81c2860edc29cf" data-text-hash="27332bb80c4cfa3b079afa8bafca5583" id="13" refid="13">
+<p> You can find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter17</a>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="80b809d1bf81be85af4e50ee42185293" data-text-hash="789d34961c936e66280bbde8b58546f1" id="14" refid="14">
+<p>Don&#8217;t be alarmed if you find that one of the containers in each quiz Pod fails to become ready. This is to be expected since the MongoDB database running in those Pods hasn&#8217;t yet been initialized. You&#8217;ll create a Job resource to do just that.</p>
+</div>
+<div class="readable-text" data-hash="ad911c682daacff9ff5383375a87237a" data-text-hash="feb7fcb469a7e61a968c41e4315b1523" id="15" refid="15">
+<h2 id="sigil_toc_id_304">17.1&#160;Running tasks with the Job resource</h2>
+</div>
+<div class="readable-text" data-hash="22b95eccdb7bdcb3e77238bcfca3abce" data-text-hash="50a63d17ccf43dc25bf0a38ef5ae9703" id="16" refid="16">
+<p>Before you create your first Pod via the Job resource, let&#8217;s think about the Pods in the <code>kiada</code> Namespace. They&#8217;re all meant to run continuously. When a container in one of these pods terminates, it&#8217;s automatically restarted. When the Pod is deleted, it&#8217;s recreated by the controller that created the original Pod. For example, if you delete one of the <code>kiada</code> pods, it&#8217;s quickly recreated by the Deployment controller because the <code>replicas</code> field in the <code>kiada</code> Deployment specifies that three Pods should always exist.</p>
+</div>
+<div class="readable-text" data-hash="caf916dd56a94bd6ebd7bded5d0fb3ca" data-text-hash="f0e8156250da1aa88ac09306d5e552b9" id="17" refid="17">
+<p>Now consider a Pod whose job is to initialize the MongoDB database. You don&#8217;t want it to run continuously; you want it to perform one task and then exit. Although you want the Pod&#8217;s containers to restart if they fail, you don&#8217;t want them to restart when they finish successfully. You also don&#8217;t want a new Pod to be created after you delete the Pod that completed its task.</p>
+</div>
+<div class="readable-text" data-hash="dff0ca789f6392e9d813a435cabe6296" data-text-hash="b2443ca3fc817a0df5d5941ea54ab5a8" id="18" refid="18">
+<p>You may recall that you already created such a Pod in chapter 15, namely the <code>quiz-data-importer</code> Pod. It was configured with the <code>OnFailure</code> restart policy to ensure that the container would restart only if it failed. When the container terminated successfully, the Pod was finished, and you could delete it. Since you created this Pod directly and not through a Deployment, StatefulSet or DaemonSet, it wasn&#8217;t recreated. So, what&#8217;s wrong with this approach and why would you create the Pod via a Job instead?</p>
+</div>
+<div class="readable-text" data-hash="87a0d58fe7d7222a86382ae4ce2e02dc" data-text-hash="d225c9e8807a10398bc5b4916b1563ad" id="19" refid="19">
+<p>To answer this question, consider what happens if someone accidentally deletes the Pod prematurely or if the Node running the Pod fails. In these cases, Kubernetes wouldn&#8217;t automatically recreate the Pod. You&#8217;d have to do that yourself. And you&#8217;d have to watch that Pod from creation to completion. That might be fine for a Pod that completes its task in seconds, but you probably don&#8217;t want to be stuck watching a Pod for hours. So, it&#8217;s better to create a Job object and let Kubernetes do the rest.</p>
+</div>
+<div class="readable-text" data-hash="ef0839a66a43d4c589a81950aef3a7e9" data-text-hash="d180d33aff423c56bf5ca2a393aa5510" id="20" refid="20">
+<h3 id="sigil_toc_id_305">17.1.1&#160;Introducing the Job resource</h3>
+</div>
+<div class="readable-text" data-hash="f7f7e49b0ff96b06d8440af7276ad1de" data-text-hash="446ecc9c805a6233f26626d7d4e712e0" id="21" refid="21">
+<p>The Job resource resembles a Deployment in that it creates one or more Pods, but instead of ensuring that those Pods run indefinitely, it only ensures that a certain number of them complete successfully.</p>
+</div>
+<div class="readable-text" data-hash="149f6f88b04114dcb2694db3ec921c41" data-text-hash="b97bdfeb2138c75fba4d71269bffdef8" id="22" refid="22">
+<p>As you can see in the following figure, the simplest Job runs a single Pod to completion, whereas more complex Jobs run multiple Pods, either sequentially or concurrently. When all containers in a Pod terminate with success, the Pod is considered completed. When all the Pods have completed, the Job itself is also completed.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c4c9ef0477cea8ec9113df487d3a0b1b" data-text-hash="18dbe5fbcb7b4812d85fe1886cfb5025" id="23" refid="23">
+<h5>Figure 17.1 Three different Job examples. Each Job is completed once its Pods have completed successfully.</h5>
+<img alt="" border="0" data-processed="true" height="376" id="Picture_4" loading="lazy" src="EPUB/images/17_img_0001.png" width="831">
+</div>
+<div class="readable-text" data-hash="65a5a9771082ace48d253136df18aa70" data-text-hash="ccb27fe8cfb0ebeaef3a1fda4340ed29" id="24" refid="24">
+<p>As you might expect, a Job resource defines a Pod template and the number of Pods that must be successfully completed. It also defines the number of Pods that may run in parallel.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="25" refid="25">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="962e7c09aadf64329cb52f52db0d3a09" data-text-hash="8b28fd192757ee5e9cb79219006b7c89" id="26" refid="26">
+<p> Unlike Deployments and other resources that contain a Pod template, you can&#8217;t modify the template in a Job object after creating the object.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f76a67329234b84c3d0bb2d34687b5b8" data-text-hash="8b4deb75d42a90de5d47632269153e02" id="27" refid="27">
+<p>Let&#8217;s look at what the simplest Job object looks like.</p>
+</div>
+<div class="readable-text" data-hash="9f4eb520353736badfd926ca3637d24f" data-text-hash="b7d374f7f375e1b9d9b24771fe251f22" id="28" refid="28">
+<h4>Defining a Job resource</h4>
+</div>
+<div class="readable-text" data-hash="58a4f10e63259f30c33cdaaf4680010e" data-text-hash="b76aa9455328e7a5c09a989c8cc216cb" id="29" refid="29">
+<p>In this section, you take the <code>quiz-data-importer</code> Pod from chapter 15 and turn it into a Job. This Pod imports the data into the Quiz MongoDB database. You may recall that before running this Pod, you had to initiate the MongoDB replica set by issuing a command in one of the <code>quiz</code> Pods. You can do that in this Job as well, using an init container. The Job and the Pod it creates are visualized in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b76dd099c853ee98eeeb332ded310aa1" data-text-hash="c4e55250320a69e4a0c54fdf09a72673" id="30" refid="30">
+<h5>Figure 17.2 An overview of the quiz-init Job</h5>
+<img alt="" border="0" data-processed="true" height="243" id="Picture_7" loading="lazy" src="EPUB/images/17_img_0002.png" width="931">
+</div>
+<div class="readable-text" data-hash="b765ebc21eb5f4767cb07f757cdea6a1" data-text-hash="1a803b496a814d31a6a98b4295179380" id="31" refid="31">
+<p>The following listing shows the Job manifest, which you can find in the file <code>job.quiz-init.yaml</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="32" refid="32">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e54089656004f3ab2c3c2845071a16f6" data-text-hash="9b1d24af20e9b57cdae4ade2f4ca8341" id="33" refid="33">
+<p> The manifest file also contains a ConfigMap in which the quiz questions are stored but this ConfigMap is not shown in the listing.</p>
+</div>
+</div>
+<div class="browsable-container listing-container" data-hash="8bf2bde0ce906469e19ec53e5264b543" data-text-hash="ca61c662eda0782fbd6955a374e04366" id="34" refid="34">
+<h5>Listing 17.1 A Job manifest for running a single task</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1    #A
+kind: Job    #A
+metadata:
+  name: quiz-init
+  labels:
+    app: quiz
+    task: init
+spec:
+  template:    #B
+    metadata:    #C
+      labels:    #C
+        app: quiz    #C
+        task: init    #C
+    spec:
+      restartPolicy: OnFailure    #D
+      initContainers:    #E
+      - name: init    #E
+        image: mongo:5    #E
+        command:    #E
+        - sh    #E
+        - -c    #E
+        - |    #E
+          mongosh mongodb://quiz-0.quiz-pods.kiada.svc.cluster.local \    #E 
+    --quiet --file /dev/stdin &lt;&lt;EOF    #E
+    #E
+          # MongoDB code that initializes the replica set    #E
+          # Refer to the job.quiz-init.yaml file to see the actual code    #E
+    #E
+          EOF    #E
+      containers:    #F
+      - name: import    #F
+        image: mongo:5    #F
+        command:    #F
+        - mongoimport    #F
+        - mongodb+srv://quiz-pods.kiada.svc.cluster.local/kiada?tls=false    #F
+        - --collection    #F
+        - questions    #F
+        - --file    #F
+        - /questions.json    #F
+        - --drop    #F
+        volumeMounts:    #F
+        - name: quiz-data    #F
+          mountPath: /questions.json    #F
+          subPath: questions.json    #F
+          readOnly: true    #F
+      volumes:
+      - name: quiz-data
+        configMap:
+          name: quiz-data</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCBkZWZpbmVzIGEgSm9iIG9iamVjdCBmcm9tIHRoZSBiYXRjaCBBUEkgZ3JvdXAsIHZlcnNpb24gdjEuCiNCIFRoZSBQb2QgdGVtcGxhdGUgc3RhcnRzIGhlcmUuCiNDIEFzc2lnbiBsYWJlbHMgdG8gdGhlIHRoZSBQb2Qgc28gZXZlcnlvbmUga25vd3MgaXRzIHJvbGUgaW4gdGhlIHN5c3RlbS4gVGhpcyBpcyBvcHRpb25hbC4KI0QgSm9icyBjYW7igJl0IHVzZSB0aGUgZGVmYXVsdCDigJxBbHdheXPigJ0gcmVzdGFydCBwb2xpY3kuIFRoZXkgbXVzdCB1c2UgZWl0aGVyIE9uRmFpbHVyZSBvciBOZXZlci4KI0UgVGhlIGluaXQgY29udGFpbmVyIGluaXRpYXRlcyB0aGUgTW9uZ29EQiByZXBsaWNhIHNldC4KI0YgVGhlIG1haW4gY29udGFpbmVyIGltcG9ydHMgdGhlIHF1aXogcXVlc3Rpb25zIGZyb20gdGhlIHF1ZXN0aW9ucy5qc29uIGZpbGUsIHdoaWNoIGlzIG1vdW50ZWQgaW50byB0aGUgY29udGFpbmVyIHZpYSBhIGNvbmZpZ01hcCB2b2x1bWUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4b674ee298174dacf6010f9a15cfff16" data-text-hash="fd6249844c13b7eb34f433a1847eaf17" id="35" refid="35">
+<p>The manifest in the listing defines a Job object that runs a single Pod to completion. Jobs belong to the <code>batch</code> API group, and you&#8217;re using API version <code>v1</code> to define the object. The Pod that this Job creates consists of two containers that execute in sequence, as one is an init and the other a normal container. The init container makes sure that the MongoDB replica set is initialized, then the main container imports the quiz questions from the <code>quiz-data</code> ConfigMap that&#8217;s mounted into the container through a volume.</p>
+</div>
+<div class="readable-text" data-hash="986a8cfde681319199e459e1db05caf1" data-text-hash="feca20e1fb468651879458de1d78d2bc" id="36" refid="36">
+<p>The Pod&#8217;s <code>restartPolicy</code> is set to <code>OnFailure</code>. A Pod defined within a Job can&#8217;t use the default policy of <code>Always</code>, as that would prevent the Pod from completing.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="37" refid="37">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="77064b6a34d3358970550b6989c5b44a" data-text-hash="d924f689ae2a0fc08ba5d0b36cb193f2" id="38" refid="38">
+<p> In a Job&#8217;s pod <code>template</code>, you must explicitly set the restart policy to either <code>OnFailure</code> or <code>Never</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="cacd4faf34217e145cd0d32c8f11c2e8" data-text-hash="ebd5eb6de52c519cd055825cffed81da" id="39" refid="39">
+<p>You&#8217;ll notice that unlike Deployments, the Job manifest in the listing doesn&#8217;t define a <code>selector</code>. While you can specify it, you don&#8217;t have to, as Kubernetes sets it automatically. The Pod template in the listing does contain two labels, but they&#8217;re there only for your convenience.</p>
+</div>
+<div class="readable-text" data-hash="194308a1069d95a144a9f635fd82844d" data-text-hash="870e653631b658d4422fb711042ec127" id="40" refid="40">
+<h4>Running a Job</h4>
+</div>
+<div class="readable-text" data-hash="db656cea1271820c50d908dc08f34055" data-text-hash="bc89b4ef62424852c86d7fe7cb173153" id="41" refid="41">
+<p>The Job controller creates the Pods immediately after you create the Job object. To run the <code>quiz-init</code> Job, apply the <code>job.quiz-init.yaml</code> manifest with <code>kubectl apply</code>.</p>
+</div>
+<div class="readable-text" data-hash="38d5fef7d202e11622fbe7144f016705" data-text-hash="80ab7ffc3ee2f35b58a306b50304f6d0" id="42" refid="42">
+<h4>Displaying a brief Job status</h4>
+</div>
+<div class="readable-text" data-hash="4341c9ec9d0395955ce91bec7e5bd627" data-text-hash="26ad5b7fe864a953bcc2cc841194543e" id="43" refid="43">
+<p>To get a brief overview of the Job&#8217;s status, list the Jobs in the current Namespace as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3af6f4fb7dd7a0c7c4f04b6ec89ba701" data-text-hash="9bdb08576d3794a62dffa11437551fb8" id="44" refid="44">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get jobs
+NAME        COMPLETIONS   DURATION   AGE
+quiz-init   0/1           3s         3s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="09fd9dd9c5a69e83fb6b37b2018d08c0" data-text-hash="3104765b9b964a3a857640b2630d8b5c" id="45" refid="45">
+<p>The <code>COMPLETIONS</code> column indicates how many times the Job has run and how many times it&#8217;s configured to complete. The <code>DURATION</code> column shows how long the Job has been running. Since the task the <code>quiz-init</code> Job performs is relatively short, its status should change within a few seconds. List the Jobs again to confirm this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e480f35c391fde1453592152bfe60cdf" data-text-hash="c7a9b03a781414fdbf907c0573c50bd7" id="46" refid="46">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get jobs
+NAME        COMPLETIONS   DURATION   AGE
+quiz-init   1/1           6s         42s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="001651d8f4ff2a921ef7eb18af1a8fce" data-text-hash="712a99e72016b22faed11021fbf6d48f" id="47" refid="47">
+<p>The output shows that the Job is now complete, which took 6 seconds.</p>
+</div>
+<div class="readable-text" data-hash="d5f20080b70337bc6e183326f2039bc8" data-text-hash="dba5ed08d3ff82b7736736ec318ad4c0" id="48" refid="48">
+<h4>Displaying the detailed Job status</h4>
+</div>
+<div class="readable-text" data-hash="823b41821ebe49b4a761505de0fe859d" data-text-hash="50e57bccd472c564ea74abfa7d316179" id="49" refid="49">
+<p>To see more details about the Job, use the <code>kubectl describe</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e287df398e2ee0a2c8c2965ffcb2e23a" data-text-hash="285a9368657b5a7c4f8a5b2d887f3bc2" id="50" refid="50">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe job quiz-init
+Name:             quiz-init
+Namespace:        kiada
+Selector:         controller-uid=98f0fe52-12ec-4c76-a185-4ccee9bae1ef    #A
+Labels:           app=quiz
+                  task=init
+Annotations:      batch.kubernetes.io/job-tracking:
+Parallelism:      1
+Completions:      1
+Completion Mode:  NonIndexed
+Start Time:       Sun, 02 Oct 2022 12:17:59 +0200
+Completed At:     Sun, 02 Oct 2022 12:18:05 +0200
+Duration:         6s
+Pods Statuses:    0 Active / 1 Succeeded / 0 Failed    #B
+Pod Template:
+  Labels:  app=quiz    #C
+           controller-uid=98f0fe52-12ec-4c76-a185-4ccee9bae1ef    #C
+           job-name=quiz-init    #C
+           task=init    #C
+  Init Containers:
+   init: ...
+  Containers:
+   import: ...
+  Volumes:
+   quiz-data: ...
+Events:
+  Type    Reason            Age    From            Message
+  ----    ------            ----   ----            -------
+  Normal  SuccessfulCreate  7m33s  job-controller  Created pod: quiz-init-xpl8d    #D
+  Normal  Completed         7m27s  job-controller  Job completed    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQXV0by1nZW5lcmF0ZWQgc2VsZWN0b3IgZm9yIHRoaXMgSm9iLgojQiBUaGUgc3RhdHVzIG9mIHRoaXMgSm9i4oCZcyBQb2RzLgojQyBJbiBhZGRpdGlvbiB0byB0aGUgbGFiZWxzIHlvdSBkZWZpbmVkIGluIHRoZSBQb2QgdGVtcGxhdGUsIHRoZSBjb250cm9sbGVyLXVpZCBhbmQgam9iLW5hbWUgbGFiZWxzIHdlcmUgYWRkZWQgYXV0b21hdGljYWxseS4KI0QgVGhlIEpvYiBldmVudHMgc2hvdyB0aGF0IGEgc2luZ2xlIFBvZCB3YXMgY3JlYXRlZCBmb3IgdGhpcyBKb2IgYW5kIHRoYXQgdGhlIEpvYiBpcyBjb21wbGV0ZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9f11b295840e3d29f26d7ad3063acfbc" data-text-hash="144ef8a93a02f4533d436946bff37863" id="51" refid="51">
+<p>In addition to the Job <code>name</code>, <code>namespace</code>, <code>labels</code>, <code>annotations</code>, and other properties, the output of the <code>kubectl describe</code> command also shows the <code>selector</code> that was automatically assigned. The <code>controller-uid</code> label used in the selector was also automatically added to the Job&#8217;s Pod template. The <code>job-name</code> label was also added to the template. As you&#8217;ll see in the next section, you can easily use this label to list the Pods that belong to a particular Job.</p>
+</div>
+<div class="readable-text" data-hash="e33073a6555a6bba6f1e19eee9730d9c" data-text-hash="f07524b3253d18b34d71aeb4a0361034" id="52" refid="52">
+<p>At the end of the <code>kubectl describe</code> output, you see the <code>Events</code> associated with this Job object. Only two events were generated for this Job: the creation of the Pod and the successful completion of the Job.</p>
+</div>
+<div class="readable-text" data-hash="93c9e46ec4aaff030221e74165f7b6d7" data-text-hash="bd566c4391c16d34864e341e64dd0969" id="53" refid="53">
+<h4>Examining the Pods that belong to a Job</h4>
+</div>
+<div class="readable-text" data-hash="de2c089cb4046805570d7d9ce41d20de" data-text-hash="e80ab3ff67daae95a38f349ed44704c5" id="54" refid="54">
+<p>To list the Pods created for a particular Job, you can use the <code>job-name</code> label that&#8217;s automatically added to those Pods. To list the Pods of the <code>quiz-init</code> job, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2b0e057c5d1aea1e976bd3227b0b0950" data-text-hash="2cce76be4663b81c6d674e73054d1c30" id="55" refid="55">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l job-name=quiz-init
+NAME              READY   STATUS      RESTARTS   AGE
+quiz-init-xpl8d   0/1     Completed   0          25m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="34aaa47ce119ff3c5abdfdaea788c325" data-text-hash="e545c2134529d51c3e7022c94e04835b" id="56" refid="56">
+<p>The pod shown in the output has finished its task. The Job controller doesn&#8217;t delete the Pod, so you can see its status and view its logs.</p>
+</div>
+<div class="readable-text" data-hash="982a34b4577bb554daf161afba016f5d" data-text-hash="bae4c74d96efa4f92a8744002850ef54" id="57" refid="57">
+<h4>Examining the logs of a Job Pod</h4>
+</div>
+<div class="readable-text" data-hash="6f200735c586a067b056a12ca3e7326a" data-text-hash="d45f28ef22eae6c7470c1719f8ba1539" id="58" refid="58">
+<p>The fastest way to see the logs of a Job is to pass the Job name instead of the Pod name to the <code>kubectl logs</code> command. To see the logs of the <code>quiz-init</code> Job, you could do something like the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c2cfc0c714fdde863de964093647adfe" data-text-hash="825b0aa59fe33e5bb605b7153dec883d" id="59" refid="59">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs job/quiz-init --all-containers --prefix    #A
+[pod/quiz-init-xpl8d/init] Replica set initialized successfully!    #B
+[pod/quiz-init-xpl8d/import] 2022-10-02T10:51:01.967+0000  connected to: ...    #C
+[pod/quiz-init-xpl8d/import] 2022-10-02T10:51:01.969+0000  dropping: kiada.questions    #C
+[pod/quiz-init-xpl8d/import] 2022-10-02T10:51:03.811+0000  6 document(s) imported...    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVXNlIHRoZSAtLWFsbC1jb250YWluZXJzIG9wdGlvbiB0byBkaXNwbGF5IHRoZSBsb2dzIG9mIGFsbCB0aGUgUG9k4oCZcyBjb250YWluZXJzLCBhbmQgdGhlIOKAk3ByZWZpeCBvcHRpb24gdG8gcHJlZml4IGVhY2ggbGluZSB3aXRoIHRoZSBwb2QgYW5kIGNvbnRhaW5lciBuYW1lLgojQiBUaGUgaW5pdCBjb250YWluZXLigJlzIGxvZy4KI0MgVGhlIGltcG9ydCBjb250YWluZXLigJlzIGxvZy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fbcdb449eee98b97a3d9abd95cb19c59" data-text-hash="1113d5668ea2ce9e715f802b5df696ca" id="60" refid="60">
+<p>The <code>--all-containers</code> option tells <code>kubectl</code> to print the logs of all the Pod&#8217;s containers, and the <code>--prefix</code> option ensures that each line is prefixed with the source, that is, the pod and container names.</p>
+</div>
+<div class="readable-text" data-hash="0c04f040cb579fe13ff3784574a68efc" data-text-hash="c404d4758ba449b5aca4a960e97d7431" id="61" refid="61">
+<p>The output contains both the <code>init</code> and the <code>import</code> container logs. These logs indicate that the MongoDB replica set has been successfully initialized and that the question database has been populated with data.</p>
+</div>
+<div class="readable-text" data-hash="39997d2a55d4491fa79ac81582c3a4db" data-text-hash="7f4f49ffbb1863c0109a0aff517a35cd" id="62" refid="62">
+<h4>Suspending active Jobs and creating Jobs in a suspended state</h4>
+</div>
+<div class="readable-text" data-hash="38015f4fd139db655e60b3142b8acbaa" data-text-hash="b8cec12e71c3f92e9b44848cebc02400" id="63" refid="63">
+<p>When you created the <code>quiz-init</code> Job, the Job controller created the Pod as soon as you created the Job object. However, you can also create Jobs in a suspended state. Let&#8217;s try this out by creating another Job. As you can see in the following listing, you suspend it by setting the <code>suspend</code> field to <code>true</code>. You can find this manifest in the file <code>job.demo-suspend.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cb428fb7f59e239682ccf090a51d113a" data-text-hash="14279e0e15c6ae76f5bdbf7f802d3e1f" id="64" refid="64">
+<h5>Listing 17.2 The manifest of a suspended Job</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-suspend
+spec:
+  suspend: true    #A
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: demo
+        image: busybox
+        command:
+        - sleep
+        - "60"</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBKb2IgaXMgc3VzcGVuZGVkLiBXaGVuIHlvdSBjcmVhdGUgdGhlIEpvYiwgbm8gUG9kcyBhcmUgY3JlYXRlZCB1bnRpbCB5b3UgdW5zdXNwZW5kIHRoZSBKb2Iu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="35655d310919a1374625e75d49245d24" data-text-hash="2e2b3ecd9e7b3c2a219a6ccc2920879e" id="65" refid="65">
+<p>Apply the manifest in the listing to create the Job. List the Pods as follows to confirm that none have been created yet:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f6792aed5adcff01f84fcb97e7cc896c" data-text-hash="61b0fc21de23acb70932b66ae77de647" id="66" refid="66">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l job-name=demo-suspend
+No resources found in kiada namespace.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="96f2108ab2e69a947d1957d7ecba656e" data-text-hash="0395649adab8046def25708ae9ef1101" id="67" refid="67">
+<p>The Job controller generates an Event indicating the suspension of the Job. You can see it when you run <code>kubectl get events</code> or when you describe the Job with <code>kubectl describe</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8fc7ea7dbc76ea61a6ab8859bb3bbcaf" data-text-hash="155e18074a3e866846aa25efa05180e2" id="68" refid="68">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe job demo-suspend
+...
+Events:
+  Type    Reason     Age    From            Message
+  ----    ------     ----   ----            -------
+  Normal  Suspended  3m37s  job-controller  Job suspended</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="eab04d88ef6091c81575bf15d0cbae85" data-text-hash="f9929c08f8c320c79213455098568830" id="69" refid="69">
+<p>When you&#8217;re ready to run the Job, you unsuspend it by patching the object as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e8f35790c559c69985b566920ed3ffa9" data-text-hash="283e1e2ca3b7c2f3c9e0d3049bf945aa" id="70" refid="70">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch job demo-suspend -p '{"spec":{"suspend": false}}'
+job.batch/demo-suspend patched</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="97d13f9b09a5381d8b4ccfb5c0cceb94" data-text-hash="96389ce0b2bfa23cdea37e658d4a19c6" id="71" refid="71">
+<p>The Job controller creates the Pod and generates an Event indicating that the Job has resumed.</p>
+</div>
+<div class="readable-text" data-hash="f48c6358331bdc569f4d1a383858db15" data-text-hash="5bc6b8beebfedcafceacd38804ca9a28" id="72" refid="72">
+<p>You can also suspend a running Job, whether you created it in a suspended state or not. To suspend a Job, set <code>suspend</code> to <code>true</code> with the following <code>kubectl patch</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1119c3b6aa34cdc441d177b7aeb66474" data-text-hash="ad56c03a1b92ef2c657366a448af0b39" id="73" refid="73">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch job demo-suspend -p '{"spec":{"suspend": true}}'
+job.batch/demo-suspend patched</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c1b6aa3eb3947ed9265c5ecf2ce2e6a4" data-text-hash="87a1e652d312c62ccd5d09e01470f78a" id="74" refid="74">
+<p>The Job controller immediately deletes the Pod associated with the Job and generates an Event indicating that the Job has been suspended. The Pod&#8217;s containers are shut down gracefully, as they are every time you delete a Pod, regardless of how it was created. You can resume the Job at your discretion by resetting the <code>suspend</code> field to <code>false</code>.</p>
+</div>
+<div class="readable-text" data-hash="604d5f33b97453c277eb281a53901dc2" data-text-hash="e90c8528c417ed93dfbd7cdb50c823d7" id="75" refid="75">
+<h4>Deleting Jobs and their Pods</h4>
+</div>
+<div class="readable-text" data-hash="83eb2899c8a35fcbe8e549fc4d9b7238" data-text-hash="9ca7b83afc97aaf3aa073c7c5967ab7c" id="76" refid="76">
+<p>You can delete a Job any time. Regardless of whether its Pods are still running or not, they&#8217;re deleted in the same way as when you delete a Deployment, StatefulSet, or DaemonSet.</p>
+</div>
+<div class="readable-text" data-hash="ed057a1800b37dda5812b2bd758c5c6e" data-text-hash="472b84116234dc2dfb7bf3e0ca9532f5" id="77" refid="77">
+<p>You don&#8217;t need the <code>quiz-init</code> Job anymore, so delete it as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8c1d855a2210b8279de8ac3168585658" data-text-hash="2e33b6909e038b10b138689aa2ad6512" id="78" refid="78">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete job quiz-init
+job.batch "quiz-init" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f9e4925ed8c858d17d2429a85272dda2" data-text-hash="8d436acb605f288cd1b3c5abdf89af5b" id="79" refid="79">
+<p>Confirm that the Pod has also been deleted by listing the Pods as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b34cb6182d9c5a2adcebeb96f42b4901" data-text-hash="a4eb5233bdb3fc1adcb133d4d44c8524" id="80" refid="80">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l job-name=quiz-init
+No resources found in kiada namespace.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="60df2b36f0a5cf16cd71a65b6070e59f" data-text-hash="c1399e42961b2753b4a31685e6a8dab8" id="81" refid="81">
+<p>You may recall that Pods are deleted by the garbage collector because they&#8217;re orphaned when their owner, in this case the Job object named <code>quiz-init</code>, is deleted. If you want to delete only the Job, but keep the Pods, you delete the Job with the <code>--cascade=orphan</code> option. You can try this method with the <code>demo-suspend</code> Job as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="81a15195d068be8328a2d2d8be7cebbf" data-text-hash="8ccb37f1c193c792c761b7be38d27048" id="82" refid="82">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete job demo-suspend --cascade=orphan
+ 
+job.batch "demo-suspend" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4282bb830ba0f53df9f636f25664d950" data-text-hash="3f11b7c109f6a9f279d1181c4e558850" id="83" refid="83">
+<p>If you now list Pods, you&#8217;ll see that the Pod still exists. Since it&#8217;s now a standalone Pod, it&#8217;s up to you to delete it when you no longer need it.</p>
+</div>
+<div class="readable-text" data-hash="07a16c8c1c103ac6f3e13301b31e8a43" data-text-hash="d9fabf02c7d8d1a8a1629737e5a37f38" id="84" refid="84">
+<h4>Automatically deleting Jobs</h4>
+</div>
+<div class="readable-text" data-hash="2c5ef6a6a84242c2c080eecd72e6fc4b" data-text-hash="14cafbeb8ff7cf1eb03c3571f99eddca" id="85" refid="85">
+<p>By default, you must delete Job objects manually. However, you can flag the Job for automatic deletion by setting the <code>ttlSecondsAfterFinished</code> field in the Job&#8217;s <code>spec</code>. As the name implies, this field specifies how long the Job and its Pods are kept after the Job is finished.</p>
+</div>
+<div class="readable-text" data-hash="293d1d82bdd1a1286c34c8cf32e90297" data-text-hash="626ef63aa5c5bda1467f28868876767e" id="86" refid="86">
+<p>To see this setting in action, try creating the Job in the <code>job.demo-ttl.yaml</code> manifest. The Job will run a single Pod that will complete successfully after 20 seconds. Since <code>ttlSecondsAfterFinished</code> is set to <code>10</code>, the Job and its Pod are deleted ten seconds later.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="87" refid="87">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="6fa7f0c934f8cf6687258085018928c0" data-text-hash="3327c1290bb8b0304f4a7ab011db7f04" id="88" refid="88">
+<p> If you set the <code>ttlSecondsAfterFinished</code> field in a Job, the Job and its pods are deleted whether the Job completes successfully or not. If this happens before you can check the logs of the failed Pods, it&#8217;s hard to determine what caused the Job to fail.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="14261758758f20d55eb98fd0cbd2ed48" data-text-hash="0e1950c97bcaabbaecef85355c97bffd" id="89" refid="89">
+<h3 id="sigil_toc_id_306">17.1.2&#160;Running a task multiple times</h3>
+</div>
+<div class="readable-text" data-hash="4ba9f2ec65c9a4933f978d2fadc13bc1" data-text-hash="269cbfbbc2f24168fbf2beabfb2d5166" id="90" refid="90">
+<p>In the previous section, you learned how to execute a task once. However, you can also configure the Job to execute the same task several times, either in parallel or sequentially. This may be necessary because the container running the task can only process a single item, so you need to run the container multiple times to process the entire input, or you may simply want to run the processing on multiple cluster nodes to improve performance.</p>
+</div>
+<div class="readable-text" data-hash="afe1c9a862dd69775bcc93bbcc80641f" data-text-hash="a0c498d8e709adb973f13cc06a85448c" id="91" refid="91">
+<p>You&#8217;ll now create a Job that inserts fake responses into the Quiz database, simulating a large number of users. Instead of having only one Pod that inserts data into the database, as in the previous example, you&#8217;ll configure the Job to create five such Pods. However, instead of running all five Pods simultaneously, you&#8217;ll configure the Job to run at most two Pods at a time. The following listing shows the Job manifest. You can find it in the file <code>job.generate-responses.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6e3c12194e40198d38097e25eec4eab7" data-text-hash="10ea6c20c82d3c9dd0099730373a4719" id="92" refid="92">
+<h5>Listing 17.3 A Job for running a task multiple times</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1    #A
+kind: Job    #A
+metadata:    #A
+  name: generate-responses    #A
+  labels:
+    app: quiz
+spec:
+  completions: 5    #B
+  parallelism: 2    #C
+  template:
+    metadata:
+      labels:
+        app: quiz
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: mongo
+        image: mongo:5
+        command:
+        ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCBkZXNjcmliZXMgdGhlIGdlbmVyYXRlLXJlc3BvbnNlcyBKb2IuCiNCIFRoaXMgSm9iIHJ1bnMgNSB0aW1lcy4KI0MgVGhpcyBKb2IgcnVucyB1cCB0byB0d28gUG9kcyBpbiBwYXJhbGxlbC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6def847025f905840c8f685913f1d73e" data-text-hash="b5209d8957308eccf94033a15d985df5" id="93" refid="93">
+<p>In addition to the Pod template, the Job manifest in the listing defines two new properties, <code>completions</code> and <code>parallelism</code>., which are explained next.</p>
+</div>
+<div class="readable-text" data-hash="2f2e7f66d19fc03abf13be705b4c4152" data-text-hash="2ae447551f8713e5afd7aa273f04c988" id="94" refid="94">
+<h4>Understanding Job completions and parallelism</h4>
+</div>
+<div class="readable-text" data-hash="09be11df2831e6383f147107ad4592af" data-text-hash="86b353150754038c55c224153b6d57d2" id="95" refid="95">
+<p>The <code>completions</code> field specifies the number of Pods that must be successfully completed for this Job to be complete. The <code>parallelism</code> field specifies how many of these Pods may run in parallel. There is no upper limit to these values, but your cluster may only be able to run so many Pods in parallel.</p>
+</div>
+<div class="readable-text" data-hash="09e324639dcf24628897ecca33ba166d" data-text-hash="f8425f33d9faddad2dc28d169849de6a" id="96" refid="96">
+<p>You can set neither of these fields, one or the other, or both. If you don&#8217;t set either field, both values are set to one by default. If you set only <code>completions</code>, this is the number of Pods that run one after the other. If you set only <code>parallelism</code>, this is the number of Pods that run, but only one must complete successfully for the Job to be complete.</p>
+</div>
+<div class="readable-text" data-hash="c33e9fac4495217d28658ea3baf700e7" data-text-hash="7f62025beacfe09adf73655381352ea5" id="97" refid="97">
+<p>If you set <code>parallelism</code> higher than <code>completions</code>, the Job controller creates only as many Pods as you specified in the <code>completions</code> field.</p>
+</div>
+<div class="readable-text" data-hash="e3b13ecb859b15e19f55382264919cff" data-text-hash="eab5f8daf03f68de71dd1fea144479db" id="98" refid="98">
+<p>If <code>parallelism</code> is lower than <code>completions</code>, the Job controller runs at most <code>parallelism</code> Pods in parallel but creates additional Pods when those first Pods complete. It keeps creating new Pods until the number of successfully completed Pods matches <code>completions</code>. The following figure shows what happens when <code>completions</code> is 5 and <code>parallelism</code> is 2.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="948dcff47bea1c93c1cff4106956c3f1" data-text-hash="182f14dfb1713e86c2656e57c26e8856" id="99" refid="99">
+<h5>Figure 17.3 Running a parallel Job with completion=5 and parallelism=2</h5>
+<img alt="" border="0" data-processed="true" height="268" id="Picture_1" loading="lazy" src="EPUB/images/17_img_0003.png" width="821">
+</div>
+<div class="readable-text" data-hash="dee3e8b464df25b8cbdd05e9b6679819" data-text-hash="eb7573c6355ec68e1ee3e699384f5a91" id="100" refid="100">
+<p>As shown in the figure, the Job controller first creates two Pods and waits until one of them completes. In the figure, Pod 2 is the first to finish. The controller immediately creates the next Pod (Pod 3), bringing the number of running Pods back to two. The controller repeats this process until five Pods complete successfully.</p>
+</div>
+<div class="readable-text" data-hash="6dd1836e929fdb28d3a1f37ee9b40239" data-text-hash="1957efe7501084839d552430ab0e1c0e" id="101" refid="101">
+<p>The following table explains the behavior for different examples of <code>completions</code> and <code>parallelism</code>.</p>
+</div>
+<div class="browsable-container" data-hash="f1c920c9a1896199756ea19b8e7b445c" data-text-hash="b0bcd4a6599631882e702a640ceab4bb" id="102" refid="102">
+<h5><span xml:lang="EN-US">Table 17.1 Completions and parallelism combinations</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td width="16%">
+<div>
+<p>Completions</p>
+</div> </td>
+<td width="14%">
+<div>
+<p>Parallelism</p>
+</div> </td>
+<td width="70%">
+<div>
+<p>Job behavior</p>
+</div> </td>
+</tr>
+<tr>
+<td width="16%"> <p>Not set</p> </td>
+<td width="14%"> <p>Not set</p> </td>
+<td width="70%"> <p>A single Pod is created. Same as when <code>completions</code> and <code>parallelism</code> is <code>1</code>.</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>1</p> </td>
+<td width="14%"> <p>1</p> </td>
+<td width="70%"> <p>A single Pod is created. If the Pod completes successfully, the Job is complete. If the Pod is deleted before completing, it&#8217;s replaced by a new Pod.</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>2</p> </td>
+<td width="14%"> <p>5</p> </td>
+<td width="70%"> <p>Only three Pods are created. The same as if parallelism was 2.</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>5</p> </td>
+<td width="14%"> <p>2</p> </td>
+<td width="70%"> <p>Two Pods are created initially. When one of them completes, the third Pod is created. There are again two Pods running. When one of the two completes, the fourth Pod is created. There are again two Pods running. When another one completes, the fifth and last Pod is created.</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>5</p> </td>
+<td width="14%"> <p>5</p> </td>
+<td width="70%"> <p>Five Pods run simultaneously. If one of them is deleted before it completes, a replacement is created. The Job is complete when five Pods complete successfully.</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>5</p> </td>
+<td width="14%"> <p>Not set</p> </td>
+<td width="70%"> <p>Five Pods are created sequentially. A new Pod is created only when the previous Pod completes (or fails).</p> </td>
+</tr>
+<tr>
+<td width="16%"> <p>Not set</p> </td>
+<td width="14%"> <p>5</p> </td>
+<td width="70%"> <p>Five Pods are created simultaneously, but only one needs to complete successfully for the Job to complete.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="0c02a1b60daacb9caf0c57d0fe0f60f4" data-text-hash="bcf91d5b2e42d7dba246686dfa1a2d28" id="103" refid="103">
+<p>In the <code>generate-responses</code> Job that you&#8217;re about to create, the number of <code>completions</code> is set to <code>5</code> and <code>parallelism</code> is set to <code>2</code>, so at most two Pods will run in parallel. The Job isn&#8217;t complete until five Pods complete successfully. The total number of Pods may end up being higher if some of the Pods fail. More on this in the next section.</p>
+</div>
+<div class="readable-text" data-hash="d0a7104651cec9cda9366a4338721999" data-text-hash="d77c538bd08fa3dd6bcb04e7bf8f5ed6" id="104" refid="104">
+<h4>Running the Job</h4>
+</div>
+<div class="readable-text" data-hash="073f0aca635fc8b96fb0a0958a7084d0" data-text-hash="78b36bd4e697d4e082feb5ccfcf09732" id="105" refid="105">
+<p>Use <code>kubectl apply</code> to create the Job by applying the manifest file <code>job.generate-responses.yaml</code>. List the Pods while running the Job as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a0d3055e2cee1654b92a0875d9618c02" data-text-hash="f4e62a6721ad9af4262f94ed5c8f97a0" id="106" refid="106">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l job-name=generate-responses
+NAME                       READY   STATUS      RESTARTS      AGE
+generate-responses-7kqw4   1/1     Running     2 (20s ago)   27s   #B
+generate-responses-98mh8   0/1     Completed   0             27s   #A
+generate-responses-tbgns   1/1     Running     0             3s   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBQb2QgaGFzIGFscmVhZHkgY29tcGxldGVkLgojQiBUd28gUG9kcyBhcmUgY3VycmVudGx5IHJ1bm5pbmcu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="88bf498b7e49d56923d8278fb61a6fd7" data-text-hash="b3bfe3ce845c8b60468307b7a8827aff" id="107" refid="107">
+<p>List the Pods several times to observe the number Pods whose <code>STATUS</code> is shown as <code>Running</code> or <code>Completed</code>. As you can see, at any given time, at most two Pods run simultaneously. After some time, the Job completes. You can see this by displaying the Job status with the <code>kubectl get</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d7e964aef486d5886fc69b58d2f3e026" data-text-hash="f60352735b9efb20516c2a8d5abc044d" id="108" refid="108">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get job generate-responses
+NAME                 COMPLETIONS   DURATION  AGE
+generate-responses   5/5           110s      115s    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSXQgdG9vayAxMTAgc2Vjb25kcyB0byBydW4gdGhpcyBKb2IgNSB0aW1lcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2d03586077683646df3a20f696be7736" data-text-hash="f67a6cec822b9deda421eff5c79439cc" id="109" refid="109">
+<p>The <code>COMPLETIONS</code> column shows that this Job completed five out of the desired five times, which took 110 seconds. If you list the Pods again, you should see five completed Pods, as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="149d21603ff4243965ce04b147fe7c2c" data-text-hash="0b0b100c35436938f7a33ba7370a0247" id="110" refid="110">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l job-name=generate-responses
+NAME                       READY   STATUS      RESTARTS   AGE
+generate-responses-5xtlk   0/1     Completed   0          82s   #A
+generate-responses-7kqw4   0/1     Completed   3          2m46s   #B
+generate-responses-98mh8   0/1     Completed   0          2m46s   #A
+generate-responses-tbgns   0/1     Completed   1          2m22s   #C
+generate-responses-vbvq8   0/1     Completed   1          111s   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgUG9kc+KAmSBjb250YWluZXIgdGVybWluYXRlZCBzdWNjZXNzZnVsbHkgdGhlIGZpcnN0IHRpbWUgaXQgcmFuLgojQiBUaGlzIFBvZOKAmXMgY29udGFpbmVyIGZhaWxlZCB0aHJlZSB0aW1lcywgd2FzIHJlc3RhcnRlZCBhZnRlciBlYWNoIGZhaWx1cmUsIGFuZCBldmVudHVhbGx5IHRlcm1pbmF0ZWQgc3VjY2Vzc2Z1bGx5LgojQyBUaGVzZSBQb2Rz4oCZIGNvbnRhaW5lciBmYWlsZWQgb25jZSBidXQgdGVybWluYXRlZCBzdWNjZXNzZnVsbHkgb24gdGhlIHNlY29uZCBhdHRlbXB0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3846c418531bc2938d424c716704319b" data-text-hash="dad501ba0ef6a78bde4c3918eb2fce7a" id="111" refid="111">
+<p>As indicated in the Job status earlier, you should see five <code>Completed</code> Pods. However, if you look closely at the <code>RESTARTS</code> column, you&#8217;ll notice that some of these Pods had to be restarted. The reason for this is that I hard-coded a 25% failure rate into the code running in those Pods. I did this to show what happens when an error occurs.</p>
+</div>
+<div class="readable-text" data-hash="966a452936690c2447ba68794a22a881" data-text-hash="ddba287e3f1d7f337be00d62cbd2f09e" id="112" refid="112">
+<h3 id="sigil_toc_id_307">17.1.3&#160;Understanding how Job failures are handled</h3>
+</div>
+<div class="readable-text" data-hash="b884ed30e120f11bd5ccc90fb609ed27" data-text-hash="dfbc2654f2dbc3bf0386066c7fe195d5" id="113" refid="113">
+<p>As explained earlier, the reason for running tasks through a Job rather than directly through Pods is that Kubernetes ensures that the task is completed even if the individual Pods or their Nodes fail. However, there are two levels at which such failures are handled:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="c5d061f4784da670bc486485bce1f1db" data-text-hash="c5d061f4784da670bc486485bce1f1db" id="114" refid="114">At the Pod level.</li>
+<li class="readable-text" data-hash="38e60cfb8e19e1f2635749b8f0d2bfa6" data-text-hash="38e60cfb8e19e1f2635749b8f0d2bfa6" id="115" refid="115">At the Job level.</li>
+</ul>
+<div class="readable-text" data-hash="b841e50e81f8f1da16d6885da2939e65" data-text-hash="2d5655a1abe71f9265624b076cfb8239" id="116" refid="116">
+<p>When a container in the Pod fails, the Pod&#8217;s <code>restartPolicy</code> determines whether the failure is handled at the Pod level by the Kubelet or at the Job level by the Job controller. As you can see in the following figure, if the <code>restartPolicy</code> is <code>OnFailure</code>, the failed container is restarted within the same Pod. However, if the policy is <code>Never</code>, the entire Pod is marked as failed and the Job controller creates a new Pod.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="3f569e1a76df99739c47c79be60b4062" data-text-hash="be30db5001140f4b7e244d1bf16cf73d" id="117" refid="117">
+<h5>Figure 17.4 How failures are handled depending on the Pod&#8217;s restart policy</h5>
+<img alt="" border="0" data-processed="true" height="540" id="Picture_2" loading="lazy" src="EPUB/images/17_img_0004.png" width="960">
+</div>
+<div class="readable-text" data-hash="1f48f5b3163b8084abb5284a42a35856" data-text-hash="f9e6b0366fdedb10411082a62fbfcea5" id="118" refid="118">
+<p>Let&#8217;s examine the difference between these two scenarios.</p>
+</div>
+<div class="readable-text" data-hash="49cb5c7fcda6de3ad1a7dcb750b9d343" data-text-hash="241135c55745d6716e7a7cdd9cd9acb0" id="119" refid="119">
+<h4>Handling failures at the Pod level</h4>
+</div>
+<div class="readable-text" data-hash="ddaf8fb65377c72dbf90a2e3a681596e" data-text-hash="f83df2560eeeabc0dd0e942006d0faad" id="120" refid="120">
+<p>In the <code>generate-responses</code> Job you created in the previous section, the Pod&#8217;s <code>restartPolicy</code> was set to <code>OnFailure</code>. As discussed earlier, whenever the container is executed, there is a 25% chance that it&#8217;ll fail. In these cases, the container terminates with a non-zero exit code. The Kubelet notices the failure and restarts the container.</p>
+</div>
+<div class="readable-text" data-hash="7c22c301ed0543262900636d1cb85c3b" data-text-hash="4fa3d0494d819c99eebb85c7ab86e300" id="121" refid="121">
+<p>The new container runs in the same Pod on the same Node and therefore allows for a quick turnaround. The container may fail again and get restarted several times but will eventually terminate successfully and the Pod will be marked complete.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="122" refid="122">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f716c741af13b1381725a1b61c41b19d" data-text-hash="fa5f25e7d0676d11660d9fd33cd4580f" id="123" refid="123">
+<p> As you learned in one of the previous chapters, the Kubelet doesn&#8217;t restart the container immediately if it crashes multiple times, but adds a delay after each crash and doubles it after each restart.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="fb82ed8090822c06d50596dbe38be936" data-text-hash="8a924cd4afe49dd4f6d0905d1dc8ee1c" id="124" refid="124">
+<h4>Handling failures at the Job level</h4>
+</div>
+<div class="readable-text" data-hash="95132c6ddd419eed1ace2744719aee45" data-text-hash="ad55733eba7323afec206171baf31c25" id="125" refid="125">
+<p>When the Pod template in a Job manifest sets the Pod&#8217;s <code>restartPolicy</code> to <code>Never</code>, the Kubelet doesn&#8217;t restart its containers. Instead, the entire Pod is marked as failed and the Job controller must create a new Pod. This new Pod might be scheduled on a different Node.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="126" refid="126">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="387e7ec79b8be1adeb403da5499a44c0" data-text-hash="17f8921d455bb42e76b2531f43f48071" id="127" refid="127">
+<p> If the Pod is scheduled to run on a different Node, the container images may need to be downloaded before the container can run.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8754b5ab3d9309256c83835ebfe9750b" data-text-hash="587f166776e302c6bc32d45d031ed38a" id="128" refid="128">
+<p>If you want to see the Job controller handle the failures in the <code>generate-responses</code> Job, delete the existing Job and recreate it from the manifest file <code>job.generate-responses.restartPolicyNever.yaml</code>. In this manifest, the Pod&#8217;s <code>restartPolicy</code> is set to <code>Never</code>.</p>
+</div>
+<div class="readable-text" data-hash="dd4d4962f7076e1a76120253091c2077" data-text-hash="8cb3dd1fa9bc989eafba521aacfc9628" id="129" refid="129">
+<p>The Job completes in about a minute or two. If you list the Pods as follows, you&#8217;ll notice that it has now taken more than five Pods to get the job done.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="13381d83918b460b6fa6f079875f8073" data-text-hash="f69bccad75afe0b25ec55da867d53b4d" id="130" refid="130">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l job-name=generate-responses
+NAME                       READY   STATUS      RESTARTS   AGE
+generate-responses-2dbrn   0/1     Error       0          2m43s    #A
+generate-responses-4pckt   0/1     Error       0          2m39s    #A
+generate-responses-8c8wz   0/1     Completed   0          2m43s    #B
+generate-responses-bnm4t   0/1     Completed   0          3m10s    #B
+generate-responses-kn55w   0/1     Completed   0          2m16s    #B
+generate-responses-t2r67   0/1     Completed   0          3m10s    #B
+generate-responses-xpbnr   0/1     Completed   0          2m34s    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVHdvIFBvZHMgZmFpbGVkLiBUaGVpciBjb250YWluZXIgd2FzbuKAmXQgcmVzdGFydGVkIGR1ZSB0byB0aGUgcmVzdGFydFBvbGljeS4KI0IgRml2ZSBQb2RzIGNvbXBsZXRlZCBzdWNjZXNzZnVsbHku"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dca21aa35f8a29561a04d1ce02284bfd" data-text-hash="7e68c473aee3fa3db716204db180a1d9" id="131" refid="131">
+<p>You should see five <code>Completed</code> Pods and a few Pods whose status is <code>Error</code>. The number of those Pods should match the number of successful and failed Pods when you inspect the Job object using the <code>kubectl describe job</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6a4a01105d90ae191be5d45c03b15109" data-text-hash="5fd6ed115c9a330c2a6cedff234a9e1c" id="132" refid="132">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe job generate-responses
+...
+Pods Statuses:    0 Active / 5 Succeeded / 2 Failed
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="133" refid="133">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="20f96e8bb7af0001f6ee6a17cb95a48f" data-text-hash="f705173467f18a742004ce73406cf8e0" id="134" refid="134">
+<p> It&#8217;s possible that the number of Pods is different in your case. It&#8217;s also possible that the Job isn&#8217;t completed. This is explained in the next section.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="692d54f38a81afd17984833e85a29d67" data-text-hash="8f1a02a3523dfa237bc4f3e91ff20563" id="135" refid="135">
+<p>To conclude this section, delete the <code>generate-responses</code> Job.</p>
+</div>
+<div class="readable-text" data-hash="c73f0a5037701690467ad7506e6809e2" data-text-hash="3ff7d90f0a4e870b4c15db3660974aa5" id="136" refid="136">
+<h4>Preventing Jobs from failing indefinitely</h4>
+</div>
+<div class="readable-text" data-hash="b8dab096bf35816b6f816e4712cfa069" data-text-hash="b7d251777f98704294d2af3c70279c77" id="137" refid="137">
+<p>The two Jobs you created in the previous sections may not have completed because they failed too many times. When that happens, the Job controller gives up. Let&#8217;s demonstrate this by creating a Job that always fails. You can find the manifest in the file <code>job.demo-always-fails.yaml</code>. Its contents are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="445a589522b9581717fabe6145b37b8e" data-text-hash="a15142c9f3ce744dcb14bfe762883e9e" id="138" refid="138">
+<h5>Listing 17.4 A Job that always fails</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-always-fails
+spec:
+  completions: 10
+  parallelism: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: demo
+        image: busybox
+        command:
+        - 'false'    #A </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb21tYW5kIHRlcm1pbmF0ZXMgd2l0aCBhIG5vbi16ZXJvIGV4aXQgY29kZSwgY2F1c2luZyB0aGUgY29udGFpbmVyIHRvIGJlIHRyZWF0ZWQgYXMgZmFpbGVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a1d9a022b17f378c0862fb8a3a002a93" data-text-hash="add20ef1cd7da03f2bdf0cd8e1adf35f" id="139" refid="139">
+<p>When you create the Job in this manifest, the Job controller creates three Pods. The container in these Pods terminates with a non-zero exit code, which causes the Kubelet to restart it. After a few restarts, the Job controller notices that these Pods are failing, so it deletes them and marks the Job as failed.</p>
+</div>
+<div class="readable-text" data-hash="e64441bd2675ed1aff8af1bb03caad43" data-text-hash="161e9d108d25e2ef0da4241ce9887600" id="140" refid="140">
+<p>Unfortunately, you won&#8217;t see that the controller has given up if you simply check the Job status with <code>kubectl get job</code>. When you run this command, you only see the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3a5f64ec8b1539f4df0f8a76bc7abe1a" data-text-hash="3f4389e17d6053e0f72159b87fefbc8c" id="141" refid="141">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get job
+NAME                COMPLETIONS   DURATION   AGE
+demo-always-fails   0/10          2m48s      2m48s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fb71a659244f9d2579cb2c0aaa596029" data-text-hash="f6e91aa71e732be2db73e47dbd9ef739" id="142" refid="142">
+<p>The output of the command indicates that the Job has zero completions, but it doesn&#8217;t indicate whether the controller is still trying to complete the Job or has given up. You can, however, see this in the events associated with the Job. To see the events, run <code>kubectl describe</code> as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6db8e65aa467b4e0f4e2bb7d91a2587c" data-text-hash="efe8570997bcd2648efdbfca72c30d96" id="143" refid="143">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe job demo-always-fails
+...
+Events:
+Type     Reason                Age    From            Message
+----     ------                ----   ----            -------
+Normal   SuccessfulCreate      5m6s   job-controller  Created pod: demo-always-fails-t9xkw
+Normal   SuccessfulCreate      5m6s   job-controller  Created pod: demo-always-fails-6kcb2
+Normal   SuccessfulCreate      5m6s   job-controller  Created pod: demo-always-fails-4nfmd
+Normal   SuccessfulDelete      4m43s  job-controller  Deleted pod: demo-always-fails-4nfmd
+Normal   SuccessfulDelete      4m43s  job-controller  Deleted pod: demo-always-fails-6kcb2
+Normal   SuccessfulDelete      4m43s  job-controller  Deleted pod: demo-always-fails-t9xkw
+Warning  BackoffLimitExceeded  4m43s  job-controller  Job has reached the specified backoff 
+                                                      limit</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0c8ff8d96da97f8ea53b3051b94a4123" data-text-hash="2a327facb9030e18d8c467d6be312dd0" id="144" refid="144">
+<p>The <code>Warning</code> event at the bottom indicates that the backoff limit of the Job has been reached, which means that the Job has failed. You can confirm this by checking the Job status as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="80a6de3b14f39ffa833e440bbd7cb1b9" data-text-hash="f7d05a1b3b677169f7be5360de66d462" id="145" refid="145">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get job demo-always-fails -o yaml
+...
+status:
+  conditions:
+  - lastProbeTime: "2022-10-02T15:42:39Z"
+    lastTransitionTime: "2022-10-02T15:42:39Z"
+    message: Job has reached the specified backoff limit   #A
+    reason: BackoffLimitExceeded    #A
+    status: "True"   #B
+    type: Failed   #B
+  failed: 3
+  startTime: "2022-10-02T15:42:16Z"
+  uncountedTerminatedPods: {}</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHJlYXNvbiB3aHkgdGhlIEpvYiBoYXMgZmFpbGVkLgojQiBUaGUgc3RhdHVzIG9mIHRoZSBKb2LigJlzIEZhaWxlZCBjb25kaXRpb24gaXMgVHJ1ZSwgaW5kaWNhdGluZyB0aGF0IHRoZSBKb2IgaGFzIGZhaWxlZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7f00a2f6f69e3f13ba8691962ac00960" data-text-hash="2381748308b60cdbfd41c3d092b01e32" id="146" refid="146">
+<p>It&#8217;s almost impossible to see this, but the Job ended after 6 retries, which is the default backoff limit. You can set this limit for each Job in the <code>spec.backoffLimit</code> field in its manifest.</p>
+</div>
+<div class="readable-text" data-hash="0071d6a6e0c636e52a7507b5c795e933" data-text-hash="b3ebc1199f0878b4a8f40c5959470800" id="147" refid="147">
+<p>Once a Job exceeds this limit, the Job controller deletes all running Pods and no longer creates new Pods for it. To restart a failed Job, you must delete and recreate it.</p>
+</div>
+<div class="readable-text" data-hash="cffad969900d7751d9890559898f99a2" data-text-hash="00285c662e82bb70b78f29a75780688d" id="148" refid="148">
+<h4>Limiting the time allowed for a Job to complete</h4>
+</div>
+<div class="readable-text" data-hash="673eb8937b60a49fd9f7d9c2d7c81038" data-text-hash="dfafd8a76fce82b048c3733ee9ea2247" id="149" refid="149">
+<p>Another way a Job can fail is if it doesn&#8217;t finish on time. By default, this time isn&#8217;t limited, but you can set the maximum time using the <code>activeDeadlineSeconds</code> field in the Job&#8217;s <code>spec</code>, as shown in the following listing (see the manifest file <code>job.demo-deadline.yaml</code>):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0959f984f6d2b538d0fca2542ac4e7ec" data-text-hash="3c72af14987c15f6101c785904b0e414" id="150" refid="150">
+<h5>Listing 17.5 A Job with a time limit</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-deadline
+spec:
+  completions: 2    #A
+  parallelism: 1    #B
+  activeDeadlineSeconds: 90    #C
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: demo-suspend
+        image: busybox
+        command:
+        - sleep   #D
+        - "60"   #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBKb2IgbXVzdCBjb21wbGV0ZSB0d2ljZS4KI0IgVGhpcyBKb2LigJlzIFBvZHMgcnVuIHNlcXVlbnRpYWxseS4KI0MgVGhlIEpvYiBtdXN0IGNvbXBsZXRlIGluIDkwIHNlY29uZHMuCiNEIEVhY2ggUG9kIGNvbXBsZXRlcyBhZnRlciA2MCBzZWNvbmRzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6aedc7ae4c184ce17aae501b85667900" data-text-hash="5acb4381f64acd13954498e3384ac29c" id="151" refid="151">
+<p>From the <code>completions</code> field shown in the listing, you can see that the Job requires two completions to be completed. Since <code>parallelism</code> is set to <code>1</code>, the two Pods run one after the other. Given the sequential execution of these two Pods and the fact that each Pod needs 60 seconds to complete, the execution of the entire Job takes just over 120 seconds. However, since <code>activeDeadlineSeconds</code> for this Job is set to <code>90</code>, the Job can&#8217;t be successful. The following figure illustrates this scenario.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="62ee93c60a19fa0dd996860615ab8a9b" data-text-hash="208f15750e246a35b1719f8694d405ee" id="152" refid="152">
+<h5>Figure 17.5 Setting a time limit for a Job</h5>
+<img alt="" border="0" data-processed="true" height="242" id="Picture_8" loading="lazy" src="EPUB/images/17_img_0005.png" width="805">
+</div>
+<div class="readable-text" data-hash="18890a9f3455d1c298e0e97611a71b95" data-text-hash="77efacfea50ffc84a5c0a29e01b0ae1d" id="153" refid="153">
+<p>To see this for yourself, create this Job by applying the manifest and wait for it to fail. When it does, the following Event is generated by the Job controller:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="93d6217b6816588909ab008f06276908" data-text-hash="4bbaa51d72e9f5817b20e6feadeee177" id="154" refid="154">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe job demo-deadline
+...
+Events:
+  Type     Reason            Age   From            Message
+  ----     ------            ----  ----            -------
+  Warning  DeadlineExceeded  1m    job-controller  Job was active longer than specified 
+                                                   deadline</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="155" refid="155">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ae5d5f9c620ea13b338c54ffb7f89c16" data-text-hash="b7e5bd6acc8ea78d64a2d561fac8929c" id="156" refid="156">
+<p> Remember that the <code>activeDeadlineSeconds</code> in a Job applies to the Job as a whole, not to the individual Pods created in the context of that Job.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="fd77c20d627f0638dea0ded02b40ef67" data-text-hash="439fe92698d787b4e0f1455e3d2f4d14" id="157" refid="157">
+<h3 id="sigil_toc_id_308">17.1.4&#160;Parameterizing Pods in a Job</h3>
+</div>
+<div class="readable-text" data-hash="5e215888cd22dd6b0a018f6b9c38e55f" data-text-hash="5539529fc2029c3983d7e36b1a61c0b8" id="158" refid="158">
+<p>Until now, the tasks you performed in each Job were identical to each other. For example, the Pods in the generate-responses Job all did the same thing: they inserted a series of responses into the database. But what if you want to run a series of related tasks that aren&#8217;t identical? Maybe you want each Pod to process only a subset of the data? That&#8217;s where the Job&#8217;s <code>completionMode</code> field comes in.</p>
+</div>
+<div class="readable-text" data-hash="54f92b01f1694be74f27148abfb140e3" data-text-hash="b67222242d27edee08c9c986d3c5cd5a" id="159" refid="159">
+<p>At the time of writing, two completion modes are supported: <code>Indexed</code> and <code>NonIndexed</code>. The Jobs you created so far in this chapter were <code>NonIndexed</code>, as this is the default mode. All Pods created by such a Job are indistinguishable from each other. However, if you set the Job&#8217;s <code>completionMode</code> to <code>Indexed</code>, each Pod is given an index number that you can use to distinguish the Pods. This allows each Pod to perform only a portion of the entire task. See the following table for a comparison between the two completion modes.</p>
+</div>
+<div class="browsable-container" data-hash="bec327b13f9d5fc4cbd8499cf0936b77" data-text-hash="185667784df776016029d2c3c0f256ad" id="160" refid="160">
+<h5><span xml:lang="EN-US">Table 17.2 Supported Job completion modes</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td width="12%">
+<div>
+<p>Value</p>
+</div> </td>
+<td width="88%">
+<div>
+<p>Description</p>
+</div> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>NonIndexed
+</pre> </td>
+<td width="88%"> <p>The Job is considered complete when the number of successfully completed Pods created by this Job equals the value of the <code>spec.completions</code> field in the Job manifest. All Pods are equal to each other. This is the default mode.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>Indexed
+</pre> </td>
+<td width="88%"> <p>Each Pod is given a completion index (starting at <code>0</code>) to distinguish the Pods from each other. The Job is considered complete when there is one successfully completed Pod for each index. If a Pod with a particular index fails, the Job controller creates a new Pod with the same index.</p> <p>The completion index assigned to each Pod is specified in the Pod annotation <code>batch.kubernetes.io/job-completion-index</code> and in the <code>JOB_COMPLETION_INDEX</code> environment variable in the Pod&#8217;s containers.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="161" refid="161">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d1245e882cb71ec03e9ff10a4492b3a0" data-text-hash="14811f01611c4dc8a78f5e915813283f" id="162" refid="162">
+<p> In the future, Kubernetes may support additional modes for Job processing, either through the built-in Job controller or through additional controllers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a6ee85334025e233ae3371b191ccc84f" data-text-hash="679d2b548344da1d1675773424904b1e" id="163" refid="163">
+<p>To better understand these completion modes, you&#8217;ll create a Job that reads the responses in the Quiz database, calculates the number of valid and invalid responses for each day, and stores those results back in the database. You&#8217;ll do this in two ways, using both completion modes so you understand the difference.</p>
+</div>
+<div class="readable-text" data-hash="74a85c77b10268431eb28d5f687bb945" data-text-hash="2accfdb5e945470f4a758f241fcc3bf3" id="164" refid="164">
+<h4>Implementing the aggregation script</h4>
+</div>
+<div class="readable-text" data-hash="c4c34011fa826bebbe82315031b09eb3" data-text-hash="fd7b9cc1f8e71379b80a3c7801d50808" id="165" refid="165">
+<p>As you can imagine, the Quiz database can get very large if many users are using the application. Therefore, you don&#8217;t want a single Pod to process all the responses, but rather you want each Pod to process only a specific month.</p>
+</div>
+<div class="readable-text" data-hash="f16cd4545554f0a2015ef312e164d033" data-text-hash="5036664200728d1305732c2b25f0819f" id="166" refid="166">
+<p>I&#8217;ve prepared a script that does this. The Pods will obtain this script from a ConfigMap. You can find its manifest in the file <code>cm.aggregate-responses.yaml</code>. The actual code is unimportant, but what is important is that it accepts two parameters: the <i>year</i> and <i>month</i> to process. The code reads these parameters via the environment variables <code>YEAR</code> and <code>MONTH</code>, as you can see in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c59ef398a101f578d88353b9cc25da1c" data-text-hash="c32df4111a8b742bd4e23ba6890fbd3d" id="167" refid="167">
+<h5>Listing 17.6 The ConfigMap with the MongoDB script for processing Quiz responses</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: ConfigMap    
+metadata:
+  name: aggregate-responses
+  labels:
+    app: aggregate-responses
+data:
+  script.js: |
+    var year = parseInt(process.env["YEAR"]);    #A
+    var month = parseInt(process.env["MONTH"]);    #A
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHNjcmlwdCByZWFkcyB0aGUgeWVhciBhbmQgbW9udGggZnJvbSBlbnZpcm9ubWVudCB2YXJpYWJsZXMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e3038f87c3946ca744e4942d2c33aecd" data-text-hash="ee07b74cee205870ae8b1de09fe49423" id="168" refid="168">
+<p>Apply this ConfigMap manifest to your cluster with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="23d28305dc1c4c62a6e4678dea027060" data-text-hash="7df4b73ccf0db61e0c891beeff13eb6f" id="169" refid="169">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f cm.aggregate-responses.yaml 
+configmap/aggregate-responses created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="45c2113c09e44a4b627badbd0d46378c" data-text-hash="7888bc73a2972d18eab0b2b446e0eebf" id="170" refid="170">
+<p>Now imagine you want to calculate the totals for each month of 2020. Since the script only processes a single month, you need 12 Pods to process the whole year. How should you create the Job to generate these Pods, since you need to pass a different month to each Pod?</p>
+</div>
+<div class="readable-text" data-hash="bf590a8b3a123636d8fd03e1c84ad613" data-text-hash="4e8432d98109adb5d1029ff28000dbad" id="171" refid="171">
+<h4>The NonIndexed completion mode</h4>
+</div>
+<div class="readable-text" data-hash="e97b005b691bc54f401b4aade9205f57" data-text-hash="999a472e65ac90b6f1b881e1e42c661b" id="172" refid="172">
+<p>Before <code>completionMode</code> support was added to the Job resource, all Jobs operated in the so called <code>NonIndexed</code> mode. The problem with this mode is that all generated Pods are identical.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="91f8c3674679557e226745fc053f9ade" data-text-hash="666756ccc7467b72d5ddbdf7edf94a33" id="173" refid="173">
+<h5>Figure 17.6 Jobs using the NonIndexed completionMode spawn identical Pods</h5>
+<img alt="" border="0" data-processed="true" height="135" id="Picture_9" loading="lazy" src="EPUB/images/17_img_0006.png" width="805">
+</div>
+<div class="readable-text" data-hash="52fe70060fa67cda061c02c984f23b8d" data-text-hash="322f52885ed4bb25d31c5624053cacec" id="174" refid="174">
+<p>So, if you use this completion mode, you can&#8217;t pass a different <code>MONTH</code> value to each Pod. You must create a separate Job object for each month. This way, each Job can set the MONTH environment variable in the Pod template to a different value, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="52dc887531e80007b2fbd026903cd216" data-text-hash="50815f37b0dd97833c9596dc16668a43" id="175" refid="175">
+<h5>Figure 17.7 Creating similar Jobs from a template</h5>
+<img alt="" border="0" data-processed="true" height="404" id="Picture_11" loading="lazy" src="EPUB/images/17_img_0007.png" width="781">
+</div>
+<div class="readable-text" data-hash="263171fc2b5b2dedb36a8050d7ef8900" data-text-hash="c4b19ae8e95ad90c8bd17ef09d7d4b9f" id="176" refid="176">
+<p>To create these different Jobs, you need to create separate Job manifests. You can do this manually or using an external templating system. Kubernetes itself doesn&#8217;t provide any functionality for creating Jobs from templates.</p>
+</div>
+<div class="readable-text" data-hash="56ceb889a46b8a380d9fba553d3930a6" data-text-hash="2809e7d2bd66225aed36121bb875b530" id="177" refid="177">
+<p>Let&#8217;s return to our example with the <code>aggregate-responses</code> Job. To process the entire year 2020, you need to create twelve Job manifests. You could use a full-blown template engine for this, but you can also do it with a relatively simple shell command.</p>
+</div>
+<div class="readable-text" data-hash="c9517394291118d60927ad30b4ed38f9" data-text-hash="9ba66c5b7fd3a30597a904d936e38219" id="178" refid="178">
+<p>First you must create the template. You can find it in the file <code>job.aggregate-responses-2020.tmpl.yaml</code>. The following listing shows how it looks.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f2d4a6f0c09d04d7d805ae5fd479950b" data-text-hash="d8bf8d7aec92ef79acecd68c4ea17001" id="179" refid="179">
+<h5>Listing 17.7 A template for creating Job manifests for the aggregate-responses Job</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aggregate-responses-2020-__MONTH__    #A
+spec:
+  completionMode: NonIndexed
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: updater
+        image: mongo:5
+        env:
+        - name: YEAR
+          value: "2020"
+        - name: MONTH
+          value: "__MONTH__"    #B
+        ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgY29udGFpbnMgdGhlIHBsYWNlaG9sZGVyIOKAnF9fTU9OVEhfX+KAnS4gV2hlbiB0aGlzIHRlbXBsYXRlIGlzIHJlbmRlcmVkLCB0aGUgcGxhY2Vob2xkZXIgaXMgcmVwbGFjZWQgd2l0aCB0aGUgYWN0dWFsIG1vbnRoIG51bWJlci4KI0IgVGhlIHNhbWUgcGxhY2Vob2xkZXIgaXMgdXNlZCBpbiB0aGUgTU9OVEggZW52aXJvbm1lbnQgdmFyaWFibGUgdGhhdCBpcyBwYXNzZWQgdG8gdGhlIGNvbnRhaW5lci4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="867f4177d2575bb3abb8def83de9b5c1" data-text-hash="d4ba4d4d93683ad67e4ad03149546a12" id="180" refid="180">
+<p>If you use Bash, you can create the manifests from this template and apply them directly to the cluster with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bce30a54e9ddf89d34d18036d62202a2" data-text-hash="656b19cade7166c951166020149e9c0f" id="181" refid="181">
+<div class="code-area-container">
+<pre class="code-area">$ for month in {1..12}; do \    #A
+    sed -e "s/__MONTH__/$month/g" job.aggregate-responses-2020.tmpl.yaml \    #B
+    | kubectl apply -f - ; \    #C
+  done
+job.batch/aggregate-responses-2020-1 created    #D
+job.batch/aggregate-responses-2020-2 created    #D
+...    #D
+job.batch/aggregate-responses-2020-12 created    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRXhlY3V0ZSBhIGxvb3AgdG8gcmVwZWF0IHRoZSBmb2xsb3dpbmcgY29tbWFuZCB0d2VsdmUgdGltZXMuCiNCIFJlbmRlciB0aGUgdGVtcGxhdGUgYnkgcmVwbGFjaW5nIHRoZSBwbGFjZWhvbGRlciBfX01PTlRIX18gd2l0aCB0aGUgbW9udGggbnVtYmVyLgojQyBBcHBseSB0aGUgcmVuZGVyZWQgWUFNTCBmaWxlIHRvIHRoZSBjbHVzdGVyLgojRCBUaGUgb3V0cHV0IG9mIHRoZSBjb21tYW5kIHNob3dzIHRoYXQgdHdlbHZlIGRpZmZlcmVudCBKb2Igb2JqZWN0cyBoYXZlIGJlZW4gY3JlYXRlZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="44d7fba38371b81351b30c10a6caa515" data-text-hash="432a0fb685d039ed0c000c21a287764e" id="182" refid="182">
+<p>This command uses a for loop to render the template twelve times. Rendering the template simply means replacing the string <code>__MONTH__</code> in the template with the actual month number. The resulting manifest is applied to the cluster using <code>kubectl apply</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="183" refid="183">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8e04aaf762e589d84cbf406379ee8065" data-text-hash="2d867f58054605287a298fab99c7abd4" id="184" refid="184">
+<p> If you want to run this example but don&#8217;t use Linux, you can use the manifests I created for you. Use the following command to apply them to your cluster: <code>kubectl apply -f job.aggregate-responses-2020.generated.yaml</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2c51117e2c9fae934e0f1f896f01d4db" data-text-hash="526c399f4bc02aa2ae23b3604f6286e3" id="185" refid="185">
+<p>The twelve Jobs you just created are now running in your cluster. Each Job creates a single Pod that processes a specific month. To see the generated statistics, use the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2dbcc61da2686721252e14e658181ad7" data-text-hash="80dbbeb5ca1556e5ee5606d18e3019f9" id="186" refid="186">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec quiz-0 -c mongo -- mongosh kiada --quiet --eval 'db.statistics.find()'
+[
+  {    #A
+    _id: ISODate("2020-02-28T00:00:00.000Z"),    #A
+    totalCount: 120,    #A
+    correctCount: 25,    #A
+    incorrectCount: 95    #A
+  },    #A
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgT24gRmVicnVhcnkgMjgsIDIwMjAgdGhlcmUgd2VyZSBhIHRvdGFsIG9mIDEyMCByZXNwb25zZXMsIHdpdGggMjUgY29ycmVjdCBhbmQgOTUgaW5jb3JyZWN0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2569a04caa63d30b927abfa3e8ee2e72" data-text-hash="83247d2429f7bd35a9bc201a75bd77cb" id="187" refid="187">
+<p>If all twelve Jobs processed their respective months, you should see many entries like the one shown here. You can now delete all twelve <code>aggregate-responses</code> Jobs as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="da07d3065d2f25a8a3f0e2befbd5ac81" data-text-hash="0f33f1d8ee523d6d2dfc1097b87095fe" id="188" refid="188">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete jobs -l app=aggregate-responses</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cdbed8606dd224c28adb1be83be04391" data-text-hash="66d5f5fd1a158c19e7614efe086b20a9" id="189" refid="189">
+<p>In this example, the parameter passed to each Job was a simple integer, but the real advantage of this approach is that you can pass any value or set of values to each Job and its Pod. The disadvantage, of course, is that you end up with more than one Job, which means more work compared to managing a single Job object. And if you create those Job objects at the same time, they will all run at the same time. That&#8217;s why creating a single Job using the <code>Indexed</code> completion mode is the better option, as you&#8217;ll see next.</p>
+</div>
+<div class="readable-text" data-hash="75b25a362f6db89b7dfd8113794972da" data-text-hash="d63273ca7dece133ce2b44bfdfa0242b" id="190" refid="190">
+<h4>Introducing the Indexed completion mode</h4>
+</div>
+<div class="readable-text" data-hash="22839021b8d7d67ca112e90417ab3e59" data-text-hash="5069b54688fe9229656b7f25e4719000" id="191" refid="191">
+<p>As mentioned earlier, when a Job is configured with the <code>Indexed</code> completion mode, each Pod is assigned a completion index (starting at <code>0</code>) that distinguishes the Pod from the other Pods in the same Job, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="8e4eae707b8e515c880575b7cef5aa6f" data-text-hash="ce463672f26a35392757c4d44b6cd73c" id="192" refid="192">
+<h5>Figure 17.8 Pods spawned by a Job with the Indexed completion mode each get their own index number</h5>
+<img alt="" border="0" data-processed="true" height="263" id="Picture_10" loading="lazy" src="EPUB/images/17_img_0008.png" width="682">
+</div>
+<div class="readable-text" data-hash="472d4baca7112f28cc72ba89fdbaa517" data-text-hash="4769db60fb830263fb610f1295d7d434" id="193" refid="193">
+<p>The number of Pods is determined by the <code>completions</code> field in the Job&#8217;s <code>spec</code>. The Job is considered completed when there is one successfully completed Pod for each index.</p>
+</div>
+<div class="readable-text" data-hash="37bd67122002a14f3814f2b0cbea5f4e" data-text-hash="1884227ba398a643f47fa26331d328e4" id="194" refid="194">
+<p>The following listing shows a Job manifest that uses the <code>Indexed</code> completion mode to run twelve Pods, one for each month. Note that the <code>MONTH</code> environment variable isn&#8217;t set. This is because the script, as you&#8217;ll see later, uses the completion index to determine the month to process.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="40a3ef8f894aa6287ba96ab4698bd52b" data-text-hash="1544c5e4512cbb76ceaac0356cc23c18" id="195" refid="195">
+<h5>Listing 17.8 A Job manifest using the Indexed completionMode</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aggregate-responses-2021
+  labels:
+    app: aggregate-responses
+    year: "2021"
+spec:
+  completionMode: Indexed    #A
+  completions: 12    #B
+  parallelism: 3    #C
+  template:
+    metadata:
+      labels:
+        app: aggregate-responses
+        year: "2021"
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: updater
+        image: mongo:5
+        env:
+        - name: YEAR    #D
+          value: "2021"    #D
+        command:
+        - mongosh
+        - mongodb+srv://quiz-pods.kiada.svc.cluster.local/kiada?tls=false
+        - --quiet
+        - --file
+        - /script.js
+        volumeMounts:
+        - name: script
+          subPath: script.js
+          mountPath: /script.js
+      volumes:
+      - name: script
+        configMap:    #E
+          name: aggregate-responses-indexed    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQmVjYXVzZSB0aGUgY29tcGxldGlvbiBtb2RlIGlzIEluZGV4ZWQsIGVhY2ggUG9kIGNyZWF0ZWQgZm9yIHRoaXMgSm9iIGlzIGFzc2lnbmVkIGFuIGluZGV4IG51bWJlciwgZGlmZmVyZW50aWF0aW5nIGl0IGZyb20gdGhlIG90aGVyIFBvZHMuCiNCIFNldCB0aGUgbnVtYmVyIG9mIGNvbXBsZXRpb25zIHRvIHByb2Nlc3MgYWxsIHR3ZWx2ZSBtb250aHMuCiNDIEFsbG93IHVwIHRvIHRocmVlIFBvZHMgdG8gcnVuIGluIHBhcmFsbGVsLgojRCBPbmx5IHRoZSBZRUFSIGVudmlyb25tZW50IHZhcmlhYmxlIGlzIHNldCBpbiB0aGUgUG9kIHRlbXBsYXRlLiBUaGUgbW9udGggaXMgcGFzc2VkIGluIHRocm91Z2ggb3RoZXIgbWVhbnMuIFRoaXMgaXMgZXhwbGFpbmVkIGxhdGVyIGluIHRoaXMgc2VjdGlvbi4KI0UgVGhlIHNjcmlwdCB0aGF0IGFnZ3JlZ2F0ZXMgdGhlIHJlc3BvbnNlcyBpcyBsb2FkZWQgZnJvbSB0aGUgYWdncmVnYXRlLXJlc3BvbnNlcy1pbmRleGVkIENvbmZpZ01hcCBhbmQgaXMgc2xpZ2h0bHkgZGlmZmVyZW50IGZyb20gdGhlIHByZXZpb3VzIGV4YW1wbGUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c1e5c4316fa375162e36d5a7333fe348" data-text-hash="7bf86c4dd11b7005b55d1da226628a5f" id="196" refid="196">
+<p>In the listing, the <code>completionMode</code> is <code>Indexed</code> and the number of <code>completions</code> is <code>12</code>, as you might expect. To run three Pods in parallel, <code>parallelism</code> is set to <code>3</code>.</p>
+</div>
+<div class="readable-text" data-hash="e2107b4d9b484c74e9bb75b2db6e109f" data-text-hash="b3c210ffb91da2b8b1e77b64cd09af36" id="197" refid="197">
+<h4>The JOB_COMPLETION_INDEX environment variable</h4>
+</div>
+<div class="readable-text" data-hash="2e6412fedffd807c19709df003ac1760" data-text-hash="b61a3831e5a1b89001171b571d5b2694" id="198" refid="198">
+<p>Unlike in the <code>aggregate-responses-2020</code> example, in which you passed in both the <code>YEAR</code> and <code>MONTH</code> environment variables, here you pass in only the <code>YEAR</code> variable. To determine which month the Pod should process, the script looks up the environment variable <code>JOB_COMPLETION_INDEX</code>, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="94b393fad21e26286779b9e6e58c77a9" data-text-hash="d05218af16ee43f14e5d0f779295478b" id="199" refid="199">
+<h5>Listing 17.9 Using the JOB_COMPLETION_INDEX environment variable in your code</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aggregate-responses-indexed
+  labels:
+    app: aggregate-responses-indexed
+data:
+  script.js: |
+    var year = parseInt(process.env["YEAR"]);
+    var month = parseInt(process.env["JOB_COMPLETION_INDEX"]) + 1;    #A
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEpPQl9DT01QTEVUSU9OX0lOREVYIGlzIGEgemVyby1iYXNlZCBlbnZpcm9ubWVudCB2YXJpYWJsZSB0aGF0IHRoZSBKb2IgY29udHJvbGxlciBzZXRzIGluIFBvZHMgY3JlYXRlZCBmb3IgYSBKb2Igd2hvc2UgY29tcGxldGlvbk1vZGUgaXMgSW5kZXhlZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8ccc712671902351ac534701c144bdf0" data-text-hash="f80fbe271908cb23ab7bbeac0290e103" id="200" refid="200">
+<p>This environment variable isn&#8217;t specified in the Pod template but is added to each Pod by the Job controller. The workload running in the Pod can use this variable to determine which part of a dataset to process.</p>
+</div>
+<div class="readable-text" data-hash="167601c3c54e7b2a3015a52931cfa555" data-text-hash="a719cd06f20266bba11d3de30aa40909" id="201" refid="201">
+<p>In the aggregate-responses example, the value of the variable represents the month number. However, because the environment variable is zero-based, the script must increment the value by <code>1</code> to get the month.</p>
+</div>
+<div class="readable-text" data-hash="33633674e9d156bafa9d409d5bead5fb" data-text-hash="2b598a06761c0f93ef8575dfc11678f4" id="202" refid="202">
+<h4>The job-completion-index annotation</h4>
+</div>
+<div class="readable-text" data-hash="40615c6ef40c4428a210d6a632cb2195" data-text-hash="2028ac4f6fa27be8ae4d6740f42f43dc" id="203" refid="203">
+<p>In addition to setting the environment variable, the Job controller also sets the job completion index in the <code>batch.kubernetes.io/job-completion-index</code> annotation of the Pod. Instead of using the <code>JOB_COMPLETION_INDEX</code> environment variable, you can pass the index via any environment variable by using the Downward API, as explained in chapter 9. For example, to pass the value of this annotation to the <code>MONTH</code> environment variable, the <code>env</code> entry in the Pod template would look like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2a6f8a43c422f2d17078cd64e0fbcc91" data-text-hash="f1d1cc7b9cbc48a9676e48c0e7fae194" id="204" refid="204">
+<div class="code-area-container">
+<pre class="code-area">env:        
+- name: MONTH    #A
+  valueFrom:    #B
+    fieldRef:    #B
+      fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBlbnYgZW50cnkgc2V0cyB0aGUgTU9OVEggZW52aXJvbm1lbnQgdmFyaWFibGUuCiNCIFRoZSBzb3VyY2Ugb2YgdGhlIHZhbHVlIGlzIHRoZSBzcGVjaWZpZWQgYW5ub3RhdGlvbiBvZiB0aGUgUG9kLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1a1f28c5442e83449e78b743b089d9a9" data-text-hash="c8349c8b4fe7f4f5d23029545d8163da" id="205" refid="205">
+<p>You might think that with this approach you could just use the same script as in the <code>aggregate-responses-2020</code> example, but that&#8217;s not the case. Since you can&#8217;t do math when using the Downward API, you&#8217;d have to modify the script to properly handle the <code>MONTH</code> environment variable, which starts at <code>0</code> instead of <code>1</code>.</p>
+</div>
+<div class="readable-text" data-hash="c234dcc7b282425d111b72453161a9f2" data-text-hash="0bc200f24dbe273147c8bb31e9e8c6da" id="206" refid="206">
+<h4>Running an Indexed Job</h4>
+</div>
+<div class="readable-text" data-hash="857be948edc1e97a45a760b4bb52d845" data-text-hash="0d9785b755255b2b4a8a7e7052720504" id="207" refid="207">
+<p>To run this indexed variant of the <code>aggregate-responses</code> Job, apply the manifest file <code>job.aggregate-responses-2021-indexed.yaml</code>. You can then track the created Pods by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b5a03bdca09c2e32a623fb4f955ecad5" data-text-hash="7c51b7a630455b06140eabebb56abb61" id="208" refid="208">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l job-name=aggregate-responses-2021
+NAME                               READY   STATUS    RESTARTS   AGE
+aggregate-responses-2021-0-kptfr   1/1     Running   0          24s    #A
+aggregate-responses-2021-1-r4vfq   1/1     Running   0          24s    #B
+aggregate-responses-2021-2-snz4m   1/1     Running   0          24s    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUG9kIHdpdGggam9iIGNvbXBsZXRpb24gaW5kZXggMC4KI0IgUG9kIHdpdGggam9iIGNvbXBsZXRpb24gaW5kZXggMS4KI0MgUG9kIHdpdGggam9iIGNvbXBsZXRpb24gaW5kZXggMi4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="73001831704a59f6b4b044f4d2cbf265" data-text-hash="355d685171204e847d1f98cf7a7aad90" id="209" refid="209">
+<p>Did you notice that the Pod names contain the job completion index? The Job name is <code>aggregate-responses-2021</code>, but the Pod names are in the form <code>aggregate-responses-2021-&lt;index&gt;-&lt;random string&gt;</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="210" refid="210">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b20e9853ec0e0068709e9aab4520fd47" data-text-hash="fbf125b9c9c4f107919c030413b7ec31" id="211" refid="211">
+<p> The completion index also appears in the Pod hostname. The hostname is of the form <code>&lt;job-name&gt;-&lt;index&gt;</code>. This facilitates communication between Pods of an indexed Job, as you&#8217;ll see in a later section.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e993d0c0a9d96ea8381cc67d81176272" data-text-hash="90045448d43da65b60bc71344142ce3b" id="212" refid="212">
+<p>Now check the Job status with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2e3e953a1cc2326b21d9f7edc8f41f62" data-text-hash="9794e3e625c0a8319d9f821e400f94a5" id="213" refid="213">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get jobs
+NAME                       COMPLETIONS   DURATION   AGE
+aggregate-responses-2021   7/12          2m17s      2m17s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7783e012bbd1551f2ed134f4caf7942" data-text-hash="69b07765c28cc4adf9903f6457cc69d4" id="214" refid="214">
+<p>Unlike the example where you used multiple Jobs with the <code>NonIndexed</code> completion mode, all the work is done with a single Job object, which makes things much more manageable. Although there are still twelve Pods, you don&#8217;t have to care about them unless the Job fails. When you see that the Job is completed, you can be sure that the task is done, and you can delete the Job to clean everything up.</p>
+</div>
+<div class="readable-text" data-hash="14363271f26970ff936752b75fe0d964" data-text-hash="daa3400dee094169fa603dc420525750" id="215" refid="215">
+<h4>Using the job completion index in more advanced use-cases</h4>
+</div>
+<div class="readable-text" data-hash="a0327de259064bc03648aa79cff30044" data-text-hash="cf59dfaa8b7a4bbd143a30f86f9a2167" id="216" refid="216">
+<p>In the previous example, the code in the workload used the job completion index directly as input. But what about tasks where the input isn&#8217;t a simple number?</p>
+</div>
+<div class="readable-text" data-hash="af7bb7e0dea80f549694c8fbfb0fe3a5" data-text-hash="b18b81ecfefca7969b5257152377035f" id="217" refid="217">
+<p>For example, imagine a container image that accepts an input file and processes it in some way. It expects the file to be in a certain location and have a certain name. Suppose the file is called <code>/var/input/file.bin</code>. You want to use this image to process 1000 files. Can you do that with an indexed job without changing the code in the image?</p>
+</div>
+<div class="readable-text" data-hash="a58a35c3ce90aa7c6a9c5793b55f34f8" data-text-hash="4e1634473b5a98e079ef79ed90e326dd" id="218" refid="218">
+<p>Yes, you can! By adding an init container and a volume to the Pod template. You create a Job with <code>completionMode</code> set to <code>Indexed</code> and <code>completions</code> set to <code>1000</code>. In the Job&#8217;s Pod template, you add two containers and a volume that is shared by these two containers. One container runs the image that processes the file. Let&#8217;s call this the main container. The other container is an init container that reads the completion index from the environment variable and prepares the input file on the shared volume.</p>
+</div>
+<div class="readable-text" data-hash="7eafec233a01a2b417aeb02f0d4c206b" data-text-hash="07e40fbcdab85276a1252ca2322abead" id="219" refid="219">
+<p>If the thousand files you need to process are on a network volume, you can also mount that volume in the Pod and have the init container create a symbolic link named <code>file.bin</code> in the Pod&#8217;s shared internal volume to one of the files in the network volume. The init container must make sure that each completion index corresponds to a different file in the network volume.</p>
+</div>
+<div class="readable-text" data-hash="db9b1fe905df9b9376dbf085700e18d6" data-text-hash="9c960f448943d2d61a7dc377dd7d14a4" id="220" refid="220">
+<p>If the internal volume is mounted in the main container at <code>/var/input</code>, the main container can process the file without knowing anything about the completion index or the fact that there are a thousand files being processed. The following figure shows how all this would look.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="a2682f072ad1cc2362780fb79af8c612" data-text-hash="9df59ff925f0274313f3d878f5656a32" id="221" refid="221">
+<h5>Figure 17.9 An init container providing the input file to the main container based on the job completion index</h5>
+<img alt="" border="0" data-processed="true" height="318" id="Picture_15" loading="lazy" src="EPUB/images/17_img_0009.png" width="901">
+</div>
+<div class="readable-text" data-hash="ba2244499696466ebb11fcb28ff4414f" data-text-hash="3c0d88fd7f08b013acec35fd9b4cdefd" id="222" refid="222">
+<p>As you can see, even though an indexed Job provides only a simple integer to each Pod, there is a way to use that integer to prepare much more complex input data for the workload. All you need is an init container that transforms the integer into this input data.</p>
+</div>
+<div class="readable-text" data-hash="05d4d53f13e27643c43ce397a01ec7fe" data-text-hash="15ba48ba54c3518429eba03ed07e3279" id="223" refid="223">
+<h3 id="sigil_toc_id_309">17.1.5&#160;Running Jobs with a work queue</h3>
+</div>
+<div class="readable-text" data-hash="72fe6b4976ba8da7e1f8979caf3d4b67" data-text-hash="ac42633e3e1d44b440f23039daeb9703" id="224" refid="224">
+<p>The Jobs in the previous section were assigned static work. However, often the work to be performed is assigned dynamically using a work queue. Instead of specifying the input data in the Job itself, the Pod retrieves that data from the queue. In this section, you&#8217;ll learn two methods for processing a work queue in a Job.</p>
+</div>
+<div class="readable-text" data-hash="81180c066a47fd3928109d81b5517db0" data-text-hash="a1b7b3734340535bf9108b695725e1ef" id="225" refid="225">
+<p>The previous paragraph may have given the impression that Kubernetes itself provides some kind of queue-based processing, but that isn&#8217;t the case. When we talk about Jobs that use a queue, the queue and the component that retrieves the work items from that queue need to be implemented in your containers. Then you create a Job that runs those containers in one or more Pods. To learn how to do this, you&#8217;ll now implement another variant of the <code>aggregate-responses</code> Job. This one uses a queue as the source of the work to be executed.</p>
+</div>
+<div class="readable-text" data-hash="fab89418bd7d9fa1c027c4b1e6f13e2f" data-text-hash="bb42a5afcb6e8592c242d3b2e31690ec" id="226" refid="226">
+<p>There are two ways to process a work queue: <i>coarse</i> or <i>fine</i>. The following figure illustrates the difference between these two methods.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="1bc1457fb8beb139a75dbaa8f4c5cdd5" data-text-hash="516243335df5cfcc38efd2e0127efc43" id="227" refid="227">
+<h5>Figure 17.10 The difference between coarse and fine parallel processing</h5>
+<img alt="" border="0" data-processed="true" height="540" id="Picture_14" loading="lazy" src="EPUB/images/17_img_0010.png" width="869">
+</div>
+<div class="readable-text" data-hash="dcb503261ba2076ad949fab4a4aa5d22" data-text-hash="d59efc60aa47c35bc3b59d8a2bc3b910" id="228" refid="228">
+<p>In <i>coarse</i> parallel processing, each Pod takes an item from the queue, processes it, and then terminates. Therefore, you end up with one Pod per work item. In contrast, in <i>fine</i> parallel processing, typically only a handful of Pods are created and each Pod processes multiple work items. They all work in parallel until the entire queue is processed. In both methods, you can run as many Pods in parallel as you want, if your cluster can accommodate them.</p>
+</div>
+<div class="readable-text" data-hash="34de2d317a272cc4160319fa4a959e5e" data-text-hash="131a906ec5c7b232dce3790566d68478" id="229" refid="229">
+<h4>Creating the work queue</h4>
+</div>
+<div class="readable-text" data-hash="e99b7cbab33c3fcf93267ef709c57719" data-text-hash="06fe353d5113ec75f4e2871639fc1980" id="230" refid="230">
+<p>The Job you&#8217;ll create for this exercise will process the Quiz responses from 2022. Before you create this Job, you must first set up the work queue. To keep things simple, you implement the queue in the existing MongoDB database. To create the queue, you run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f9fffc7397f3b534ddf0481fcfd52364" data-text-hash="8d02898985be5a237afa422ceb56a882" id="231" refid="231">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz-0 -c mongo -- mongosh kiada --eval '
+  db.monthsToProcess.insertMany([
+    {_id: "2022-01", year: 2022, month: 1},
+    {_id: "2022-02", year: 2022, month: 2},
+    {_id: "2022-03", year: 2022, month: 3},
+    {_id: "2022-04", year: 2022, month: 4},
+    {_id: "2022-05", year: 2022, month: 5},
+    {_id: "2022-06", year: 2022, month: 6},
+    {_id: "2022-07", year: 2022, month: 7},
+    {_id: "2022-08", year: 2022, month: 8},
+    {_id: "2022-09", year: 2022, month: 9},
+    {_id: "2022-10", year: 2022, month: 10},
+    {_id: "2022-11", year: 2022, month: 11},
+    {_id: "2022-12", year: 2022, month: 12}])'</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="232" refid="232">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="660a1a90937d8d691e1eaa7ecbc0f53c" data-text-hash="a10c27977c52bd26b2dde74f17a042c5" id="233" refid="233">
+<p> This command assumes that quiz-0 is the primary MongoDB replica. If the command fails with the error message &#8220;not primary&#8221;, try running the command in all three Pods, or you can ask MongoDB which of the three is the primary replica with the following command: <code>kubectl exec quiz-0 -c mongo -&#8211; mongosh &#8211;-eval 'rs.hello().primary'</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a68d37665bd41ee90e4587dfae081800" data-text-hash="e57056914249b97cd1dbebfcfada4e91" id="234" refid="234">
+<p>The command inserts 12 work items into the MongoDB collection named <code>monthsToProcess</code>. Each work item represents a particular month that needs to be processed.</p>
+</div>
+<div class="readable-text" data-hash="736de20325db04ea78b63f4ecc214272" data-text-hash="2adc7a6c651adf5f44efc1d6b414f463" id="235" refid="235">
+<h4>Processing a work queue using coarse parallel processing</h4>
+</div>
+<div class="readable-text" data-hash="0f5359b480c48582fa25d9230f6cdbd9" data-text-hash="26ebda8afc5b6696b270006633170fec" id="236" refid="236">
+<p>Let&#8217;s start with an example of coarse parallel processing, where each Pod processes only a single work item. You can find the Job manifest in the file <code>job.aggregate-responses-queue-coarse.yaml</code> and is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="77ccae484abbfd81961b9be0f8875f9a" data-text-hash="efff891cb42627f913152c9a6ad87b99" id="237" refid="237">
+<h5>Listing 17.10 Processing a work queue using coarse parallel processing</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aggregate-responses-queue-coarse
+spec:
+  completions: 6    #A
+  parallelism: 3    #B
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: processor
+        image: mongo:5
+        command:
+        - mongosh    #C
+        - mongodb+srv://quiz-pods.kiada.svc.cluster.local/kiada?tls=false    #C
+        - --quiet    #C
+        - --file    #C
+        - /script.js    #C
+        volumeMounts:    #D
+        - name: script    #D
+          subPath: script.js    #D
+          mountPath: /script.js    #D
+      volumes:    #D
+      - name: script    #D
+        configMap:    #D
+          name: aggregate-responses-queue-coarse    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBKb2IgaXMgY29uZmlndXJlZCB0byBwcm9jZXNzIDYgd29yayBpdGVtcy4KI0IgVGhyZWUgd29yayBpdGVtcyBhcmUgcHJvY2Vzc2VkIGluIHBhcmFsbGVsLgojQyBQb2RzIHNwYXduZWQgYnkgdGhpcyBKb2IgcnVuIGEgc2NyaXB0IGluIE1vbmdvREIuCiNEIFRoZSBzb3VyY2Ugb2YgdGhlIHNjcmlwdCBpcyBhIENvbmZpZ01hcC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0916832113e243ef301421f07de014b1" data-text-hash="29ffeb4b2fe671e4eefdc3838e9b4571" id="238" refid="238">
+<p>The Job creates Pods that run a script in MongoDB that takes a single item from the queue and processes it. Note that <code>completions</code> is <code>6</code>, meaning that this Job only processes 6 of the 12 items you added to the queue. The reason for this is that I want to leave a few items for the fine parallel processing example that comes after this one.</p>
+</div>
+<div class="readable-text" data-hash="eb4bb0e27aa092b896137b6dcb83dd93" data-text-hash="2ec4a2dc53b9bd25c5394390c2158657" id="239" refid="239">
+<p>The <code>parallelism</code> setting for this Job is <code>3</code>, which means that three work items are processed in parallel by three different Pods.</p>
+</div>
+<div class="readable-text" data-hash="72cbedc71882b9d75b5bfd0fb57e5d3e" data-text-hash="fb9011652a74f37149025cab14d3cc9d" id="240" refid="240">
+<p>The script that each Pod executes is defined in the <code>aggregate-responses-queue-coarse</code> ConfigMap. The manifest for this ConfigMap is in the same file as the Job manifest. A rough outline of the script can be seen in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1a7230957481d0e22d528aaca4ce4970" data-text-hash="2dac8d14948e316a27714f0543b71bf3" id="241" refid="241">
+<h5>Listing 17.11 A MongoDB script processing a single work item</h5>
+<div class="code-area-container">
+<pre class="code-area">print("Fetching one work item from queue...");
+ 
+var workItem = db.monthsToProcess.findOneAndDelete({});    #A
+if (workItem == null) {    #B
+    print("No work item found. Processing is complete.");    #B
+    quit(0);    #B
+}    #B
+ 
+print("Found work item:");    #C
+print("  Year:  " + workItem.year);    #C
+print("  Month: " + workItem.month);    #C
+ 
+var year = parseInt(workItem.year);    #C
+var month = parseInt(workItem.month) + 1;    #C
+// code that processes the item    #C
+ 
+print("Done.");    #D
+quit(0);    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGFrZSBvbmUgd29yayBpdGVtIGZyb20gdGhlIHF1ZXVlLgojQiBJZiB0aGUgcXVldWUgaXMgZW1wdHksIHRlcm1pbmF0ZSB3aXRoIGV4aXQgY29kZSB6ZXJvLCBpbmRpY2F0aW5nIHRoYXQgcHJvY2Vzc2luZyBpcyBkb25lLgojQyBQcm9jZXNzIHRoZSB3b3JrIGl0ZW0uCiNEIEFmdGVyIHRoZSBpdGVtIGlzIHByb2Nlc3NlZCwgdGVybWluYXRlIHN1Y2Nlc3NmdWxseS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5462789371d370dc807cb95821a31d5b" data-text-hash="d814877f1be73ef2698ed2d307efd469" id="242" refid="242">
+<p>The script takes an item from the work queue. As you know, each item represents a single month. The script performs an aggregation query on the Quiz responses for that month that calculates the number of correct, incorrect, and total responses, and stores the result back in MongoDB.</p>
+</div>
+<div class="readable-text" data-hash="44dc4865795f560f7cb2fc27f435d11a" data-text-hash="ed27f0451601c67ce6dbe39bc8a67aff" id="243" refid="243">
+<p>To run the Job, apply <code>job.aggregate-responses-queue-coarse.yaml</code> with <code>kubectl apply</code> and observe the status of the Job with <code>kubectl get jobs</code>. You can also check the Pods to make sure that three Pods are running in parallel, and that the total number of Pods is six after the Job is complete.</p>
+</div>
+<div class="readable-text" data-hash="76a2dfcf9be993cd6c0e33f867e6a630" data-text-hash="688f2211c6c27132d01314de7a1eb84c" id="244" refid="244">
+<p>If all goes well, your work queue should now only contain the 6 months that haven&#8217;t been processed by the Job. You can confirm this by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4e970397d47a09445009bf902c4e1728" data-text-hash="7921fb0af5ba95afaf03a4410fe4270f" id="245" refid="245">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec quiz-0 -c mongo -- mongosh kiada --quiet --eval 'db.monthsToProcess.find()'
+[
+  { _id: '2022-07', year: 2022, month: 7 },
+  { _id: '2022-08', year: 2022, month: 8 },
+  { _id: '2022-09', year: 2022, month: 9 },
+  { _id: '2022-10', year: 2022, month: 10 },
+  { _id: '2022-11', year: 2022, month: 11 },
+  { _id: '2022-12', year: 2022, month: 12 }
+]</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7edebd74fb0d20c5bae948ef339118b4" data-text-hash="9ccab7e72abdad865fe2d212b87e923f" id="246" refid="246">
+<p>You can check the logs of the six Pods to see if they have processed the exact months for which the items were removed from the queue. You&#8217;ll process the remaining items with fine parallel processing. Before you continue, please delete the <code>aggregate-responses-queue-coarse</code> Job with <code>kubectl delete</code>. This also removes the six Pods.</p>
+</div>
+<div class="readable-text" data-hash="856556d2026d11b45afa8f02844df0f7" data-text-hash="644a4c609479c3048e48f9de451f508a" id="247" refid="247">
+<h4>Processing a work queue using fine parallel processing</h4>
+</div>
+<div class="readable-text" data-hash="2399821f5a6bc0527ed3378133ec841a" data-text-hash="0bb70fe3adadc71cab6cbe96a62388f0" id="248" refid="248">
+<p>In fine parallel processing, each Pod handles multiple work items. It takes an item from the queue, processes it, takes the next item, and repeats this process until there are no items left in the queue. As before, multiple Pods can work in parallel.</p>
+</div>
+<div class="readable-text" data-hash="b4f4f82069a351e8b657022bd98d311e" data-text-hash="83e28e6152ddbb0a6a0eb73694b70af9" id="249" refid="249">
+<p>The Job manifest is in the file <code>job.aggregate-responses-queue-fine.yaml</code>. The Pod template is virtually the same as in the previous example, but it doesn&#8217;t contain the <code>completions</code> field, as you can see in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b83ee14f97285adfafc0689db3a15125" data-text-hash="99190df7177ee86f178a93f35f873aca" id="250" refid="250">
+<h5>Listing 17.12 Processing a work queue using the fine parallel processing approach</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aggregate-responses-queue-fine
+spec:
+  parallelism: 3    #A
+  template:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgT25seSBwYXJhbGxlbGlzbSBpcyBzZXQgZm9yIHRoaXMgSm9iLiBUaGUgY29tcGxldGlvbnMgZmllbGQgaXMgbm90IHNldC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9e3168789f641f9150bd1286e5a0f94c" data-text-hash="56f13e61383a203a50269b4b622e8716" id="251" refid="251">
+<p>A Job that uses fine parallel processing doesn&#8217;t set the <code>completions</code> field because a single successful completion indicates that all the items in the queue have been processed. This is because the Pod terminates with success when it has processed the last work item.</p>
+</div>
+<div class="readable-text" data-hash="c4cf63fc72244145aa878ac0064289d0" data-text-hash="b22174637c307ff3a33680ae6681096f" id="252" refid="252">
+<p>You may wonder what happens if some Pods are still processing their items when another Pod reports success. Fortunately, the Job controller lets the other Pods finish their work. It doesn&#8217;t kill them.</p>
+</div>
+<div class="readable-text" data-hash="e325d77421276d67f00e06a5e022d933" data-text-hash="292059be3b92c65f99b28aee0c6a38af" id="253" refid="253">
+<p>As before, the manifest file also contains a ConfigMap that contains the MongoDB script. Unlike the previous script, this script processes one work item after the other until the queue is empty, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="54f0422fc1c555bed41a51b5e0345ca0" data-text-hash="4fad525815bac96c034b11590acffb3b" id="254" refid="254">
+<h5>Listing 17.13 A MongoDB script that processes the entire queue</h5>
+<div class="code-area-container">
+<pre class="code-area">print("Processing quiz responses - queue - all work items");
+print("==================================================");
+print();
+print("Fetching work items from queue...");
+print();
+ 
+while (true) {    #A
+    var workItem = db.monthsToProcess.findOneAndDelete({});    #B
+    if (workItem == null) {    #C
+        print("No work item found. Processing is complete.");    #C
+        quit(0);    #C
+    }    #C
+    print("Found work item:");    #D
+    print("  Year:  " + workItem.year);    #D
+    print("  Month: " + workItem.month);    #D
+    // process the item    #D
+    ...    #D
+ 
+    print("Done processing item.");    #E
+    print("------------------");    #E
+    print();    #E
+}    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHNjcmlwdCBydW5zIGEgbG9vcCwgcHJvY2Vzc2luZyB0aGUgaXRlbXMgdW50aWwgdGhlcmUgYXJlIG5vbmUgbGVmdC4KI0IgVGFrZSBhbSBpdGVtIGZyb20gdGhlIHdvcmsgcXVldWUuCiNDIFdoZW4gdGhlIHF1ZXVlIGlzIGVtcHR5LCB0ZXJtaW5hdGUgdGhlIHNjcmlwdCB3aXRoIGV4aXQgY29kZSB6ZXJvLiBUaGlzIHdpbGwgYnJlYWsgdGhlIGxvb3AsIG9mIGNvdXJzZS4KI0QgUHJvY2VzcyB0aGUgd29yayBpdGVtLgojRSBDb250aW51ZSB0aGUgbG9vcCBhZnRlciB0aGUgaXRlbSBoYXMgYmVlbiBwcm9jZXNzZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a3c46146964686d4dbeddb97bff5c582" data-text-hash="56c8e6f42d456984513ccddf3cfbe8ef" id="255" refid="255">
+<p>To run this Job, apply the manifest file <code>job.aggregate-responses-queue-fine.yaml</code>. You should see three Pods associated with it. When they finish processing the items in the queue, their containers terminate, and the Pods show as <code>Completed</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a7f6e4f85e615196e386e5bf1c39c4ce" data-text-hash="3570b427ae6009bbb0dd29e940620221" id="256" refid="256">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l job-name=aggregate-responses-queue-fine
+NAME                                   READY   STATUS      RESTARTS   AGE
+aggregate-responses-queue-fine-9slkl   0/1     Completed   0          4m21s
+aggregate-responses-queue-fine-hxqbw   0/1     Completed   0          4m21s
+aggregate-responses-queue-fine-szqks   0/1     Completed   0          4m21s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8ca231c2ef84941226bc57b673fc3725" data-text-hash="7bafb51eee05dd9f439a41a58351a7bb" id="257" refid="257">
+<p>The status of the Job also indicates that all three Pods have completed:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="776eb65e30a9d807ce4a734990d4a8b8" data-text-hash="a6a925d72d1691afac96bf05a8515626" id="258" refid="258">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get jobs
+NAME                             COMPLETIONS   DURATION   AGE
+aggregate-responses-queue-fine   3/1 of 3      3m19s      5m34s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="45bee4c5960d284b077a4fc2746de147" data-text-hash="d8cb669afa5945422bf0dacdaf219363" id="259" refid="259">
+<p>The last thing you need to do is check if the work queue is actually empty. You can do that with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="47cd23c704bec013009ece70ff2e4bdb" data-text-hash="65943f48ff52254ff8cfc87772232eba" id="260" refid="260">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec quiz-1 -c mongo -- mongosh kiada --quiet --eval 'db.monthsToProcess.countDocuments()'
+0    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlcmUgYXJlIG5vIGRvY3VtZW50cyBpbiB0aGUgbW9udGhzVG9Qcm9jZXNzIGNvbGxlY3Rpb24gdGhhdCByZXByZXNlbnRzIHlvdXIgd29yayBxdWV1ZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="33b81bf81fe37b48054660675a9117f9" data-text-hash="d673941236ef4bda81e2858a2bd15d58" id="261" refid="261">
+<p>As you can see, the queue is zero, so the Job is completed.</p>
+</div>
+<div class="readable-text" data-hash="076370d6681e196b96359222ef7cdeac" data-text-hash="def255dcefdd0afab360004840fee56b" id="262" refid="262">
+<h4>Continuous processing of work queues</h4>
+</div>
+<div class="readable-text" data-hash="a3c1b5330c684b10239b29f46601fe7f" data-text-hash="5b1b2d6d1231afa7dddd41d63061f8cc" id="263" refid="263">
+<p>To conclude this section on Jobs with work queues, let&#8217;s see what happens when you add items to the queue after the Job is complete. Add a work item for January 2023 as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="047d6a01ad4efcce838c59455b08b094" data-text-hash="3657316565871d16bd09f633fd160660" id="264" refid="264">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz-0 -c mongo -- mongosh kiada --quiet --eval 'db.monthsToProcess.insertOne({_id: "2023-01", year: 2023, month: 1})'
+{ acknowledged: true, insertedId: '2023-01' }</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c01091530a8caf13fedf086f0097f3dc" data-text-hash="6b0e1ae140464855c16610dfe0a46e27" id="265" refid="265">
+<p>Do you think the Job will create another Pod to handle this work item? The answer is obvious when you consider that Kubernetes doesn&#8217;t know anything about the queue, as I explained earlier. Only the containers running in the Pods know about the existence of the queue. So, of course, if you add a new item after the Job finishes, it won&#8217;t be processed unless you recreate the Job.</p>
+</div>
+<div class="readable-text" data-hash="a3a2f5d5d4b858731560611d5598ab1a" data-text-hash="3a0ada378b80fbecf6958d89838d97bd" id="266" refid="266">
+<p>Remember that Jobs are designed to run tasks to completion, not continuously. To implement a worker Pod that continuously monitors a queue, you should run the Pod with a Deployment instead. However, if you want to run the Job at regular intervals rather than continuously, you can also use a CronJob, as explained in the second part of this chapter.</p>
+</div>
+<div class="readable-text" data-hash="b79c76534bd239412c1c3f297444a496" data-text-hash="452dfdc0743be6ef1a28fcf29db2a03e" id="267" refid="267">
+<h3 id="sigil_toc_id_310">17.1.6&#160;Communication between Job Pods</h3>
+</div>
+<div class="readable-text" data-hash="1a52a8ec69ce22312a4de3deba4380ca" data-text-hash="368f4803b132d978ec6ee340a75fe9f1" id="268" refid="268">
+<p>Most Pods running in the context of a Job run independently, unaware of the other Pods running in the same context. However, some tasks require that these Pods communicate with each other.</p>
+</div>
+<div class="readable-text" data-hash="fb5383b66b6bcd88e383dd233b1381ac" data-text-hash="a92272dee9db63f4118bddaa449e0fb7" id="269" refid="269">
+<p>In most cases, each Pod needs to communicate with a specific Pod or with all its peers, not just with a random Pod in the group. Fortunately, it&#8217;s trivial to enable this kind of communication. You only have to do three things:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="8e0cef0e1416d857d4a990de8a2cdf74" data-text-hash="7693217f83dc01a9a5e012ac081ab966" id="270" refid="270">Set the <code class="codechar">completionMode</code> of the Job to <code class="codechar">Indexed</code>.</li>
+<li class="readable-text" data-hash="ef456fdaf01252426b1b3e4a4a3752a4" data-text-hash="ef456fdaf01252426b1b3e4a4a3752a4" id="271" refid="271">Create a headless Service.</li>
+<li class="readable-text" data-hash="ea4191b1aeba24f2b7e420d6d3c9ec32" data-text-hash="ea4191b1aeba24f2b7e420d6d3c9ec32" id="272" refid="272">Configure this Service as a subdomain in the Pod template.</li>
+</ul>
+<div class="readable-text" data-hash="84e30127f1c69735690a0e5d4bc9ebc6" data-text-hash="09e3fcc2136b01ec74c948255e2a42d9" id="273" refid="273">
+<p>Let me explain this with an example.</p>
+</div>
+<div class="readable-text" data-hash="7a3daee6f326424a315350509c28ab3b" data-text-hash="7f985411c01c25c731ad346960633b1f" id="274" refid="274">
+<h4>Creating the headless Service manifest</h4>
+</div>
+<div class="readable-text" data-hash="9a37c5fe53fd962d6eb95291bad172a8" data-text-hash="78c77b6ed94fd14ec4bbbe2553efc6e6" id="275" refid="275">
+<p>Let&#8217;s first look at how the headless Service must be configured. Its manifest is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="cccaa15acc4c493fbaf723a1a633adc5" data-text-hash="8e59a4427ab328369663cf09b661e06e" id="276" refid="276">
+<h5>Listing 17.14 Headless Service for communication between Job Pods</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Service
+metadata:
+  name: demo-service
+spec:
+  clusterIP: none    #A
+  selector:
+    job-name: comm-demo    #B
+  ports:
+  - name: http
+    port: 80</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYWtlcyB0aGUgU2VydmljZSBoZWFkbGVzcy4gRm9yIG1vcmUgaW5mb3JtYXRpb24sIHNlZSBjaGFwdGVyIDExLgojQiBUaGUgc2VsZWN0b3IgbXVzdCBtYXRjaCB0aGUgUG9kcyB0aGF0IHRoZSBKb2IgY3JlYXRlcy4gVGhlIGVhc2llc3Qgd2F5IGlzIHRvIHVzZSB0aGUg4oCcam9iLW5hbWXigJ0gbGFiZWwsIHdoaWNoIGlzIGF1dG9tYXRpY2FsbHkgYXNzaWduZWQgdG8gdGhvc2UgUG9kcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e344b50887e4e6d971b764d4c5d8dc69" data-text-hash="bcb0a09fe62f7b6a89cb4616ce00e537" id="277" refid="277">
+<p>As you learned in chapter 11, you must set <code>clusterIP</code> to <code>none</code> to make the Service headless. You also need to make sure that the label selector matches the Pods that the Job creates. The easiest way to do this is to use the <code>job-name</code> label in the selector. You learned at the beginning of this chapter that this label is automatically added to the Pods. The value of the label is set to the name of the Job object, so you need to make sure that the value you use in the selector matches the Job name.</p>
+</div>
+<div class="readable-text" data-hash="af4bed711b5d26dc50a0c5795a63af0d" data-text-hash="6a82fb441c03de7ad61414230721aae9" id="278" refid="278">
+<h4>Creating the Job manifest</h4>
+</div>
+<div class="readable-text" data-hash="0ea51cf992396fce94c850c28cc57b87" data-text-hash="e42e3c4cfc73570c41889f4c6396b66e" id="279" refid="279">
+<p>Now let&#8217;s see how the Job manifest must be configured. Examine the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="ab79c8c4c3aeafbcc718abd60fbde5eb" data-text-hash="6bbf769cf3f427b9df976c2ba0fd5b8f" id="280" refid="280">
+<h5>Listing 17.15 A Job manifest enabling pod-to-pod communication</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: Job
+metadata:
+  name: comm-demo    #A
+spec:
+  completionMode: Indexed    #B
+  completions: 2    #C
+  parallelism: 2    #C
+  template:
+    spec:
+      subdomain: demo-service    #D
+      restartPolicy: Never
+      containers:
+      - name: comm-demo
+        image: busybox
+        command:    #E
+        - sleep    #E
+        - "600"    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEpvYiBuYW1lIG11c3QgbWF0Y2ggdGhlIHZhbHVlIHlvdSB1c2VkIGluIHRoZSBsYWJlbCBTZWxlY3RvciBpbiB0aGUgaGVhZGxlc3MgU2VydmljZS4KI0IgVGhlIGNvbXBsZXRpb24gbW9kZSBtdXN0IGJlIHNldCB0byBJbmRleGVkLgojQyBJbiB0aGlzIGRlbW8sIHRoZSBKb2IgY3JlYXRlcyB0d28gUG9kcy4gVGhleSBydW4gaW4gcGFyYWxsZWwgc28gdGhleSBjYW4gY29tbXVuaWNhdGUgd2l0aCBlYWNoIG90aGVyLgojRCBUaGlzIG11c3QgbWF0Y2ggdGhlIG5hbWUgb2YgdGhlIGhlYWRsZXNzIFNlcnZpY2UuCiNFIFRoZXNlIGRlbW8gUG9kcyBkb27igJl0IGRvIGFueXRoaW5nLiBUaGV5IGp1c3Qgc2xlZXAgZm9yIDEwIG1pbnV0ZXMgc28geW91IGNhbiBleHBlcmltZW50IHdpdGggdGhlbS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="69ce64b571a312bee461afb2060dfe25" data-text-hash="281eaec9c4ba3ead21a5829f52e52e63" id="281" refid="281">
+<p>As mentioned earlier, the completion mode must be set to <code>Indexed</code>. This Job is configured to run two Pods in parallel so you can experiment with them. In order for the Pods to find each other via DNS, you need to set their <code>subdomain</code> to the name of the headless Service.</p>
+</div>
+<div class="readable-text" data-hash="5e948d7309190b3c42f1a8e2b87ac23c" data-text-hash="81ca3ec73c362c633f9009c157fae68b" id="282" refid="282">
+<p>You can find both the Job and the Service manifest in the <code>job.comm-demo.yaml</code> file. Create the two objects by applying the file and then list the Pods as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="14cee2a3c6bda163904336d414ba7c9a" data-text-hash="75e9f596aeb28c79baac8d87303b55d8" id="283" refid="283">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l job-name=comm-demo
+NAME                READY   STATUS    RESTARTS   AGE
+comm-demo-0-mrvlp   1/1     Running   0          34s
+comm-demo-1-kvpb4   1/1     Running   0          34s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="59356a9ebca09d77b76061e20dc63e1c" data-text-hash="9cff99cfa39d2958b2fed829230e126b" id="284" refid="284">
+<p>Note the names of the two Pods. You need them to execute commands in their containers.</p>
+</div>
+<div class="readable-text" data-hash="5b043b7f32b028756eef726d0ff78691" data-text-hash="6ce55f285269cd9e34683b3338489635" id="285" refid="285">
+<h4>Connecting to Pods from other Pods</h4>
+</div>
+<div class="readable-text" data-hash="8494418842e1c8fc9e3d42c52407df9f" data-text-hash="f1aa30df6813f6e089585978d6d4a7c3" id="286" refid="286">
+<p>Check the hostname of the first Pod with the following command. Use the name of your Pod.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b38089d6a650f22f7561e3e10f97feb1" data-text-hash="a9ee33e267de87b9713786234bbb5bc5" id="287" refid="287">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec comm-demo-0-mrvlp -- hostname -f
+comm-demo-0.demo-service.kiada.svc.cluster.local</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f5184752d6cf226d123e9b4fb4db7dbb" data-text-hash="1b25af3081aca14bb3cfef73b8de55c9" id="288" refid="288">
+<p>The second Pod can communicate with the first Pod at this address. To confirm this, try pinging the first Pod from the second Pod using the following command (this time, pass the name of your second Pod to the <code>kubectl exec</code> command):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f367b32ea971618d36764b1e5ecbb040" data-text-hash="a41494145bc61ad639f30dfc78407d5d" id="289" refid="289">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec comm-demo-1-kvpb4 -- ping comm-demo-0.demo-service.kiada.svc.cluster.local
+PING comm-demo-0.demo-service.kiada.svc.cluster.local (10.244.2.71): 56 data bytes
+64 bytes from 10.244.2.71: seq=0 ttl=63 time=0.060 ms
+64 bytes from 10.244.2.71: seq=1 ttl=63 time=0.062 ms
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9aa75179fce8a1faed1462969812efc8" data-text-hash="926b81a73c03d551e0c2ba2f6600ed01" id="290" refid="290">
+<p>As you can see, the second Pod can communicate with the first Pod without knowing its exact name, which is known to be random. A pod running in the context of a Job can determine the names of its peers according to the following pattern:</p>
+</div>
+<div class="browsable-container figure-container" data-hash="4d41c1a2685d21454a37fc6a83ff2206" data-text-hash="d41d8cd98f00b204e9800998ecf8427e" id="291" refid="291">
+<img alt="" border="0" data-processed="true" height="79" id="Picture_13" loading="lazy" src="EPUB/images/17_img_0011.png" width="403">
+</div>
+<div class="readable-text" data-hash="3b673af75ad0a91e6f4000b9c403ae69" data-text-hash="8355f544a5e9f5a7c7f568166dc28085" id="292" refid="292">
+<p>But you can simplify the address even further. As you may recall, when resolving DNS records for objects in the same Namespace, you don&#8217;t have to use the fully qualified domain name. You can omit the Namespace and the cluster domain suffix. So the second Pod can connect to the first Pod using the address <code>comm-demo-0.demo-service</code>, as shown in the following example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="61d01eab07c29ba7eb7bd7e918243b40" data-text-hash="c7a09a663156e662243eb9a06729cf0d" id="293" refid="293">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec comm-demo-1-kvpb4 -- ping comm-demo-0.demo-service
+PING comm-demo-0.demo-service (10.244.2.71): 56 data bytes
+64 bytes from 10.244.2.71: seq=0 ttl=63 time=0.040 ms
+64 bytes from 10.244.2.71: seq=1 ttl=63 time=0.067 ms
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5683a2846afabf49f0bd64430ce52e5a" data-text-hash="d05a9cf4b845607c831d984caf9b7170" id="294" refid="294">
+<p>As long as the Pods know how many Pods belong to the same Job (in other words, what the value of the <code>completions</code> field is), they can easily find all their peers via DNS. They don&#8217;t need to ask the Kubernetes API server for their names or IP addresses.</p>
+</div>
+<div class="readable-text" data-hash="9293c71d095ef32453c0020d2304131c" data-text-hash="4861c3afa425f5fe235e66ca19de0aaa" id="295" refid="295">
+<p>This concludes the first part of this chapter. Please delete any remaining Jobs before continuing.</p>
+</div>
+<div class="readable-text" data-hash="6ad0176f751686f28a89cd2c8076b9ed" data-text-hash="59aee7f652475ea061023c2dabc4c79e" id="296" refid="296">
+<h2 id="sigil_toc_id_311">17.2&#160;Scheduling Jobs with CronJobs</h2>
+</div>
+<div class="readable-text" data-hash="bbf5f18cdaa44072999dd9079bf93968" data-text-hash="1f35214f841d5c1344d20da1aacf1628" id="297" refid="297">
+<p>When you create a Job object, it starts executing immediately. Although you can create the Job in a suspended state and later un-suspend it, you cannot configure it to run at a specific time. To achieve this, you can wrap the Job in a CronJob object.</p>
+</div>
+<div class="readable-text" data-hash="50fa747d0e0a86caebfe690835ed86e9" data-text-hash="9e46cc24e8b258b0a4488dcf4e2ebbbf" id="298" refid="298">
+<p>In the CronJob object you specify a Job template and a schedule. According to this schedule, the CronJob controller creates a new Job object from the template. You can set the schedule to do this several times a day, at a specific time of day, or on specific days of the week or month. The controller will continue to create Jobs according to the schedule until you delete the CronJob object. The following figure illustrates how a CronJob works.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="54bfa3bcdca0a1e79f311ea25e480f02" data-text-hash="aa987bb3fd537393cb099973262504fd" id="299" refid="299">
+<h5>Figure 17.11 The operation of a CronJob</h5>
+<img alt="" border="0" data-processed="true" height="335" id="Picture_3" loading="lazy" src="EPUB/images/17_img_0012.png" width="914">
+</div>
+<div class="readable-text" data-hash="4ee1da2729be58ff7198edb6eed6c89f" data-text-hash="a3bb6d39ab04081b61c717f5722dac83" id="300" refid="300">
+<p>As you can see in the figure, each time the CronJob controller creates a Job, the Job controller subsequently creates the Pod(s), just like when you manually create the Job object. Let&#8217;s see this process in action.</p>
+</div>
+<div class="readable-text" data-hash="dc0872952f2399fb97880429a9e4237e" data-text-hash="ef211f1697d6fee2f1d6491f6c2aee89" id="301" refid="301">
+<h3 id="sigil_toc_id_312">17.2.1&#160;Creating a CronJob</h3>
+</div>
+<div class="readable-text" data-hash="9ce4259e0caee848d2a6dc8c35fad06e" data-text-hash="a16d3e6effee7e02a6b3076c17936ff4" id="302" refid="302">
+<p>The following listing shows a CronJob manifest that runs a Job every minute. This Job aggregates the Quiz responses received today and updates the daily quiz statistics. You can find the manifest in the <code>cj.aggregate-responses-every-minute.yaml</code> file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="afd602b48328f6812f804472be33604b" data-text-hash="1e5f286eabd5bc198aba8f21c1b6941b" id="303" refid="303">
+<h5>Listing 17.16 A CronJob that runs a Job every minute</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1    #A
+kind: CronJob    #A
+metadata:
+  name: aggregate-responses-every-minute
+spec:
+  schedule: "* * * * *"    #B
+  jobTemplate:    #C
+    metadata:    #C
+      labels:    #C
+        app: aggregate-responses-today    #C
+    spec:    #C
+      template:    #C
+        metadata:    #C
+          labels:    #C
+            app: aggregate-responses-today    #C
+        spec:    #C
+          restartPolicy: OnFailure    #C
+          containers:    #C
+          - name: updater    #C
+            image: mongo:5    #C
+            command:    #C
+            - mongosh    #C
+            - mongodb+srv://quiz-pods.kiada.svc.cluster.local/kiada?tls=false    #C
+            - --quiet    #C
+            - --file    #C
+            - /script.js    #C
+            volumeMounts:    #C
+            - name: script    #C
+              subPath: script.js    #C
+              mountPath: /script.js    #C
+          volumes:    #C
+          - name: script    #C
+            configMap:    #C
+              name: aggregate-responses-today    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQ3JvbkpvYnMgYXJlIGluIHRoZSBiYXRjaCBBUEkgZ3JvdXAsIHZlcnNpb24gdjEuCiNCIFRoZSBzY2hlZHVsZSBpcyBzcGVjaWZpZWQgaW4gY3JvbnRhYiBmb3JtYXQuIFRoaXMgcGFydGljdWxhciBzY2hlZHVsZSBydW5zIHRoZSBKb2IgZXZlcnkgbWludXRlLgojQyBBIENyb25Kb2IgbXVzdCBzcGVjaWZ5IGEgdGVtcGxhdGUgZm9yIHRoZSBKb2Igb2JqZWN0Lg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b660ad25c017a84c4fb0e4df653273fc" data-text-hash="3b5500212d7eaee531197e2a23b2dd59" id="304" refid="304">
+<p>As you can see in the listing, a CronJob is just a thin wrapper around a Job. There are only two parts in the CronJob <code>spec</code>: the <code>schedule</code> and the <code>jobTemplate</code>. You learned how to write a Job manifest in the previous sections, so that part should be clear. If you know the crontab format, you should also understand how the schedule field works. If not, I explain it in section 17.2.2. First, let&#8217;s create the CronJob object from the manifest and see it in action.</p>
+</div>
+<div class="readable-text" data-hash="1e00a341bf8fb1d77259a73d201ae5fe" data-text-hash="a1bcd5a784e40e2c262c8de34b4ecc32" id="305" refid="305">
+<h4>Running a CronJob</h4>
+</div>
+<div class="readable-text" data-hash="9a01d3114d9d6ec94e68f549d0818315" data-text-hash="8dc6c9ab151525b8fe688fb7561ac092" id="306" refid="306">
+<p>Apply the manifest file to create the CronJob. Use the <code>kubectl get cj</code> command to check the object:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3d4f2127831cb9f8a98c2181e0749917" data-text-hash="74c69f8601348f9929f3fa07f8bc97e0" id="307" refid="307">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cj
+NAME                               SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+aggregate-responses-every-minute   * * * * *   False     0        &lt;none&gt;          2s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="308" refid="308">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="46ad4a20b7b3dfcf8cd09da6f402bc40" data-text-hash="b7f949c5572f7955e350861d511348cb" id="309" refid="309">
+<p> The shorthand for CronJob is <code>cj</code>.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="310" refid="310">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ab8d9b15cd1206fa3bb89a577f8adae9" data-text-hash="99d28a5d6ae1a707f8b535c4fbf3f4cf" id="311" refid="311">
+<p> When you list CronJobs with the <code>-o wide</code> option, the command also shows the container names and images used in the Pod, so you can easily see what the CronJob does.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0f8b816f929c70d650da00af6f37c715" data-text-hash="4b510025d9b0622efc89891016652568" id="312" refid="312">
+<p>The command output shows the list of CronJobs in the current Namespace. For each CronJob, the name, schedule, whether the CronJob is suspended, the number of currently active Jobs, the last time a Job was scheduled, and the age of the object are displayed.</p>
+</div>
+<div class="readable-text" data-hash="515c9c859224e2d9d265ea74d2a1c735" data-text-hash="43cce229049b9b897c7facb2fbd16001" id="313" refid="313">
+<p>As indicated by the information in the columns <code>ACTIVE</code> and <code>LAST SCHEDULE</code>, no Job has yet been created for this CronJob. The CronJob is configured to create a new Job every minute. The first Job is created when the next minute starts, and the output of the <code>kubectl get cj</code> command then looks like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3bf964c429fbf7edd22688c2ca9f0add" data-text-hash="6beaaea448582ad9dc661c957172e6e8" id="314" refid="314">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cj
+NAME                               SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+aggregate-responses-every-minute   * * * * *   False     1        2s              53s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="bb3d01b74a3a7f47bcfd3a875f7214a2" data-text-hash="ee51e0b35dd0b0c289cd458a2050cd83" id="315" refid="315">
+<p>The command output now shows an active Job that was created 2 seconds ago. Unlike the Job controller, which adds the <code>job-name</code> label to the Pods so you can easily list Pods associated with a Job, the CronJob controller doesn&#8217;t add labels to the Job. So, if you want to list Jobs created by a specific CronJob, you need to add your own labels to the Job template.</p>
+</div>
+<div class="readable-text" data-hash="712d054118ce5f42b229ec3cb3a765a4" data-text-hash="50c68413e1c66ca21ad3100ee3954cdd" id="316" refid="316">
+<p>In the manifest for the <code>aggregate-responses-every-minute</code> CronJob, you added the label &#8220;<code>app: aggregate-responses-today</code>&#8221; to both the Job template and the Pod template within that Job template. This allows you to easily list the Jobs and Pods associated with this CronJob. List the associated Jobs as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fb4979fc946dca18ef6cc2c1780d94d4" data-text-hash="7002f8217f655a6a32ffba4a2ca8366c" id="317" refid="317">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get jobs -l app=aggregate-responses-today
+NAME                                        COMPLETIONS   DURATION   AGE
+aggregate-responses-every-minute-27755219   1/1           36s        37s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="deb2df6c1e727ac29b7605355630412d" data-text-hash="7d746578bc37071e6773a22c12501653" id="318" refid="318">
+<p>The CronJob has created only one Job so far. As you can see, the Job name is generated from the CronJob name. The number at the end of the name is the scheduled time of the Job in Unix Epoch Time, converted to minutes.</p>
+</div>
+<div class="readable-text" data-hash="9149434fbf051c1df2633bf071dc3525" data-text-hash="5b56f74f8583818e507ee19872352265" id="319" refid="319">
+<p>When the CronJob controller creates the Job object, the Job controller creates one or more Pods, depending on the Job template. To list the Pods, you use the same label selector as before. The command looks like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="49dfec8fcf30e55d1d65bc2e151020b3" data-text-hash="cfd6635b76114e2ca0093045064894c4" id="320" refid="320">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=aggregate-responses-today
+NAME                                              READY   STATUS      RESTARTS   AGE
+aggregate-responses-every-minute-27755219-4sl97   0/1     Completed   0          52s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ed966f4fbf7d135f9983198401cd3c58" data-text-hash="236fc747378fa70c977689b9b803ac1c" id="321" refid="321">
+<p>The status shows that this Pod has completed successfully, but you already knew that from the Job status.</p>
+</div>
+<div class="readable-text" data-hash="fe50d9ecbff552dec27fddbc5b2ebbce" data-text-hash="d1e26e4e5980bff50564adaa29c8445e" id="322" refid="322">
+<h4>Inspecting the CronJob status in detail</h4>
+</div>
+<div class="readable-text" data-hash="948a7952c758ad5f1d89aa3d754b7eaf" data-text-hash="9536057f25c33538bb9c5c0af5e0d76a" id="323" refid="323">
+<p>The <code>kubectl get cronjobs</code> command only shows the number of currently active Jobs and when the last Job was scheduled. Unfortunately, it doesn&#8217;t show whether the last Job was successful. To get this information, you can either list the Jobs directly or check the CronJob <code>status</code> in YAML form as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="327562798a6167fd59d43cad923fd74d" data-text-hash="62c5f9863f1136ce447cc9e495026fc7" id="324" refid="324">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cj aggregate-responses-every-minute -o yaml
+...
+status:
+  active:    #A
+  - apiVersion: batch/v1    #A
+    kind: Job    #A
+    name: aggregate-responses-every-minute-27755221    #A
+    namespace: kiada    #A
+    resourceVersion: "5299"    #A
+    uid: 430a0064-098f-4b46-b1af-eaa690597353    #A
+  lastScheduleTime: "2022-10-09T11:01:00Z"    #B
+  lastSuccessfulTime: "2022-10-09T11:00:41Z"    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGxpc3Qgb2YgY3VycmVudGx5IHJ1bm5pbmcgSm9icyBmb3IgdGhpcyBDcm9uSm9iLgojQiBXaGVuIHRoZSBsYXN0IEpvYiBmb3IgdGhpcyBDcm9uSm9iIHdhcyBzY2hlZHVsZWQuCiNDIFdoZW4gdGhlIGxhc3QgSm9iIGZvciB0aGlzIENyb25Kb2IgY29tcGxldGVkIHN1Y2Nlc3NmdWxseS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9f7bac79ca32f99aabd250cdcafc39b7" data-text-hash="3588e720dc7bc223bb21d5a061826c33" id="325" refid="325">
+<p>As you can see, the <code>status</code> section of a CronJob object shows a list with references to the currently running Jobs (field <code>active</code>), the last time the Job was scheduled (field <code>lastScheduleTime</code>), and the last time the Job completed successfully (field <code>lastSuccessfulTime</code>). From the last two fields you can deduce whether the last run was successful.</p>
+</div>
+<div class="readable-text" data-hash="277de1af979ea281937c32bc6b615296" data-text-hash="df1e252242ea9109e3cadd494ceb4b2f" id="326" refid="326">
+<h4>Inspecting Events associated with a CronJob</h4>
+</div>
+<div class="readable-text" data-hash="32db01ef1db46a7b70c74be6684d1e1a" data-text-hash="2080f85b0ca2f2e227e1979cf7eb72cb" id="327" refid="327">
+<p>To see the full details of a CronJob and all Events associated with the object, use the <code>kubectl describe</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="edec8a6660f7f93bd3ddc99d90058517" data-text-hash="2928457afdd5907fadb7372a7b46d921" id="328" refid="328">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe cj aggregate-responses-every-minute
+Name:                          aggregate-responses-every-minute
+Namespace:                     kiada
+Labels:                        &lt;none&gt;
+Annotations:                   &lt;none&gt;
+Schedule:                      * * * * *
+Concurrency Policy:            Allow
+Suspend:                       False
+Successful Job History Limit:  3
+Failed Job History Limit:      1
+Starting Deadline Seconds:     &lt;unset&gt;
+Selector:                      &lt;unset&gt;
+Parallelism:                   &lt;unset&gt;
+Completions:                   &lt;unset&gt;
+Pod Template:
+  ...
+Last Schedule Time:  Sun, 09 Oct 2022 11:01:00 +0200
+Active Jobs:         aggregate-responses-every-minute-27755221
+Events:
+  Type    Reason            Age   From                Message
+  ----    ------            ----  ----                -------
+  Normal  SuccessfulCreate  98s   cronjob-controller  Created job aggregate-responses-
+                                                      every-minute-27755219
+  Normal  SawCompletedJob   41s   cronjob-controller  Saw completed job: aggregate-
+                                                      responses-every-minute-27755219, 
+                                                      status: Complete
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f9fdb4cfed511a7e7f9683e1c8252e4f" data-text-hash="f5f0fa27da4e8a3359d2d4ea01b538db" id="329" refid="329">
+<p>As can be seen in the command output, the CronJob controller generates a <code>SuccessfulCreate</code> Event when it creates a Job, and a <code>SawCompletedJob</code> Event when the Job completes.</p>
+</div>
+<div class="readable-text" data-hash="e81b78b0ed4aa1f903090d2185a9bc43" data-text-hash="6e683c0188a13f37bb888ef1af349dbd" id="330" refid="330">
+<h3 id="sigil_toc_id_313"><a href="v-15.html" id="id_Ref126784664"></a>17.2.2&#160;Configuring the schedule</h3>
+</div>
+<div class="readable-text" data-hash="e48aa6c6daaa13b4471528aad380b15c" data-text-hash="301288109ee288be839aa4215177174f" id="331" refid="331">
+<p>The <code>schedule</code> in the CronJob spec is written in crontab format. If you&#8217;re not familiar with the this syntax, you can find tutorials and explanations online, but the following section is meant as a short introduction.</p>
+</div>
+<div class="readable-text" data-hash="ef30e1d6ee203a8c857c591a0aca9c75" data-text-hash="cb50205d9a1e79e56998075e69b6b002" id="332" refid="332">
+<h4>Understanding the crontab format</h4>
+</div>
+<div class="readable-text" data-hash="b757796497fe2cbd32ccd7c230f84ca9" data-text-hash="d99f1eedc1c886d71cf4685bb140a5ca" id="333" refid="333">
+<p>A schedule in crontab format consists of five fields and looks as follows:</p>
+</div>
+<div class="browsable-container figure-container" data-hash="8ba054270f4a956013bc2b1535fed7c5" data-text-hash="d41d8cd98f00b204e9800998ecf8427e" id="334" refid="334">
+<img alt="" border="0" data-processed="true" height="83" id="Picture_6" loading="lazy" src="EPUB/images/17_img_0013.png" width="439">
+</div>
+<div class="readable-text" data-hash="4e4b1776c4dd12bd0755adf2b649f0bd" data-text-hash="fe2777a486522e056fa6c47cfdc7c8ab" id="335" refid="335">
+<p>From left to right, the fields are the minute, hour, day of the month, month, and day of the week when the schedule should be triggered. In the example, an asterisk (<code>*</code>) appears in each field, meaning that each field matches any value.</p>
+</div>
+<div class="readable-text" data-hash="8462a2950c99ddfb7cac586d203f4d5c" data-text-hash="3678e9423dbbfe5191346078307a1db7" id="336" refid="336">
+<p>If you&#8217;ve never seen a cron schedule before, it may not be obvious that the schedule in this example triggers every minute. But don&#8217;t worry, this will become clear to you as you learn what values to use instead of asterisks and as you see other examples. In each field, you can specify a specific value, range of values, or group of values instead of the asterisk, as explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="0e73a39d6bb6458e15bf5e2a79553dee" data-text-hash="9697b0d04c205f59432c1609e6b9729e" id="337" refid="337">
+<h5><span xml:lang="EN-US">Table 17.3 Understanding the patterns in a CronJob&#8217;s schedule field</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td width="12%">
+<div>
+<p>Value</p>
+</div> </td>
+<td width="88%">
+<div>
+<p>Description</p>
+</div> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>5
+</pre> </td>
+<td width="88%"> <p>A single value. For example, if the value 5 is used in the Month field, the schedule will trigger if the current month is May.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>MAY
+</pre> </td>
+<td width="88%"> <p>In the Month and Day of week fields, you can use three-letter names instead of numeric values.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>1-5
+</pre> </td>
+<td width="88%"> <p>A range of values. The specified range includes both limits. For the Month field, <code>1-5</code> corresponds to <code>JAN-MAY</code>, in which case the schedule triggers if the current month is between January and May (inclusive).</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>1,2,5-8
+</pre> </td>
+<td width="88%"> <p>A list of numbers or ranges. In the Month field, <code>1,2,5-8</code> stands for January, February, May, June, July, and August.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>*
+</pre> </td>
+<td width="88%"> <p>Matches the entire range of values. For example, * in the Month field is equivalent to <code>1-12</code> or <code>JAN-DEC</code>.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>*/3
+</pre> </td>
+<td width="88%"> <p>Every Nth value, starting with the first value. For example, if <code>*/3</code> is used in the Month field, it means that every third month is included in the schedule, while the others aren&#8217;t. A CronJob using this schedule will be executed in January, April, July, and October.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>5/2
+</pre> </td>
+<td width="88%"> <p>Every Nth value, starting with the specified value. In the Month field, <code>5/2</code> causes the schedule to trigger every other month, starting in May. In other words, this schedule is triggered if the month is May, July, September, or November.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>3-10/2
+</pre> </td>
+<td width="88%"> <p>The <code>/N</code> pattern can also be applied to ranges. In the Month field, <code>3-10/2</code> indicates that between March and October, only every other month is included in the schedule. Thus, the schedule includes the months of March, May, July, and September.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="4f9fcedc2a9872853e0d06c4366109a6" data-text-hash="52338af5897ebc9c9e88a0217250d153" id="338" refid="338">
+<p>Of course, these values can appear in different time fields and together they define the exact times at which this schedule is triggered. The following table shows examples of different schedules and their explanations.</p>
+</div>
+<div class="browsable-container" data-hash="75abaf27f8667cc6d3b236244d351024" data-text-hash="5cdd2f24b4108e0927288f493e902fdd" id="339" refid="339">
+<h5><span xml:lang="EN-US">Table 17.4 Cron examples</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td width="21%">
+<div>
+<p>Schedule</p>
+</div> </td>
+<td width="79%">
+<div>
+<p>Explanation</p>
+</div> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>* * * * *
+</pre> </td>
+<td width="79%"> <p>Every minute (at every minute of every hour, regardless of month, day of the month, or day of the week).</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>15 * * * *
+</pre> </td>
+<td width="79%"> <p>Fifteen minutes after every hour.</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>0 0 * 1-3 *
+</pre> </td>
+<td width="79%"> <p>Every day at midnight, but only from January to March.</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>*/5 18 * * *
+</pre> </td>
+<td width="79%"> <p>Every five minutes between 18:00 (6 PM) and 18:59 (6:59 PM).</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>* * 7 5 *
+</pre> </td>
+<td width="79%"> <p>Every minute on May 7.</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>0,30 3 7 5 *
+</pre> </td>
+<td width="79%"> <p>At 3:00AM and 3:30AM on May 7.</p> </td>
+</tr>
+<tr>
+<td width="21%"> <p></p><pre>0 0 * * 1-5
+</pre> </td>
+<td width="79%"> <p>At 0:00 AM every weekday (Monday through Friday).</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="340" refid="340">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="789848db8f04b84e171b60297ba4ec79" data-text-hash="017d453d9065860bdae1a4aa25229cf0" id="341" refid="341">
+<p> A CronJob creates a new Job when all fields in the crontab match the current date and time, except for the <i>Day of month</i> and <i>Day of week</i> fields. The CronJob will run if <i>either</i> of these fields match. You might expect the schedule &#8220;* * 13 * 5&#8221; to only trigger on Friday the 13th, but it&#8217;ll trigger on every 13th of the Month <i>as well as</i> every Friday.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f71bbf79df3c96b11ef88211b01c870e" data-text-hash="a1fabf2b030ea3a8e4b33fbb04685bcd" id="342" refid="342">
+<p>Fortunately, simple schedules don&#8217;t have to be specified this way. Instead, you can use one of the following special values:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="4f9e3b53d42090d8d133ac1a443b6035" data-text-hash="3e39b480194e12188fe11fcb9c04c2ec" id="343" refid="343"><code class="codechar">@hourly</code>, to run the Job every hour (at the top of the hour),</li>
+<li class="readable-text" data-hash="a6e429c0bd4d8b3d4ab450dc0c4aa2c8" data-text-hash="e285af35bf21b256f9f24828c07e84cc" id="344" refid="344"><code>@daily</code>, to run it every day at midnight,</li>
+<li class="readable-text" data-hash="6423564fb5c1e9e4987273163dc44df3" data-text-hash="d0095efc3acef9fb20457e3c7828d03c" id="345" refid="345"><code>@weekly</code>, to run it every Sunday at midnight,</li>
+<li class="readable-text" data-hash="c303e2070ddb98b2f3385f2b140e1a97" data-text-hash="af9c6a6f9293c69c83e6fbf9a70d42be" id="346" refid="346"><code>@monthly</code>, to run it at 0:00 on the first day of each month,</li>
+<li class="readable-text" data-hash="a8bb068bacc283873f152af7a7f6ac45" data-text-hash="6a14cb4ba42470429f7ddc7545c6b6e0" id="347" refid="347"><code>@yearly</code> or <code>@annually</code> to run it at 0:00 on January 1st of each year.</li>
+</ul>
+<div class="readable-text" data-hash="88314b7260ab96d21a23e7217505f5ee" data-text-hash="fd18a8c2096eee2000d3b2f649cdd805" id="348" refid="348">
+<h4>Setting the Time Zone to use for scheduling</h4>
+</div>
+<div class="readable-text" data-hash="a8a1759b440636c0dee3325552e57688" data-text-hash="f638ff4471d6b4aaa772a26de76f3bab" id="349" refid="349">
+<p>The CronJob controller, like most other controllers in Kubernetes, runs within the Controller Manager component of the Kubernetes Control Plane. By default, the CronJob controller schedules CronJobs based on the time zone used by the Controller Manager. This can cause your CronJobs to run at times you didn&#8217;t intend, especially if the Control Plane is running in another location that uses a different time zone.</p>
+</div>
+<div class="readable-text" data-hash="abf6a5822519efd716ed174891e8db65" data-text-hash="9078acf4913d8ad3167642b454435dc9" id="350" refid="350">
+<p>By default, the time zone isn&#8217;t specified. However, you can specify it using the <code>timeZone</code> field in the <code>spec</code> section of the CronJob manifest. For example, if you want your CronJob to run Jobs at 3 AM Central European Time (<code>CET</code> time zone), the CronJob manifest should look like the following listing:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6408969b5187324ee175fffbb1d23c96" data-text-hash="283039959cd3aedde10d58c6bc23eca7" id="351" refid="351">
+<h5>Listing 17.17 Setting a time zone for the CronJob schedule</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1    #A
+kind: CronJob    #A
+metadata:
+  name: runs-at-3am-cet
+spec:
+  schedule: "0 3 * * *"    #A
+  timeZone: CET    #A
+  jobTemplate:
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBDcm9uSm9iIHJ1bnMgYXQgMzowMCBBTSBDZW50cmFsIEV1cm9wZWFuIFRpbWUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="76e5bd8a67b666990f42860b83c4de80" data-text-hash="2cba9b599551ddf34b52616dcdb1a5ee" id="352" refid="352">
+<h3 id="sigil_toc_id_314">17.2.3&#160;Suspending and resuming a CronJob</h3>
+</div>
+<div class="readable-text" data-hash="fdbbd12d2a31c993edfe12e3d63e99ce" data-text-hash="b388cfd2b286b6735de1e6d87fcf9a4d" id="353" refid="353">
+<p>Just as you can suspend a Job, you can suspend a CronJob. At the time of writing, there is no specific <code>kubectl</code> command to suspend a CronJob, so you must do so using the <code>kubectl patch</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e1e79d3359cf31d1c174cab3f8cb619f" data-text-hash="4aabf5ec4c52590e02c295fd404cfab6" id="354" refid="354">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch cj aggregate-responses-every-minute -p '{"spec":{"suspend": true}}'
+cronjob.batch/aggregate-responses-every-minute patched</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e62e9cdec94bce07e929889c497d4b20" data-text-hash="cdc8e30d04717c32875db375d4eb9676" id="355" refid="355">
+<p>While a CronJob is suspended, the controller doesn&#8217;t start any new Jobs for it, but allows all Jobs already running to finish, as the following output shows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c15fcb83d1c85b187d6f0177a3916730" data-text-hash="b71c8d5678ae16daf5f21a06ce885d3d" id="356" refid="356">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cj
+NAME                               SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+aggregate-responses-every-minute   * * * * *   True      1        19s             10m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="598c6d3ea1d16ba6a18930c7382d5a1c" data-text-hash="9a1f1e2bf901e0a69fbacad9ff8158b4" id="357" refid="357">
+<p>The output shows that the CronJob is suspended, but that a Job is still active. When that Job is finished, no new Jobs will be created until you resume the CronJob. You can do this as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fa7e92189dd0c5b776d3a4634befb1ce" data-text-hash="207dbe3aab72a01a39cb141790066e65" id="358" refid="358">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl patch cj aggregate-responses-every-minute -p '{"spec":{"suspend": false}}'
+cronjob.batch/aggregate-responses-every-minute patched</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5416511b9ac960c91b3defca1c954a95" data-text-hash="bfde10a0762bb5d0a56f87b4f578570a" id="359" refid="359">
+<p>As with Jobs, you can create CronJobs in a suspended state and resume them later.</p>
+</div>
+<div class="readable-text" data-hash="a3c52ca470e1cacd9b05efa42f198458" data-text-hash="2536a2adb256bdf64a157f1e37bee2e4" id="360" refid="360">
+<h3 id="sigil_toc_id_315">17.2.4&#160;Automatically removing finished Jobs</h3>
+</div>
+<div class="readable-text" data-hash="8054884346c2d2a7dca782123483c22f" data-text-hash="be75f775e89618cf684a925df9cb511a" id="361" refid="361">
+<p>Your <code>aggregate-responses-every-minute</code> CronJob has been active for several minutes, so several Job objects have been created in that time. In my case, the CronJob has been in existence for over ten minutes, which means that more than ten Jobs have been created. However, when I list the Jobs, I see only see four, as you can see in the following output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fd8ff31079111ec17a4038921ab564e5" data-text-hash="1a3320394a4c7ce3fca0857917353bf3" id="362" refid="362">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get job -l app=aggregate-responses-today
+NAME                                        COMPLETIONS   DURATION   AGE
+aggregate-responses-every-minute-27755408   1/1           57s        3m5s    #A
+aggregate-responses-every-minute-27755409   1/1           61s        2m5s    #A
+aggregate-responses-every-minute-27755410   1/1           53s        65s    #A
+aggregate-responses-every-minute-27755411   0/1           5s         5s    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhyZWUgY29tcGxldGVkIEpvYnMuCiNCIE9uZSBjdXJyZW50bHkgcnVubmluZyBKb2Iu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1b3e844a8dc6a2072e68fdace2b237c6" data-text-hash="5cad806ca21e69366d4e736705544c86" id="363" refid="363">
+<p>Why don&#8217;t I see more Jobs? This is because the CronJob controller automatically deletes completed Jobs. However, not all of them are deleted. In the CronJob&#8217;s <code>spec</code>, you can use the fields <code>successfulJobsHistoryLimit</code> and <code>failedJobsHistoryLimit</code> to specify how many successful and failed Jobs to keep. By default, CronJobs keeps 3 successful and 1 failed Job. The Pods associated with each kept Job are also preserved, so you can view their logs.</p>
+</div>
+<div class="readable-text" data-hash="acfdee164f43111953bdb46b58850736" data-text-hash="06e2693ef0e1e2305648906e2341647c" id="364" refid="364">
+<p>As an exercise, you can try setting the <code>successfulJobsHistoryLimit</code> in the <code>aggregate-responses-every-minute</code> CronJob to <code>1</code>. You can do that by modifying the existing CronJob object with the <code>kubectl edit</code> command. After you have updated the CronJob, list the Jobs again to verify that all but one Job has been deleted.</p>
+</div>
+<div class="readable-text" data-hash="8aa178b0641b877e782b1d42f61cb6e4" data-text-hash="fe6cac4af9a67dfcabae2e5df6433754" id="365" refid="365">
+<h3 id="sigil_toc_id_316">17.2.5&#160;Setting a start deadline</h3>
+</div>
+<div class="readable-text" data-hash="f4615153793a337dd83abbdf53230450" data-text-hash="2f40ae34120677732cd438d9db90f568" id="366" refid="366">
+<p>The CronJob controller creates the Job objects at approximately the scheduled time. If the cluster is working normally, there is at most a delay of a few seconds. However, if the cluster&#8217;s Control Plane is overloaded or if the Controller Manager component running the CronJob controller is offline, this delay may be longer.</p>
+</div>
+<div class="readable-text" data-hash="adfd4c5c251f6dd71211ec71729c1cc9" data-text-hash="827a5db611a405137ef23be8e2a492ff" id="367" refid="367">
+<p>If it&#8217;s crucial that the Job shouldn&#8217;t start too far after its scheduled time, you can set a deadline in the <code>startingDeadlineSeconds</code> field, as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="41584850d43e97219e3272782785d91b" data-text-hash="b088fc26a1808707bc5e7a5f390e8a75" id="368" refid="368">
+<h5>Listing 17.18 Specifying a starting deadline in a CronJob</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: batch/v1
+kind: CronJob
+spec:
+  schedule: "* * * * *"
+  startingDeadlineSeconds: 30    #A
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEpvYiBpcyBjb25zaWRlcmVkIGZhaWxlZCBpZiBpdCBkb2VzbuKAmXQgc3RhcnQgd2l0aGluIDMwIHNlY29uZHMgb2YgaXRzIGludGVuZGVkIHNjaGVkdWxlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d9fa52beb542b9622d120735eca79004" data-text-hash="06f64778af0dddbd644936fef6b73527" id="369" refid="369">
+<p>If the CronJob controller can&#8217;t create the Job within 30 seconds of the scheduled time, it won&#8217;t create it. Instead, a <code>MissSchedule</code> event will be generated to inform you why the Job wasn&#8217;t created.</p>
+</div>
+<div class="readable-text" data-hash="8cc4aec5928bc638e83677a7c57882b3" data-text-hash="1da98229ec362b5658044c18089039c7" id="370" refid="370">
+<h4>What happens when the CronJob controller is offline for a long time</h4>
+</div>
+<div class="readable-text" data-hash="9e427d017515bd819aadde0c22a1131c" data-text-hash="f4fa44a4bf75d897cefdd05c4af4c140" id="371" refid="371">
+<p>If the <code>startingDeadlineSeconds</code> field isn&#8217;t set and the CronJob controller is offline for an extended period of time, undesirable behavior may occur when the controller comes back online. This is because the controller will immediately create all the Jobs that should have been created while it was offline.</p>
+</div>
+<div class="readable-text" data-hash="d30e5e91b6c173295d80fb357d34e8ce" data-text-hash="1aff22ac676d8eae1d25def896136bf8" id="372" refid="372">
+<p>However, this will only happen if the number of missing jobs is less than 100. If the controller detects that more than 100 Jobs were missed, it doesn&#8217;t create any Jobs. Instead, it generates a <code>TooManyMissedTimes</code> event. By setting the start deadline, you can prevent this from happening.</p>
+</div>
+<div class="readable-text" data-hash="1252de8a0fc9ad64cc43ae5a25fbcbc3" data-text-hash="77de77fd00fd52b0ed64b046d4653877" id="373" refid="373">
+<h3 id="sigil_toc_id_317">17.2.6&#160;Handling Job concurrency</h3>
+</div>
+<div class="readable-text" data-hash="02ef7ae8c897f97e684b2f11e3ef3cc4" data-text-hash="f1fd7ca55c7cf8e042ceee5421c9d70f" id="374" refid="374">
+<p>The <code>aggregate-responses-every-minute</code> CronJob creates a new Job every minute. What happens if a Job run takes longer than one minute? Does the CronJob controller create another Job even if the previous Job is still running?</p>
+</div>
+<div class="readable-text" data-hash="91e57ffbb132b894f7c26ac7ca2ad318" data-text-hash="086e09ca4c5634daf9b08edfcb0b93d0" id="375" refid="375">
+<p>Yes! If you keep an eye on the CronJob status, you may eventually see the following status:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a144a55fe7b92633849ba62d3b480d0b" data-text-hash="eaa8897dc2e5fc4122c3baaceccc1ec7" id="376" refid="376">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get cj
+NAME                               SCHEDULE    SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+aggregate-responses-every-minute   * * * * *   True      2        5s              20m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="aac267a316fa4580a3f294e4b3115886" data-text-hash="bfbefb12e363107b9fe0ad1cb6db12b8" id="377" refid="377">
+<p>The <code>ACTIVE</code> column indicates that two Jobs are active at the same time. By default, the CronJob controller creates new Jobs regardless of how many previous Jobs are still active. However, you can change this behavior by setting the <code>concurrencyPolicy</code> in the CronJob <code>spec</code>. The following figure shows the three supported concurrency policies.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b91b76aefdf9292011810633ffb4935f" data-text-hash="916869650ae582bd125ed8a9c7e179e1" id="378" refid="378">
+<h5>Figure 17.12 Comparing the behavior of the three CronJob concurrency policies</h5>
+<img alt="" border="0" data-processed="true" height="540" id="Picture_5" loading="lazy" src="EPUB/images/17_img_0014.png" width="832">
+</div>
+<div class="readable-text" data-hash="7d26665f41dec81dea4f1e898ee20264" data-text-hash="22179b339a28233a9b9287fb8ef5bb5e" id="379" refid="379">
+<p>For easier reference, the supported concurrency policies are also explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="89741496eee520d6068d43296594c26d" data-text-hash="bce01cd493b17a92f8a81578749aaad5" id="380" refid="380">
+<h5><span xml:lang="EN-US">Table 17.5 Supported concurrency policies</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td width="12%">
+<div>
+<p>Value</p>
+</div> </td>
+<td width="88%">
+<div>
+<p>Description</p>
+</div> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>Allow
+</pre> </td>
+<td width="88%"> <p>Multiple Jobs are allowed to run at the same time. This is the default setting.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>Forbid
+</pre> </td>
+<td width="88%"> <p>Concurrent runs are prohibited. If the previous run is still active when a new run is to be scheduled, the CronJob controller records a <code>JobAlreadyActive</code> event and skips creating a new Job.</p> </td>
+</tr>
+<tr>
+<td width="12%"> <p></p><pre>Replace
+</pre> </td>
+<td width="88%"> <p>The active Job is canceled and replaced by a new one. The CronJob controller cancels the active Job by deleting the Job object. The Job controller then deletes the Pods, but they&#8217;re allowed to terminate gracefully. This means that two Jobs are still running at the same time, but one of them is being terminated.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="532fc59fbc96b92b4674e5004a61bffb" data-text-hash="1a3a6caced071f55629803e80144c37e" id="381" refid="381">
+<p>If you want to see how the concurrency policy affects the execution of CronJob, you can try deploying the CronJobs in the following manifest files:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="2b365b8b9254ad9517e20f6bf8f279e0" data-text-hash="7c1a59013d6fa03ae6de1bd5adec2437" id="382" refid="382"><code class="codechar">cj.concurrency-allow.yaml</code>,</li>
+<li class="readable-text" data-hash="8936ed364700d54a997d15052d5bd7b5" data-text-hash="adce1456f6a9794f2c026c487dd682cb" id="383" refid="383"><code>cj.concurrency-forbid.yaml</code>,</li>
+<li class="readable-text" data-hash="4c0fae9fc01026d02822f9b87b82d6cc" data-text-hash="f4334eac1bfeeebccf7a544c84c7d0bc" id="384" refid="384"><code>cj.concurrency-replace.yaml</code>.</li>
+</ul>
+<div class="readable-text" data-hash="98e80920ddb4bd654e424d8449cb2834" data-text-hash="3874e02645530e960e6fba843a744451" id="385" refid="385">
+<h3 id="sigil_toc_id_318">17.2.7&#160;Deleting a CronJob and its Jobs</h3>
+</div>
+<div class="readable-text" data-hash="1097f3dc86d0b875b73a9eb05ebcb325" data-text-hash="55e432eb8112f0bd32573eabc93869f9" id="386" refid="386">
+<p>To temporarily suspend a CronJob, you can suspend it as described in one of the previous sections. If you want to cancel a CronJob completely, delete the CronJob object as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f717c6ff862704ec4d45910b17fb4ca7" data-text-hash="ff59299ffe153273c893ec71a716c5cc" id="387" refid="387">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete cj aggregate-responses-every-minute
+cronjob.batch "aggregate-responses-every-minute" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="724273e45ca4ae140f2c4b7cac5c3154" data-text-hash="97a7400e3cdaa93ebd1bea98d5a21862" id="388" refid="388">
+<p>When you delete the CronJob, all the Jobs it created will also be deleted. When they&#8217;re deleted, the Pods are deleted as well, which causes their containers to shut down gracefully.</p>
+</div>
+<div class="readable-text" data-hash="565f29f0557148cc86def100caa98fe7" data-text-hash="d62a4755b8919cfbdeb9299c62053376" id="389" refid="389">
+<h4>Deleting the CronJob while preserving the Jobs and their Pods</h4>
+</div>
+<div class="readable-text" data-hash="69a02ea11880f0b60bb00d735bc71909" data-text-hash="0a76ea8b8615266851230bd1bef20619" id="390" refid="390">
+<p>If you want to delete the CronJob but keep the Jobs and the underlying Pods, you should use the <code>--cascade=orphan</code> option when deleting the CronJob, as in the following example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c0e69a9fd5faa39997ecf10d4e0eb4d5" data-text-hash="eb72d77944718944209342c5edd7e142" id="391" refid="391">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete cj aggregate-responses-every-minute --cascade=orphan</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="392" refid="392">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="af265884badb398baaa6bcc17dbef616" data-text-hash="09d93778f9783d7becd66baf02a6c24d" id="393" refid="393">
+<p> If you delete a CronJob with the option <code>&#8211;-cascade=orphan</code> while a Job is active, the active Job will be preserved and allowed to complete the task it&#8217;s executing.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="7aaf5dc1b6d776bcfabd16b819d2c86a" data-text-hash="9a5c46d2aa0dd0a68d07a91b5d67949d" id="394" refid="394">
+<h2 id="sigil_toc_id_319">17.3&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="76287a6983a2e48c9128e363ceeb163e" data-text-hash="58011f191069096bc25b439857960e9e" id="395" refid="395">
+<p>In this chapter, you learned about Jobs and CronJobs. You learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="c3d02f8ac4bddb5a4e24e125de5b4fb0" data-text-hash="c3d02f8ac4bddb5a4e24e125de5b4fb0" id="396" refid="396">A Job object is used to run workloads that execute a task to completion instead of running indefinitely.</li>
+<li class="readable-text" data-hash="fdba0b1a491c90b9b2296d8ffdee787f" data-text-hash="fdba0b1a491c90b9b2296d8ffdee787f" id="397" refid="397">Running a task with the Job object ensures that the Pod running the task is rescheduled in the event of a node failure.</li>
+<li class="readable-text" data-hash="00a547858bed34f0621a702a6b228623" data-text-hash="f4414d3ccc0d6d69c39b2a5115ccbe95" id="398" refid="398">A Job can be configured to repeat the same task several times if you set the <code>completions</code> field. You can specify the number of tasks that are executed in parallel using the <code>parallelism</code> field.</li>
+<li class="readable-text" data-hash="8363a0def0a433d92c4aae47b9218da3" data-text-hash="8363a0def0a433d92c4aae47b9218da3" id="399" refid="399">When a container running a task fails, the failure is handled either at the Pod level by the Kubelet or at the Job level by the Job controller.</li>
+<li class="readable-text" data-hash="e7ec2791cb8e94f91516452fd991358a" data-text-hash="e7ec2791cb8e94f91516452fd991358a" id="400" refid="400">By default, the Pods created by a Job are identical unless you set the Job's completionMode to Indexed. In that case, each Pod gets its own completion index. This index allows each Pod to process only a certain portion of the data.</li>
+<li class="readable-text" data-hash="adfc2e9918868ef823b408ac7b52e3e3" data-text-hash="adfc2e9918868ef823b408ac7b52e3e3" id="401" refid="401">You can use a work queue in a Job, but you must provide your own queue and implement work item retrieval in your container.</li>
+<li class="readable-text" data-hash="6c4d164dedca06c8f4f8b92ce29519db" data-text-hash="6c4d164dedca06c8f4f8b92ce29519db" id="402" refid="402">Pods running in a Job can communicate with each other, but you need to define a headless Service so they can find each other via DNS.</li>
+<li class="readable-text" data-hash="02163f4ed66d6d138bdfbd34f7e6a0f0" data-text-hash="02163f4ed66d6d138bdfbd34f7e6a0f0" id="403" refid="403">If you want to run a Job at a specific time or at regular intervals, you wrap it in a CronJob. In the CronJob you define the schedule in the well-known crontab format.</li>
+</ul>
+<div class="readable-text" data-hash="5b246a0d1c043529f632134267bcc803" data-text-hash="725014382d96746199d595f52a52f09e" id="404" refid="404">
+<p>This brings us to the end of the second part of this book. You now know how to run all kinds of workloads in Kubernetes. In the next part, you&#8217;ll learn more about the Kubernetes Control Plane and how it works.</p>
+</div></div>
+
+        </body>
+        
+        

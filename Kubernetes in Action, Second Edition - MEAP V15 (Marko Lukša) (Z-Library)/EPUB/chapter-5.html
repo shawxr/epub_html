@@ -1,0 +1,1660 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="2a240830f30c43d1d4f7c70034547946" data-text-hash="203de3e6809147ae77f5ad1b058aec90" id="1" refid="1">
+<h1>5 Running workloads in Pods</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="ef0010c62eade2e54cc331d6afa77c04" data-text-hash="ef0010c62eade2e54cc331d6afa77c04" id="2" refid="2">Understanding how and when to group containers</li>
+<li class="readable-text" data-hash="4d93a5ee01d574ec5c4bd1bfdb2696c3" data-text-hash="4d93a5ee01d574ec5c4bd1bfdb2696c3" id="3" refid="3">Running an application by creating a Pod object from a YAML file</li>
+<li class="readable-text" data-hash="f949618b8845525e81619546ca4ba9e9" data-text-hash="f949618b8845525e81619546ca4ba9e9" id="4" refid="4">Communicating with an application, viewing its logs, and exploring its environment</li>
+<li class="readable-text" data-hash="543d8172e0feb34e52af8e80c05c564e" data-text-hash="543d8172e0feb34e52af8e80c05c564e" id="5" refid="5">Adding a sidecar container to extend the pod&#8217;s main container</li>
+<li class="readable-text" data-hash="603766191cfbabf124cc8d8a441c11eb" data-text-hash="603766191cfbabf124cc8d8a441c11eb" id="6" refid="6">Initializing pods by running init containers at pod startup</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="d17a38076841ecb171395f20af8b6c85" data-text-hash="385c5b8098c3413fb02d4d116122d03c" id="7" refid="7">
+<p>Let me refresh your memory with a diagram that shows the three types of objects you created in chapter 3 to deploy a minimal application on Kubernetes. Figure 5.1 shows how they relate to each other and what functions they have in the system.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="9827b9e7951c071bce3dd0169ce75787" data-text-hash="b9355f6416fc05d5d369a1a76bd5069c" id="8" refid="8">
+<h5>Figure 5.1 Three basic object types comprising a deployed application</h5>
+<img alt="" data-processed="true" height="232" id="Picture_1" loading="lazy" src="EPUB/images/05image002.png" width="838">
+</div>
+<div class="readable-text" data-hash="a43aeade7027067bd2a621f5e1faace8" data-text-hash="14d9ddefc378cbf0f3affdc5c79c83a3" id="9" refid="9">
+<p>You now have a basic understanding of how these objects are exposed via the Kubernetes API. In this and the following chapters, you&#8217;ll learn about the specifics of each of them and many others that are typically used to deploy a full application. Let&#8217;s start with the Pod object, as it represents the central, most important concept in Kubernetes - a running instance of your application.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="10" refid="10">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="66031eb032d0611eb6c9ab14c83d911a" data-text-hash="88daa558c5bd9b03e6c70e11111aa59c" id="11" refid="11">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html"><span>https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter05</span></a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="b2e445e752da3d8436fba47fab4861de" data-text-hash="d8b13f170b469f78f8ca3421ba7d2ccb" id="12" refid="12">
+<h2 id="sigil_toc_id_64">5.1&#160;Understanding pods</h2>
+</div>
+<div class="readable-text" data-hash="8675c393a3c87729315c4157662dd5cb" data-text-hash="a077a59f6ddf6ac9c9e394c8385bd1d0" id="13" refid="13">
+<p>You&#8217;ve already learned that a pod is a co-located group of containers and the basic building block in Kubernetes. Instead of deploying containers individually, you deploy and manage a group of containers as a single unit &#8212; a pod. Although pods may contain several, it&#8217;s not uncommon for a pod to contain just a single container. When a pod has multiple containers, all of them run on the same worker node &#8212; a single pod instance never spans multiple nodes. Figure 5.2 will help you visualize this information.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c35437cd47f38a6a4998b2a0ca45b116" data-text-hash="c22c3b2f30dbab28f8409c9f9af76ec2" id="14" refid="14">
+<h5>Figure 5.2 All containers of a pod run on the same node. A pod never spans multiple nodes.</h5>
+<img alt="" data-processed="true" height="260" id="Picture_2" loading="lazy" src="EPUB/images/05image003.png" width="825">
+</div>
+<div class="readable-text" data-hash="a31886a0763571e97fd6cf0d104e3ca0" data-text-hash="327a7c70133841ac632407ffe7b6e380" id="15" refid="15">
+<h3 id="sigil_toc_id_65">5.1.1&#160;Understanding why we need pods</h3>
+</div>
+<div class="readable-text" data-hash="9ce503ba36a746de1828d2bc84747320" data-text-hash="9dc09eddb8606e217d579428b0f4443c" id="16" refid="16">
+<p>Let&#8217;s discuss why we need to run multiple containers together, as opposed to, for example, running multiple processes in the same container.</p>
+</div>
+<div class="readable-text" data-hash="d21cdc5857280739d59f9403ebd73668" data-text-hash="18b881856dc5b450db4d2b4f20d5cd64" id="17" refid="17">
+<h4>Understanding why one container shouldn&#8217;t contain multiple processes</h4>
+</div>
+<div class="readable-text" data-hash="33604a1c02ad66a4285cd089d85afb58" data-text-hash="6ff77af26b27e85dcfed815aa659ea5a" id="18" refid="18">
+<p>Imagine an application that consists of several processes that communicate with each other via <i>IPC</i> (Inter-Process Communication) or shared files, which requires them to run on the same computer. In chapter 2, you learned that each container is like an isolated computer or virtual machine. A computer typically runs several processes; containers can also do this. You can run all the processes that make up an application in just one container, but that makes the container very difficult to manage.</p>
+</div>
+<div class="readable-text" data-hash="44646f44ea3945ba8d40e94b900c8ddf" data-text-hash="735673794278773b2ffe255af857dbce" id="19" refid="19">
+<p>Containers are <i>designed</i> to run only a single process, not counting any child processes that it spawns. Both container tooling and Kubernetes were developed around this fact. For example, a process running in a container is expected to write its logs to standard output. Docker and Kubernetes commands that you use to display the logs only show what has been captured from this output. If a single process is running in the container, it&#8217;s the only writer, but if you run multiple processes in the container, they all write to the same output. Their logs are therefore intertwined, and it&#8217;s difficult to tell which process each line belongs to.</p>
+</div>
+<div class="readable-text" data-hash="d0df4dc6ecdcfdaf1e5f63d312e7f992" data-text-hash="efb63bcce7a712a918e19f218be99d76" id="20" refid="20">
+<p>Another indication that containers should only run a single process is the fact that the container runtime only restarts the container when the container&#8217;s root process dies. It doesn&#8217;t care about any child processes created by this root process. If it spawns child processes, it alone is responsible for keeping all these processes running.</p>
+</div>
+<div class="readable-text" data-hash="6e6b8502eea1ece2b210f4d254baaee3" data-text-hash="c58c2f073dab4bd0040c80946799aa96" id="21" refid="21">
+<p>To take full advantage of the features provided by the container runtime, you should consider running only one process in each container.</p>
+</div>
+<div class="readable-text" data-hash="4a782a662874970438704eaeb3b5b77e" data-text-hash="2917e9d4d43174c196f00b51480f2567" id="22" refid="22">
+<h4>Understanding how a pod combines multiple containers</h4>
+</div>
+<div class="readable-text" data-hash="52415f0d3b5e36c3fb757fa5a721e08e" data-text-hash="f4ad46d3b8260d042ed70cdb6942052e" id="23" refid="23">
+<p>Since you shouldn&#8217;t run multiple processes in a single container, it&#8217;s evident you need another higher-level construct that allows you to run related processes together even when divided into multiple containers. These processes must be able to communicate with each other like processes in a normal computer. And that is why pods were introduced.</p>
+</div>
+<div class="readable-text" data-hash="39c6edeb5c778b407afad71b156674e2" data-text-hash="84163cdc732e7b9f87187fd3a1463da2" id="24" refid="24">
+<p>With a pod, you can run closely related processes together, giving them (almost) the same environment as if they were all running in a single container. These processes are somewhat isolated, but not completely - they share some resources. This gives you the best of both worlds. You can use all the features that containers offer, but also allow processes to work together. A pod makes these interconnected containers manageable as one unit.</p>
+</div>
+<div class="readable-text" data-hash="ce2519362a57d73004370f706e33c2a8" data-text-hash="73bb886c3ce48496c3f8ba5965905abe" id="25" refid="25">
+<p>In the second chapter, you learned that a container uses its own set of Linux namespaces, but it can also share some with other containers. This sharing of namespaces is exactly how Kubernetes and the container runtime combine containers into pods.</p>
+</div>
+<div class="readable-text" data-hash="77a126195285fcc1e22e889684a3bea6" data-text-hash="ad9b2f67c14b90f0512c46e9e0f75356" id="26" refid="26">
+<p>As shown in figure 5.3, all containers in a pod share the same Network namespace and thus the network interfaces, IP address(es) and port space that belong to it.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d877fb6abf5e27594b5d255ef537dd22" data-text-hash="32179a0be8e6e392a994c615d320b3ec" id="27" refid="27">
+<h5>Figure 5.3 Containers in a pod share the same network interfaces</h5>
+<img alt="" data-processed="true" height="235" id="Picture_3" loading="lazy" src="EPUB/images/05image004.png" width="724">
+</div>
+<div class="readable-text" data-hash="b8f8ecbaf588235d732eb5d6944c3e0e" data-text-hash="920a07e4ae3768bf9253f73effad5a27" id="28" refid="28">
+<p>Because of the shared port space, processes running in containers of the same pod can&#8217;t be bound to the same port numbers, whereas processes in other pods have their own network interfaces and port spaces, eliminating port conflicts between different pods.</p>
+</div>
+<div class="readable-text" data-hash="067f65ba446187b65ca426fdf45fe00d" data-text-hash="a14ffa4bbc0dcc45cbdd188abb2cdfac" id="29" refid="29">
+<p>All the containers in a pod also see the same system hostname, because they share the UTS namespace, and can communicate through the usual IPC mechanisms because they share the IPC namespace. A pod can also be configured to use a single PID namespace for all its containers, which makes them share a single process tree, but you must explicitly enable this for each pod individually.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="30" refid="30">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="85ed45d5495fccc8ca72975d6e083078" data-text-hash="8fb38e337eb4434de0eda510c61bc894" id="31" refid="31">
+<p> When containers of the same pod use separate PID namespaces, they can&#8217;t see each other or send process signals like <code>SIGTERM</code> or <code>SIGINT</code> between them.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5379643e8da935e2ef72f7e414683883" data-text-hash="b378fcf665a2e4dc1c49a344e4e27868" id="32" refid="32">
+<p>It&#8217;s this sharing of certain namespaces that gives the processes running in a pod the impression that they run together, even though they run in separate containers.</p>
+</div>
+<div class="readable-text" data-hash="4d1259a5a54fe50ec4ef7782d5d7dda5" data-text-hash="1a65c2da8585e98bde1531c962beebd7" id="33" refid="33">
+<p>In contrast, each container always has its own Mount namespace, giving it its own file system, but when two containers must share a part of the file system, you can add a <i>volume</i> to the pod and mount it into both containers. The two containers still use two separate Mount namespaces, but the shared volume is mounted into both. You&#8217;ll learn more about volumes in chapter 7.</p>
+</div>
+<div class="readable-text" data-hash="f5094157e0016d8a7b3d0b954bc16dd4" data-text-hash="1c89d64188ed28197b7a45b79fa9f63f" id="34" refid="34">
+<h3 id="sigil_toc_id_66">5.1.2&#160;Organizing containers into pods</h3>
+</div>
+<div class="readable-text" data-hash="aabb122779ec67db34f84a109be0a04d" data-text-hash="1bd3bac9d1e706597434c4af2f2cada0" id="35" refid="35">
+<p>You can think of each pod as a separate computer. Unlike virtual machines, which typically host multiple applications, you typically run only one application in each pod. You never need to combine multiple applications in a single pod, as pods have almost no resource overhead. You can have as many pods as you need, so instead of stuffing all your applications into a single pod, you should divide them so that each pod runs only closely related application processes.</p>
+</div>
+<div class="readable-text" data-hash="ca02af6865e0c1153c7c44783e96e4c2" data-text-hash="fa9ea068e32c26cbeaaea6a9e6170d44" id="36" refid="36">
+<p>Let me illustrate this with a concrete example.</p>
+</div>
+<div class="readable-text" data-hash="37e756ba471248d03db5a854297d1da6" data-text-hash="599383536231b8292a596b8d60ac717e" id="37" refid="37">
+<h4>Splitting a multi-tier application stack into multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="8e9953da98c10af2b2a5bf39266deb49" data-text-hash="ec96760e8144c1c285fb8bb1d245cb78" id="38" refid="38">
+<p>Imagine a simple system composed of a front-end web server and a back-end database. I&#8217;ve already explained that the front-end server and the database shouldn&#8217;t run in the same container, as all the features built into containers were designed around the expectation that not more than one process runs in a container. If not in a single container, should you then run them in separate containers that are all in the same pod?</p>
+</div>
+<div class="readable-text" data-hash="d9be809eb480107228e366af184847d4" data-text-hash="c5ec0ba377228da3ce8c3ae42651da3f" id="39" refid="39">
+<p>Although nothing prevents you from running both the front-end server and the database in a single pod, this isn&#8217;t the best approach. I&#8217;ve explained that all containers of a pod always run co-located, but do the web server and the database have to run on the same computer? The answer is obviously no, as they can easily communicate over the network. Therefore you shouldn&#8217;t run them in the same pod.</p>
+</div>
+<div class="readable-text" data-hash="8450be076e708cda60ca0a3e8500c22a" data-text-hash="1c18085d70839af21ebffaf93c23eb2e" id="40" refid="40">
+<p>If both the front-end and the back-end are in the same pod, both run on the same cluster node. If you have a two-node cluster and only create this one pod, you are using only a single worker node and aren&#8217;t taking advantage of the computing resources available on the second node. This means wasted CPU, memory, disk storage and bandwidth. Splitting the containers into two pods allows Kubernetes to place the front-end pod on one node and the back-end pod on the other, thereby improving the utilization of your hardware.</p>
+</div>
+<div class="readable-text" data-hash="55a0176786038e4f2005ecd1e4848c37" data-text-hash="2b74ff4f544919c41cad8cf66999d01f" id="41" refid="41">
+<h4>Splitting into multiple pods to enable individual scaling</h4>
+</div>
+<div class="readable-text" data-hash="32def48373ae832d7f4529bb176cc67a" data-text-hash="7e7cd90bc8012deab78f06534ab3b619" id="42" refid="42">
+<p>Another reason not to use a single pod has to do with horizontal scaling. A pod is not only the basic unit of deployment, but also the basic unit of scaling. In chapter 2 you scaled the Deployment object and Kubernetes created additional pods &#8211; additional replicas of your application. Kubernetes doesn&#8217;t replicate containers within a pod. It replicates the entire pod.</p>
+</div>
+<div class="readable-text" data-hash="3efcc6bcc7bd951f0322ab7a5ad49544" data-text-hash="f8ac2e861fcf188b3915cb88eaf22206" id="43" refid="43">
+<p>Front-end components usually have different scaling requirements than back-end components, so we typically scale them individually. When your pod contains both the front-end and back-end containers and Kubernetes replicates it, you end up with multiple instances of both the front-end and back-end containers, which isn&#8217;t always what you want. Stateful back-ends, such as databases, usually can&#8217;t be scaled. At least not as easily as stateless front ends. If a container has to be scaled separately from the other components, this is a clear indication that it must be deployed in a separate pod.</p>
+</div>
+<div class="readable-text" data-hash="507d15bb18d903e00f4abfa971af23cb" data-text-hash="52a54215db758b42a591c76e83cdf012" id="44" refid="44">
+<p>The following figure illustrates what was just explained.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="15e6cee418995316941dbeafc21fbf87" data-text-hash="d4d07fd7370f5eba19b77d964b90d560" id="45" refid="45">
+<h5>Figure 5.4 Splitting an application stack into pods</h5>
+<img alt="" data-processed="true" height="425" id="Picture_4" loading="lazy" src="EPUB/images/05image005.png" width="842">
+</div>
+<div class="readable-text" data-hash="82cfe6d0b481c944cff20fe47e3ac6e8" data-text-hash="353a4b90aa9f8199673af9d905f42f6a" id="46" refid="46">
+<p>Splitting application stacks into multiple pods is the correct approach. But then, when does one run multiple containers in the same pod?</p>
+</div>
+<div class="readable-text" data-hash="b2fe53ac1a11a7f8c58bc132d7551c92" data-text-hash="df14c1f3172786350d05e6ca56ac9c44" id="47" refid="47">
+<h4>Introducing sidecar containers</h4>
+</div>
+<div class="readable-text" data-hash="3f7fcbbcdf43eaecbafb200613223b7b" data-text-hash="2e307a0a0a04f4b5070fd2acb672c1b4" id="48" refid="48">
+<p>Placing several containers in a single pod is only appropriate if the application consists of a primary process and one or more processes that complement the operation of the primary process. The container in which the complementary process runs is called a <i>sidecar container</i> because it&#8217;s analogous to a motorcycle sidecar, which makes the motorcycle more stable and offers the possibility of carrying an additional passenger. But unlike motorcycles, a pod can have more than one sidecar, as shown in figure 5.5.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e39886151a64fbc3da54c70b73ac0ca6" data-text-hash="1404b5469b370c81b6076bca37e6c33a" id="49" refid="49">
+<h5>Figure 5.5 A pod with a primary and sidecar container(s)</h5>
+<img alt="" data-processed="true" height="233" id="Picture_5" loading="lazy" src="EPUB/images/05image006.png" width="741">
+</div>
+<div class="readable-text" data-hash="957121889bd7294f53852c81c531ad21" data-text-hash="bd6bd69950d308daa62629b1182dfc6d" id="50" refid="50">
+<p>It&#8217;s difficult to imagine what constitutes a complementary process, so I&#8217;ll give you some examples. In chapter 2, you deployed pods with one container that runs a Node.js application. The Node.js application only supports the HTTP protocol. To make it support HTTPS, we could add a bit more JavaScript code, but we can also do it without changing the existing application at all - by adding an additional container to the pod &#8211; a reverse proxy that converts HTTPS traffic to HTTP and forwards it to the Node.js container. The Node.js container is thus the primary container, whereas the container running the proxy is the sidecar container. Figure 5.6 shows this example.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e4497ce7fbb594df022854579c50a3b6" data-text-hash="28402b00a2769530e227de5a1c8dae0c" id="51" refid="51">
+<h5>Figure 5.6 A sidecar container that converts HTTPS traffic to HTTP</h5>
+<img alt="" data-processed="true" height="308" id="Picture_6" loading="lazy" src="EPUB/images/05image007.png" width="754">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="52" refid="52">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="123368e08c61a9c8ee87594abba4fef0" data-text-hash="8279233f89ee292a0cb2fac790192125" id="53" refid="53">
+<p> You&#8217;ll create this pod in section 5.4.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6ec81a0bae79ec652f1545023feefa7d" data-text-hash="8ca1984d44dd477bf9d9b311cf7b0f77" id="54" refid="54">
+<p>Another example, shown in figure 5.7, is a pod where the primary container runs a web server that serves files from its webroot directory. The other container in the pod is an agent that periodically downloads content from an external source and stores it in the web server&#8217;s webroot directory. As I mentioned earlier, two containers can share files by sharing a volume. The webroot directory would be located on this volume.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="06fed986ce376d1f5a18a3c6430a66bc" data-text-hash="ebba9a03b3882431aa433d179be298b3" id="55" refid="55">
+<h5>Figure 5.7 A sidecar container that delivers content to the web server container via a volume</h5>
+<img alt="" data-processed="true" height="319" id="Picture_7" loading="lazy" src="EPUB/images/05image008.png" width="817">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="56" refid="56">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b933249eddc9a7b2898267500c25580d" data-text-hash="583d78f9ab29b0a1d0afc8eb51b1d6ae" id="57" refid="57">
+<p> You&#8217;ll create this pod in the chapter 7.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a3a502e46029d98bd4abdbba71ed79cc" data-text-hash="839bedab232fe611cdfb1fa771c6d4b6" id="58" refid="58">
+<p>Other examples of sidecar containers are log rotators and collectors, data processors, communication adapters, and others.</p>
+</div>
+<div class="readable-text" data-hash="986e6fbdff2310e03f8905d3a9b07a84" data-text-hash="d65e0c912855787ae1e2c1e0272a6a57" id="59" refid="59">
+<p>Unlike changing the application&#8217;s existing code, adding a sidecar increases the pod&#8217;s resources requirements because an additional process must run in the pod. But keep in mind that adding code to legacy applications can be very difficult. This could be because its code is difficult to modify, it&#8217;s difficult to set up the build environment, or the source code itself is no longer available. Extending the application by adding an additional process is sometimes a cheaper and faster option.</p>
+</div>
+<div class="readable-text" data-hash="9fd0885bb0e7fd6ec8d1fcd0526c13a4" data-text-hash="6c3b10b24d896e99df0183084e563929" id="60" refid="60">
+<h4>How to decide whether to split containers into multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="8344e475fcfbbf0adc9f50b6ef2c2b25" data-text-hash="e939af95705aefb339b162586af2f26c" id="61" refid="61">
+<p>When deciding whether to use the sidecar pattern and place containers in a single pod, or to place them in separate pods, ask yourself the following questions:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="1a30f1f02fd9067de9d77f68b612fe72" data-text-hash="1a30f1f02fd9067de9d77f68b612fe72" id="62" refid="62">Do these containers have to run on the same host?</li>
+<li class="readable-text" data-hash="e3cd5cdfc7299849f859803b362808e1" data-text-hash="e3cd5cdfc7299849f859803b362808e1" id="63" refid="63">Do I want to manage them as a single unit?</li>
+<li class="readable-text" data-hash="fe5c9899425ddb4a95085f57359730e1" data-text-hash="fe5c9899425ddb4a95085f57359730e1" id="64" refid="64">Do they form a unified whole instead of being independent components?</li>
+<li class="readable-text" data-hash="f092e3d2468a69d362b5ee02d60fab7d" data-text-hash="f092e3d2468a69d362b5ee02d60fab7d" id="65" refid="65">Do they have to be scaled together?</li>
+<li class="readable-text" data-hash="84fd72d2103590f630c6139cb9319bde" data-text-hash="84fd72d2103590f630c6139cb9319bde" id="66" refid="66">Can a single node meet their combined resource needs?</li>
+</ul>
+<div class="readable-text" data-hash="6ab0a8d9e550198b38e93cc587a4e4a4" data-text-hash="0986cf04ea1b6b51b9a7c4f0083d3784" id="67" refid="67">
+<p>If the answer to all these questions is yes, put them all in the same pod. As a rule of thumb, always place containers in separate pods unless a specific reason requires them to be part of the same pod.</p>
+</div>
+<div class="readable-text" data-hash="3ebe6f0d5973718dd7831f08aa96fded" data-text-hash="ae05f37a2efac97fe05b1723fbad975f" id="68" refid="68">
+<h2 id="sigil_toc_id_67">5.2&#160;Creating pods from YAML or JSON files</h2>
+</div>
+<div class="readable-text" data-hash="a058ef0fe687df175e36a3cb8c4163be" data-text-hash="3e4cb7b67adb2a8b2ccf42f1b280f5b3" id="69" refid="69">
+<p>With the information you learned in the previous sections, you can now start creating pods. In chapter 3, you created them using the imperative command <code>kubectl create</code>, but pods and other Kubernetes objects are usually created by creating a JSON or YAML manifest file and posting it to the Kubernetes API, as you&#8217;ve already learned in the previous chapter.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="70" refid="70">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5a2055181e32984c79387ce4fb0735f8" data-text-hash="a5deac095bfc9e5081da654684503d22" id="71" refid="71">
+<p> The decision whether to use YAML or JSON to define your objects is yours. Most people prefer to use YAML because it&#8217;s slightly more human-friendly and allows you to add comments to the object definition.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ce37dfc06d4251bfce50b89189499b16" data-text-hash="aeb4162b9d93c4da99fd77359196fd0e" id="72" refid="72">
+<p>By using YAML files to define the structure of your application, you don&#8217;t need shell scripts to make the process of deploying your applications repeatable, and you can keep a history of all changes by storing these files in a VCS (Version Control System). Just like you store code.</p>
+</div>
+<div class="readable-text" data-hash="9f808b3fcef6ac014bedb7cdc9a77548" data-text-hash="04695fb8bb352020d0c6621f7b8a4ad5" id="73" refid="73">
+<p>In fact, the application manifests of the exercises in this book are all stored in a VCS. You can find them on GitHub at <a href="luksa.html">github.com/luksa/kubernetes-in-action-2nd-edition</a>.</p>
+</div>
+<div class="readable-text" data-hash="a89c074b20bd9d82733d21a4ba4bd1b6" data-text-hash="f1bdc513ae3169bdce45f6612c88ea8f" id="74" refid="74">
+<h3 id="sigil_toc_id_68">5.2.1&#160;Creating a YAML manifest for a pod</h3>
+</div>
+<div class="readable-text" data-hash="ce03b542a9f30406d2fcf51f9fa68745" data-text-hash="9e95667c3a89313daedc56598e8e5c1f" id="75" refid="75">
+<p>In the previous chapter you learned how to retrieve and examine the YAML manifests of existing API objects. Now you&#8217;ll create an object manifest from scratch.</p>
+</div>
+<div class="readable-text" data-hash="47fae4d547bb7a65ad9ca939a59ab24f" data-text-hash="d3343df9c2b80af9c5eef98a3970ad16" id="76" refid="76">
+<p>You&#8217;ll start by creating a file called <code>pod.kiada.yaml</code> on your computer, in a location of your choosing. You can also find the file in the book&#8217;s code archive in the <code>Chapter05/</code> directory. The following listing shows the contents of the file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2ace8f65766133f48c27665ec7df2d1c" data-text-hash="819c0a0481c8a4203857129f532ed30f" id="77" refid="77">
+<h5>Listing 5.1 A basic pod manifest file</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1    #A
+kind: Pod    #B
+metadata:     
+  name: kiada    #C
+spec: 
+  containers: 
+  - name: kiada    #D
+    image: luksa/kiada:0.1    #E
+    ports: 
+    - containerPort: 8080    #F</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCB1c2VzIHRoZSB2MSBBUEkgdmVyc2lvbiB0byBkZWZpbmUgdGhlIG9iamVjdAojQiBUaGUgb2JqZWN0IHNwZWNpZmllZCBpbiB0aGlzIG1hbmlmZXN0IGlzIGEgcG9kCiNDIFRoZSBuYW1lIG9mIHRoZSBwb2QKI0QgVGhlIG5hbWUgb2YgdGhlIGNvbnRhaW5lcgojRSBDb250YWluZXIgaW1hZ2UgdG8gY3JlYXRlIHRoZSBjb250YWluZXIgZnJvbQojRiBUaGUgcG9ydCB0aGUgYXBwIGlzIGxpc3RlbmluZyBvbg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9ffb82e8afd525ba6932299542616bdb" data-text-hash="4e7bca68e0cd9f0fdfda1e801bf87900" id="78" refid="78">
+<p>I&#8217;m sure you&#8217;ll agree that this pod manifest is much easier to understand than the mammoth of a manifest representing the Node object, which you saw in the previous chapter. But once you post this pod object manifest to the API and then read it back, it won&#8217;t be much different.</p>
+</div>
+<div class="readable-text" data-hash="fcde2711b1a3440f2f4d6b9ddced5e5a" data-text-hash="495c29f12b448b02332f1981c727f706" id="79" refid="79">
+<p>The manifest in listing 5.1 is short only because it does not yet contain all the fields that a pod object gets after it is created through the API. For example, you&#8217;ll notice that the <code>metadata</code> section contains only a single field and that the <code>status</code> section is completely missing. Once you create the object from this manifest, this will no longer be the case. But we&#8217;ll get to that later.</p>
+</div>
+<div class="readable-text" data-hash="07893968342fa582da6c00bd7dff4cb4" data-text-hash="5e9063b1dbdfb01a8f3249266063dbc8" id="80" refid="80">
+<p>Before you create the object, let&#8217;s examine the manifest in detail. It uses version <code>v1</code> of the Kubernetes API to describe the object. The object kind is <code>Pod</code> and the name of the object is <code>kiada</code>. The pod consists of a single container also called <code>kiada</code>, based on the <code>luksa/kiada:0.1</code> image. The pod definition also specifies that the application in the container listens on port <code>8080</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="81" refid="81">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="45788d16ae878a01ecbd23d2153956ae" data-text-hash="78be590952d7403cb5847ecb02737312" id="82" refid="82">
+<p> Whenever you want to create a pod manifest from scratch, you can also use the following command to create the file and then edit it to add more fields: <code>kubectl run kiada --image=luksa/kiada:0.1 --dry-run=client -o yaml &gt; mypod.yaml</code>. The <code>--dry-run=client</code> flag tells kubectl to output the definition instead of actually creating the object via the API.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="97109907a3e9c131eafe6c2a64c97104" data-text-hash="40fd8baac6e3a0ec6c3433657657e798" id="83" refid="83">
+<p>The fields in the YAML file are self-explanatory, but if you want more information about each field or want to know what additional fields you can add, remember to use the <code>kubectl explain pods</code> command.</p>
+</div>
+<div class="readable-text" data-hash="69e6a3caedf58d5e6945aa193d74ffb8" data-text-hash="26db0a0768bd30d2d1ab945f95ef388b" id="84" refid="84">
+<h3 id="sigil_toc_id_69">5.2.2&#160;Creating the Pod object from the YAML file</h3>
+</div>
+<div class="readable-text" data-hash="ba0cdddb47369e7b1cba13e1039ee984" data-text-hash="a17e74874c7affbe37e1947ddb34fdc3" id="85" refid="85">
+<p>After you&#8217;ve prepared the manifest file for your pod, you can now create the object by posting the file to the Kubernetes API.</p>
+</div>
+<div class="readable-text" data-hash="187a0d8bd5a9ad105fc579bb13e8651d" data-text-hash="66a77bbfffc2790963a957ce3244104f" id="86" refid="86">
+<h4>Creating objects by applying the manifest file to the cluster</h4>
+</div>
+<div class="readable-text" data-hash="99881c9dbb1641ef09e73705e9832de5" data-text-hash="b4a6482f8d6215e6c4f488af99bda13e" id="87" refid="87">
+<p>When you post the manifest to the API, you are directing Kubernetes to <i>apply</i> the manifest to the cluster. That&#8217;s why the <code>kubectl</code> sub-command that does this is called <code>apply</code>. Let&#8217;s use it to create the pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7c7f0d1834e2cc296c03fbf7a1612ac9" data-text-hash="88a80ac20a10367f6430cdc2aa55f1c5" id="88" refid="88">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada.yaml
+pod "kiada" created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="832ada518c962571b9155b4f05755c2d" data-text-hash="8d785211fc0f0ead6cf0df02d3cbd901" id="89" refid="89">
+<h4>Updating objects by modifying the manifest file and re-applying it</h4>
+</div>
+<div class="readable-text" data-hash="a41bcf49ad9228ef7cffadf9754979f5" data-text-hash="7b280eca4c0639ea8c416af1e9bf6474" id="90" refid="90">
+<p>The <code>kubectl</code> <code>apply</code> command is used for creating objects as well as for making changes to existing objects. If you later decide to make changes to your pod object, you can simply edit the <code>pod.kiada.yaml</code> file and run the <code>apply</code> command again. Some of the pod&#8217;s fields aren&#8217;t mutable, so the update may fail, but you can always delete the pod and re-create it. You&#8217;ll learn how to delete pods and other objects at the end of this chapter.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="77a5b208b437f281774ae930be60ead1" data-text-hash="ab2deaca66b9ac18a742dddb29b87600" id="91" refid="91">
+<h5>Retrieving the full manifest of a running pod</h5>
+</div>
+<div class="readable-text" data-hash="5c2c2cbab5363e476c8690319bc4ad13" data-text-hash="8e51071a47250dea5aa4bb29a3e0b800" id="92" refid="92">
+<p>The pod object is now part of the cluster configuration. You can now read it back from the API to see the full object manifest with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b830acc4610922666611f2e50f2395f9" data-text-hash="cd518703a4490180500bad5f4894455e" id="93" refid="93">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada -o yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5a0489f17b7d2377f2899c5c949e3d1f" data-text-hash="ed44d9bfbbc868313f661dd31c8a8105" id="94" refid="94">
+<p>If you run this command, you&#8217;ll notice that the manifest has grown considerably compared to the one in the <code>pod.kiada.yaml</code> file. You&#8217;ll see that the <code>metadata</code> section is now much bigger, and the object now has a <code>status</code> section. The <code>spec</code> section has also grown by several fields. You can use <code>kubectl explain</code> to learn more about these new fields, but most of them will be explained in this and the following chapters.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="bdaef1dc14e4f0ac286b5d92f5307cd1" data-text-hash="a59df966bed916bc030bbefff35cf055" id="95" refid="95">
+<h3 id="sigil_toc_id_70">5.2.3&#160;Checking the newly created pod</h3>
+</div>
+<div class="readable-text" data-hash="7c044675906acc4abd464375fe92f6d6" data-text-hash="bd7d61c866b029fd1451dfea9d1790c4" id="96" refid="96">
+<p>Let&#8217;s use the basic <code>kubectl</code> commands to see how the pod is doing before we start interacting with the application running inside it.</p>
+</div>
+<div class="readable-text" data-hash="b40b0d7afec4684561b45b6c9a5d4f7b" data-text-hash="d48fbcbce159fe0209ed7d0dc71d15b0" id="97" refid="97">
+<h4>Quickly checking the status of a pod</h4>
+</div>
+<div class="readable-text" data-hash="4c19aa8df12b3de7dd598617d89bc7e6" data-text-hash="70d412a4af0cae67e4746fd0d34ee0b7" id="98" refid="98">
+<p>Your Pod object has been created, but how do you know if the container in the pod is actually running? You can use the <code>kubectl get</code> command to see a summary of the pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="afe0bbc71542c8ffe6119080726ba148" data-text-hash="8c02b5dc907969659d6c47099c959a48" id="99" refid="99">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pod kiada
+NAME     READY   STATUS    RESTARTS   AGE
+kiada    1/1     Running   0          32s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="77c9d70cb8afa79774de89b245f0c86c" data-text-hash="73ff90ff4620ae06a104c115cfa0c048" id="100" refid="100">
+<p>You can see that the pod is running, but not much else. To see more, you can try the <code>kubectl get pod -o wide</code> or the <code>kubectl describe</code> command that you learned in the previous chapter.</p>
+</div>
+<div class="readable-text" data-hash="4e233b30f8bd70c0f66c2a8f6e4e92a6" data-text-hash="61578e96e7f7b73836df73d766cdfda3" id="101" refid="101">
+<h4>Using kubectl describe to see pod details</h4>
+</div>
+<div class="readable-text" data-hash="6ce9c6e035eea49a36112bfdb45ff0e8" data-text-hash="a2e59fb6810a0daf4debafd2d9b16592" id="102" refid="102">
+<p>To display a more detailed view of the pod, use the <code>kubectl describe</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="83c918979a45dd9403610bcff0e112bf" data-text-hash="6368765eac77ab1f1cf0da1af9c4a5b7" id="103" refid="103">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe pod kiada
+Name:         kiada
+Namespace:    default
+Priority:     0
+Node:         worker2/172.18.0.4
+Start Time:   Mon, 27 Jan 2020 12:53:28 +0100
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="70fd2fcbdb6a513ff2b850a4065433a3" data-text-hash="7c844a77542444680b23944b512a5072" id="104" refid="104">
+<p>The listing doesn&#8217;t show the entire output, but if you run the command yourself, you&#8217;ll see virtually all information that you&#8217;d see if you print the complete object manifest using the <code>kubectl get -o yaml</code> command.</p>
+</div>
+<div class="readable-text" data-hash="4bd6c60e735887de68fc472c393c0ffc" data-text-hash="708d80ebda7de1cfcdc3145ddd70e5e0" id="105" refid="105">
+<h4>Inspecting events to see what happens beneath the surface</h4>
+</div>
+<div class="readable-text" data-hash="695f1da4403d730097cf9434d4a4dbfe" data-text-hash="eae3f363c8c1212ef29b2f9837c3abd0" id="106" refid="106">
+<p>As in the previous chapter where you used the <code>describe</code> <code>node</code> command to inspect a Node object, the <code>describe pod</code> command should display several events related to the pod at the bottom of the output.</p>
+</div>
+<div class="readable-text" data-hash="beb12a336db97dd487814dd7e290a7ad" data-text-hash="9324b61d5f69510d5b7c75fbc55556c5" id="107" refid="107">
+<p>If you remember, these events aren&#8217;t part of the object itself, but are separate objects. Let&#8217;s print them to learn more about what happens when you create the pod object. These are the events that were logged after the pod was created:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="37768a81eebf89c60e679aa8b095f8e3" data-text-hash="3f4f3b9bd27dad089a6d36c2733d304e" id="108" refid="108">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get events
+LAST SEEN   TYPE     REASON      OBJECT      MESSAGE
+&lt;unknown&gt;   Normal   Scheduled   pod/kiada   Successfully assigned default/
+                                             kiada to kind-worker2
+5m          Normal   Pulling     pod/kiada   Pulling image luksa/kiada:0.1
+5m          Normal   Pulled      pod/kiada   Successfully pulled image
+5m          Normal   Created     pod/kiada   Created container kiada
+5m          Normal   Started     pod/kiada   Started container kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9b17e2b01b3b85ec107ef31c43030ec7" data-text-hash="90eeeb0a7dd0a6e7029a87d8b7a049b1" id="109" refid="109">
+<p>These events are printed in chronological order. The most recent event is at the bottom. You see that the pod was first assigned to one of the worker nodes, then the container image was pulled, then the container was created and finally started.</p>
+</div>
+<div class="readable-text" data-hash="6ea3e68240953247967e6f6f907a2eeb" data-text-hash="3c4aad08d5561a1f6473c8b2d14ab91a" id="110" refid="110">
+<p>No warning events are displayed, so everything seems to be fine. If this is not the case in your cluster, you should read section 5.4 to learn how to troubleshoot pod failures.</p>
+</div>
+<div class="readable-text" data-hash="ba4969be893c802631c4872d31e9100e" data-text-hash="dcb341210d575f3dbda4d9c39f88b3ea" id="111" refid="111">
+<h2 id="sigil_toc_id_71">5.3&#160;Interacting with the application and the pod</h2>
+</div>
+<div class="readable-text" data-hash="4f9921b1ebb911b46dddd4a574cfd21e" data-text-hash="4b1149d8440306d5c73aa3f1aeb97786" id="112" refid="112">
+<p>Your container is now running. In this section, you&#8217;ll learn how to communicate with the application, inspect its logs, and execute commands in the container to explore the application&#8217;s environment. Let&#8217;s confirm that the application running in the container responds to your requests.</p>
+</div>
+<div class="readable-text" data-hash="00482d4d2d29a4c302b76a78fa2b36a5" data-text-hash="46deb342cff0e177b4e43d98d0e09fd3" id="113" refid="113">
+<h3 id="sigil_toc_id_72">5.3.1&#160;Sending requests to the application in the pod</h3>
+</div>
+<div class="readable-text" data-hash="60fd4ae4f8d8c13ef305d0b5eaab580d" data-text-hash="07bdfb48a717eec4893f1fca044555a1" id="114" refid="114">
+<p>In chapter 2, you used the <code>kubectl</code> <code>expose</code> command to create a service that provisioned a load balancer so you could talk to the application running in your pod(s). You&#8217;ll now take a different approach. For development, testing and debugging purposes, you may want to communicate directly with a specific pod, rather than using a service that forwards connections to randomly selected pods.</p>
+</div>
+<div class="readable-text" data-hash="b13c4b8d38637e7d6de10518879ac126" data-text-hash="56846f5d185152abbc7f72bb35c610e4" id="115" refid="115">
+<p>You&#8217;ve learned that each pod is assigned its own IP address where it can be accessed by every other pod in the cluster. This IP address is typically internal to the cluster. You can&#8217;t access it from your local computer, except when Kubernetes is deployed in a specific way &#8211; for example, when using kind or Minikube without a VM to create the cluster.</p>
+</div>
+<div class="readable-text" data-hash="c004cc1c0d6c2ddcc4a70a085a839586" data-text-hash="8e748d72baa400fa131c896b14a8edfa" id="116" refid="116">
+<p>In general, to access pods, you must use one of the methods described in the following sections. First, let&#8217;s determine the pod&#8217;s IP address.</p>
+</div>
+<div class="readable-text" data-hash="5195d1dd8c2540eeea7be094f5b1f411" data-text-hash="cba5b5f2e3706bf8fea9879b8d630870" id="117" refid="117">
+<h4>Getting the pod&#8217;s IP address</h4>
+</div>
+<div class="readable-text" data-hash="c1ce02d1faebab61bec4833b30455857" data-text-hash="ce46357465708703379d1321f14ec285" id="118" refid="118">
+<p>You can get the pod&#8217;s IP address by retrieving the pod&#8217;s full YAML and searching for the <code>podIP</code> field in the <code>status</code> section. Alternatively, you can display the IP with <code>kubectl describe</code>, but the easiest way is to use <code>kubectl get</code> with the <code>wide</code> output option:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4c8bb4b88865ffb2b202eda2f87d519c" data-text-hash="5178ec44e3ffa40894759e764ba5b59a" id="119" refid="119">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pod kiada -o wide
+NAME    READY   STATUS    RESTARTS   AGE   IP           NODE     ...
+kiada   1/1     Running   0          35m   10.244.2.4   worker2  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ed57249453f885de6eaa96edcad7cea3" data-text-hash="825116359f5804ff4335c6d96fb5fdab" id="120" refid="120">
+<p>As indicated in the IP column, my pod&#8217;s IP is <code>10.244.2.4</code>. Now I need to determine the port number the application is listening on.</p>
+</div>
+<div class="readable-text" data-hash="0e774bcc1e7eaba05c2418fb05faadc3" data-text-hash="f714df40bc83783af3a5c83d55d7e7d5" id="121" refid="121">
+<h4>Getting the port number used by the application</h4>
+</div>
+<div class="readable-text" data-hash="227aa6bf85a33b7c110e121c3779fd44" data-text-hash="b66875c3baddb7ac7def4bdaa038f8d9" id="122" refid="122">
+<p>If I wasn&#8217;t the author of the application, it would be difficult for me to find out which port the application listens on. I could inspect its source code or the Dockerfile of the container image, as the port is usually specified there, but I might not have access to either. If someone else had created the pod, how would I know which port it was listening on?</p>
+</div>
+<div class="readable-text" data-hash="b60032ed59ebccac7074cd1c2bede61a" data-text-hash="3ddf61e752b38a3a1c0db3f923f27c22" id="123" refid="123">
+<p>Fortunately, you can specify a list of ports in the pod definition itself. It isn&#8217;t necessary to specify any ports, but it is a good idea to always do so. See sidebar for details.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="628caf956f34b2ba85f403d4cf6c98f8" data-text-hash="e40dfdf0237d0a9af29da6befffa06f7" id="124" refid="124">
+<h5>Why specify container ports in pod definitions</h5>
+</div>
+<div class="readable-text" data-hash="c9b59fb8b41180085122c974b070c536" data-text-hash="24ed364e951d4364ca874eeed0a91f64" id="125" refid="125">
+<p>Specifying ports in the pod definition is purely informative. Their omission has no effect on whether clients can connect to the pod&#8217;s port. If the container accepts connections through a port bound to its IP address, anyone can connect to it, even if the port isn&#8217;t explicitly specified in the pod spec or if you specify an incorrect port number.</p>
+</div>
+<div class="readable-text" data-hash="27e4a76e8ae069332e315834cae13ebb" data-text-hash="bec3f00da33075881cefdb0bace85078" id="126" refid="126">
+<p>Despite this, it&#8217;s a good idea to always specify the ports so that anyone who has access to your cluster can see which ports each pod exposes. By explicitly defining ports, you can also assign a name to each port, which is very useful when you expose pods via services.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="395569a681d8237e6c4c37128fae973f" data-text-hash="6ad773b3bee6e0bf3c8f078a11b47f3b" id="127" refid="127">
+<p>The pod manifest says that the container uses port 8080, so you now have everything you need to talk to the application.</p>
+</div>
+<div class="readable-text" data-hash="f1a86c8c0f687bc3824f99e2cb4125cc" data-text-hash="482ed4e3606006781f2bbe5fc7d73172" id="128" refid="128">
+<h4>Connecting to the pod from the worker nodes</h4>
+</div>
+<div class="readable-text" data-hash="2167d51c887dcb820130044d6869c092" data-text-hash="9c7384071a3fe0888de73074445abff1" id="129" refid="129">
+<p>The Kubernetes network model dictates that each pod is accessible from any other pod and that each <i>node</i> can reach any pod on any node in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="b3da0a2e6ce497403272cc3b6c3ff97c" data-text-hash="c199501b20d9cab9ba645adfe93f981b" id="130" refid="130">
+<p>Because of this, one way to communicate with your pod is to log into one of your worker nodes and talk to the pod from there. You&#8217;ve already learned that the way you log on to a node depends on what you used to deploy your cluster. If you&#8217;re using kind, run <code>docker exec -it kind-worker bash</code>, or <code>minikube ssh</code> if you&#8217;re using Minikube. On GKE use the <code>gcloud compute ssh</code> command. For other clusters refer to their documentation.</p>
+</div>
+<div class="readable-text" data-hash="c5f91904f2ca76f28a3e154061e0ebef" data-text-hash="5359d4c06910227cd669344df1f79464" id="131" refid="131">
+<p>Once you have logged into the node, use the <code>curl</code> command with the pod&#8217;s IP and port to access your application. My pod&#8217;s IP is 10.244.2.4 and the port is 8080, so I run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e5a35b0ca69a9f6622e7584e7d7261f2" data-text-hash="12e5075159a255baaf98cacf5a3fb508" id="132" refid="132">
+<div class="code-area-container">
+<pre class="code-area">$ curl 10.244.2.4:8080
+Kiada version 0.1. Request processed by "kiada". Client IP: ::ffff:10.244.2.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5f3693b429a6d92f3b4eb9e8b90f0e61" data-text-hash="ba41212f60bcac2704f87e2ab7e4a261" id="133" refid="133">
+<p>Normally you don&#8217;t use this method to talk to your pods, but you may need to use it if there are communication issues and you want to find the cause by first trying the shortest possible communication route. In this case, it&#8217;s best to log into the node where the pod is located and run <code>curl</code> from there. The communication between it and the pod takes place locally, so this method always has the highest chances of success.</p>
+</div>
+<div class="readable-text" data-hash="2c53c810730fdd15d2cfda512d463858" data-text-hash="ca4b34ea7ef168767a5024b388becd7b" id="134" refid="134">
+<h4>Connecting from a one-off client pod</h4>
+</div>
+<div class="readable-text" data-hash="99aafa7b8a2ba7a67ab0abc9a3f7b6ad" data-text-hash="82cd4c00c6d70d9c193b518e2d93f678" id="135" refid="135">
+<p>The second way to test the connectivity of your application is to run <code>curl</code> in another pod that you create specifically for this task. Use this method to test if other pods will be able to access your pod. Even if the network works perfectly, this may not be the case. In chapter 24, you&#8217;ll learn how to lock down the network by isolating pods from each other. In such a system, a pod can only talk to the pods it&#8217;s allowed to.</p>
+</div>
+<div class="readable-text" data-hash="35146f818cba4d39eb694bceee6f155a" data-text-hash="7c12283538087a43a4995f06bb39ea90" id="136" refid="136">
+<p>To run <code>curl</code> in a one-off pod, use the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6f73cc0b3e5ac31279ba81bd02cc3879" data-text-hash="19d12783b24d1b7f55283757f71c1201" id="137" refid="137">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl run --image=curlimages/curl -it --restart=Never --rm client-pod curl 10.244.2.4:8080
+Kiada version 0.1. Request processed by "kiada". Client IP: ::ffff:10.244.2.5
+pod "client-pod" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="713093d151640c4ec06f4509dcef11bf" data-text-hash="9d97a18fb956b001274d9eade0f2ce94" id="138" refid="138">
+<p>This command runs a pod with a single container created from the <code>curlimages/curl</code> image. You can also use any other image that provides the <code>curl</code> binary executable. The <code>-it</code> option attaches your console to the container&#8217;s standard input and output, the <code>--restart=Never</code> option ensures that the pod is considered Completed when the <code>curl</code> command and its container terminate, and the <code>--rm</code> options removes the pod at the end. The name of the pod is <code>client-pod</code> and the command executed in its container is <code>curl 10.244.2.4:8080</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="139" refid="139">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5dddec6c88eb8f84a5155c9f48b85940" data-text-hash="efce1d63fc6c1c7de5692414ab0de71c" id="140" refid="140">
+<p> You can also modify the command to run the <code>bash</code> shell in the client pod and then run <code>curl</code> from the shell.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4e3cce6a58c39f568228f2082b8fcaef" data-text-hash="cea7520418a10c8def8f4214479c369c" id="141" refid="141">
+<p>Creating a pod just to see if it can access another pod is useful when you&#8217;re specifically testing pod-to-pod connectivity. If you only want to know if your pod is responding to requests, you can also use the method explained in the next section.</p>
+</div>
+<div class="readable-text" data-hash="07a0dc4da14af7b3fc774ebb649833ee" data-text-hash="628c65d85c7c79c428a7cf7b2679b3f2" id="142" refid="142">
+<h4>Connecting to pods via kubectl port forwarding</h4>
+</div>
+<div class="readable-text" data-hash="9c82ddb2345a2030d0256d89d3011bb8" data-text-hash="b224b378944528ece1b3207ba549b57b" id="143" refid="143">
+<p>During development, the easiest way to talk to applications running in your pods is to use the <code>kubectl port-forward</code> command, which allows you to communicate with a specific pod through a proxy bound to a network port on your local computer, as shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="443a2325bb6532819c7240fc1cd2fda2" data-text-hash="13d4fb6624481b24d5606d2e3de52463" id="144" refid="144">
+<h5>Figure 5.8 Connecting to a pod through the kubectl port-forward proxy</h5>
+<img alt="" data-processed="true" height="202" id="Picture_8" loading="lazy" src="EPUB/images/05image009.png" width="820">
+</div>
+<div class="readable-text" data-hash="6debb80e0971f53d3a34e7d653ed340f" data-text-hash="c16c2b895f944cdc889d992d2a2bae2f" id="145" refid="145">
+<p>To open a communication path with a pod, you don&#8217;t even need to look up the pod&#8217;s IP, as you only need to specify its name and the port. The following command starts a proxy that forwards your computer&#8217;s local port <code>8080</code> to the <code>kiada</code> pod&#8217;s port <code>8080</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="58db7fa4ce42a32560e1377035639d02" data-text-hash="5d0d6a4d3f31a19e7d0b15528606855a" id="146" refid="146">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward kiada 8080
+... Forwarding from 127.0.0.1:8080 -&gt; 8080
+... Forwarding from [::1]:8080 -&gt; 8080</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c88d16c9a6f49f6b04127ba6511d9f13" data-text-hash="0e85d8735a051c31e2062b2058a7845f" id="147" refid="147">
+<p>The proxy now waits for incoming connections. Run the following <code>curl</code> command in another terminal:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="4594c65a42531dacb647d6841c2a0b5d" data-text-hash="9672fb7fb018645241d4342a97f7ef3c" id="148" refid="148">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8080
+Kiada version 0.1. Request processed by "kiada". Client IP: ::ffff:127.0.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="75b01b1b25516d5840b3f5d15744e0a7" data-text-hash="2167efd123ed112aba3b287e094b2afa" id="149" refid="149">
+<p>As you can see, <code>curl</code> has connected to the local proxy and received the response from the pod. While the <code>port-forward</code> command is the easiest method for communicating with a specific pod during development and troubleshooting, it&#8217;s also the most complex method in terms of what happens underneath. Communication passes through several components, so if anything is broken in the communication path, you won&#8217;t be able to talk to the pod, even if the pod itself is accessible via regular communication channels.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="150" refid="150">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8245a1d6749d427d284a203db2309ec3" data-text-hash="556e48c0f59be04eaac3c9d14b90e513" id="151" refid="151">
+<p> The <code>kubectl port-forward</code> command can also forward connections to services instead of pods and has several other useful features. Run <code>kubectl port-forward --help</code> to learn more.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="865cadfc25f4b791440d7df191e9bb4c" data-text-hash="02b8ba436390c08a72fa0271e26a0101" id="152" refid="152">
+<p>Figure 5.9 shows how the network packets flow from the <code>curl</code> process to your application and back.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="5ce73810d90097b2ab4457903d2b2c61" data-text-hash="0694bf8138597e890234f681b938d33b" id="153" refid="153">
+<h5>Figure 5.9 The long communication path between curl and the container when using port forwarding</h5>
+<img alt="" data-processed="true" height="334" id="Picture_9" loading="lazy" src="EPUB/images/05image010.png" width="834">
+</div>
+<div class="readable-text" data-hash="d1cccd31b90ad44f97932514ef0873f7" data-text-hash="ea9e89928d11a252cba24aa8289f14ed" id="154" refid="154">
+<p>As shown in the figure, the <code>curl</code> process connects to the proxy, which connects to the API server, which then connects to the Kubelet on the node that hosts the pod, and the Kubelet then connects to the container through the pod&#8217;s loopback device (in other words, through the localhost address). I&#8217;m sure you&#8217;ll agree that the communication path is exceptionally long.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="155" refid="155">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="cd49762cd8490567fa5677671fa2008c" data-text-hash="1f1420dfe292ef03306cb12195833121" id="156" refid="156">
+<p> The application in the container must be bound to a port on the loopback device for the Kubelet to reach it. If it listens only on the pod&#8217;s <code>eth0</code> network interface, you won&#8217;t be able to reach it with the <code>kubectl port-forward</code> command.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="07fbdfb2d0231146b7aac958eae862c8" data-text-hash="7f657d36ea27649c450c3ba4300cdd75" id="157" refid="157">
+<h3 id="sigil_toc_id_73">5.3.2&#160;Viewing application logs</h3>
+</div>
+<div class="readable-text" data-hash="4c730f3f45511700be2b04786746e526" data-text-hash="29d42747353e2455b4a6dbc0d2241afe" id="158" refid="158">
+<p>Your Node.js application writes its log to the standard output stream. Instead of writing the log to a file, containerized applications usually log to the standard output (<i>stdout</i>) and standard error streams (<i>stderr</i>). This allows the container runtime to intercept the output, store it in a consistent location (usually <code>/var/log/containers</code>) and provide access to the log without having to know where each application stores its log files.</p>
+</div>
+<div class="readable-text" data-hash="86a94b5af0cad12b67dc0f9217d8ccea" data-text-hash="c76bcee0188bcb964c605a5a6625e582" id="159" refid="159">
+<p>When you run an application in a container using Docker, you can display its log with <code>docker logs &lt;container-id&gt;.</code> When you run your application in Kubernetes, you could log into the node that hosts the pod and display its log using <code>docker</code> <code>logs</code>, but Kubernetes provides an easier way to do this with the <code>kubectl logs</code> command.</p>
+</div>
+<div class="readable-text" data-hash="84042e717b8af58d24a068e4dbb1c9c6" data-text-hash="a3689d51c690803fa645578c46deb208" id="160" refid="160">
+<h4>Retrieving a pod&#8217;s log with kubectl logs</h4>
+</div>
+<div class="readable-text" data-hash="65114020727feb10936fbf60c91504d7" data-text-hash="f56d346207b1f115a05030e371aadb54" id="161" refid="161">
+<p>To view the log of your pod (more specifically, the container&#8217;s log), run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b602b0dd3f670eb02a259579656943c" data-text-hash="349b68d4e6e14d7169c58c9098b659bd" id="162" refid="162">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada
+Kiada - Kubernetes in Action Demo Application
+---------------------------------------------
+Kiada 0.1 starting...
+Local hostname is kiada
+Listening on port 8080
+Received request for / from ::ffff:10.244.2.1    #A
+Received request for / from ::ffff:10.244.2.5    #B
+Received request for / from ::ffff:127.0.0.1     #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVxdWVzdCB5b3Ugc2VudCBmcm9tIHdpdGhpbiB0aGUgbm9kZQojQiBSZXF1ZXN0IGZyb20gdGhlIG9uZS1vZmYgY2xpZW50IHBvZAojQyBSZXF1ZXN0IHNlbnQgdGhyb3VnaCBwb3J0IGZvcndhcmRpbmc="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="42c4f914896cdd32974398091041a760" data-text-hash="cca9a66383cda5d5643f2799e7cb4136" id="163" refid="163">
+<h4>Streaming logs using kubectl logs -f</h4>
+</div>
+<div class="readable-text" data-hash="e6c5b70bf8de3bac2b136913741f6465" data-text-hash="e61cdef0e7bcb99d6b480111d1ded8e1" id="164" refid="164">
+<p>If you want to stream the application log in real-time to see each request as it comes in, you can run the command with the <code>--follow</code> option (or the shorter version <code>-f</code>):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d6e29e2a747ef34a5afbfdcf6a9903e2" data-text-hash="89876a367f57c801c85f9abf6620375a" id="165" refid="165">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada -f</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="190ce4e13e02828ad27855affe1486bc" data-text-hash="3ae7b88c100b2296221f682ee4c8c846" id="166" refid="166">
+<p>Now send some additional requests to the application and have a look at the log. Press ctrl-C to stop streaming the log when you&#8217;re done.</p>
+</div>
+<div class="readable-text" data-hash="6e683de8e6975737f23ff4d84ce83e00" data-text-hash="ea6f22e3ddd9e5c793e92e087cb58186" id="167" refid="167">
+<h4>Displaying the timestamp of each logged line</h4>
+</div>
+<div class="readable-text" data-hash="5722aca37adff35981a607752e58da77" data-text-hash="56e53c9e492228cf2144cc615e4133d5" id="168" refid="168">
+<p>You may have noticed that we forgot to include the timestamp in the log statement. Logs without timestamps have limited usability. Fortunately, the container runtime attaches the current timestamp to every line produced by the application. You can display these timestamps by using the <code>--timestamps=true</code> option as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c1c92c95330561a097a3ccfe77b313cb" data-text-hash="4886959e2463acd3b73c1e80e32d6d5c" id="169" refid="169">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada --timestamps=true
+2020-02-01T09:44:40.954641934Z Kiada - Kubernetes in Action Demo Application
+2020-02-01T09:44:40.954843234Z ---------------------------------------------
+2020-02-01T09:44:40.955032432Z Kiada 0.1 starting...
+2020-02-01T09:44:40.955123432Z Local hostname is kiada
+2020-02-01T09:44:40.956435431Z Listening on port 8080
+2020-02-01T09:50:04.978043089Z Received request for / from ...
+2020-02-01T09:50:33.640897378Z Received request for / from ...
+2020-02-01T09:50:44.781473256Z Received request for / from ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="170" refid="170">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="db86367342072a422d6a27f7141d9f4f" data-text-hash="876e55539799edf4f1ad74ef2b822e90" id="171" refid="171">
+<p> You can display timestamps by only typing <code>--timestamps</code> without the value. For boolean options, merely specifying the option name sets the option to <code>true</code>. This applies to all kubectl options that take a Boolean value and default to <code>false</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="2ae3aa3fa7c490620d214071cfebfe18" data-text-hash="cf71eb24dffee2e5ba90a6a0f9217748" id="172" refid="172">
+<h4>Displaying recent logs</h4>
+</div>
+<div class="readable-text" data-hash="cea0c2b98a01423e98b5206339ac407f" data-text-hash="6ae38c6bcaf2d5480b527b20be077459" id="173" refid="173">
+<p>The previous feature is great if you run third-party applications that don&#8217;t include the timestamp in their log output, but the fact that each line is timestamped brings us another benefit: filtering log lines by time. Kubectl provides two ways of filtering the logs by time.</p>
+</div>
+<div class="readable-text" data-hash="7145ee2a481b39e5c4232949465b8c7c" data-text-hash="e5fed52c34be2f0b4874965631863cda" id="174" refid="174">
+<p>The first option is when you want to only display logs from the past several seconds, minutes or hours. For example, to see the logs produced in the last two minutes, run:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="414bb980e5e479495d8acc1a43e953fb" data-text-hash="0150225d0e5d6174e74bcb9848b85cc3" id="175" refid="175">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada --since=2m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="13f621dce31732caceb01afc276d1a09" data-text-hash="57307a16a2f7b45d7f254c09c97e567b" id="176" refid="176">
+<p>The other option is to display logs produced after a specific date and time using the <code>--since-time</code> option. The time format to be used is RFC3339. For example, the following command is used to print logs produced after February 1st, 2020 at 9:50 a.m.:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="49f432f7c5a63c61de4c1655c15c3229" data-text-hash="eb3e5fdec3f556fcb392ee4ecced876d" id="177" refid="177">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada --since-time=2020-02-01T09:50:00Z</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7359d671007a222e68d8d7c5addf07b1" data-text-hash="fa2e024a3fd93e03938c6fdc4ff4dea7" id="178" refid="178">
+<h4>Displaying the last several lines of the log</h4>
+</div>
+<div class="readable-text" data-hash="b4a066bee5ee0099a414d110720b3be0" data-text-hash="219f3e95a1a85a47315fa54a5c744404" id="179" refid="179">
+<p>Instead of using time to constrain the output, you can also specify how many lines from the end of the log you want to display. To display the last ten lines, try:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5eea344805b00bfeadf5d00f5fb19b35" data-text-hash="fc39deda5b9018b0a994d4cbefc43669" id="180" refid="180">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada --tail=10</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="181" refid="181">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="027f8d88a7072ae06deed275f57f17c9" data-text-hash="22ecf38e1ea0087f3544902a2ed0adf3" id="182" refid="182">
+<p> Kubectl options that take a value can be specified with an equal sign or with a space. Instead of <code>--tail=10</code>, you can also type <code>--tail 10</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e896b0b301d8d049742d0f48ca8349ec" data-text-hash="8e36543955a178a4fbc700465a9296fa" id="183" refid="183">
+<h4>Understanding the availability of the pod&#8217;s logs</h4>
+</div>
+<div class="readable-text" data-hash="5d72e3c83c2020c47c0499ae8a414827" data-text-hash="9bef7279a962f00e72332e76663f75f4" id="184" refid="184">
+<p>Kubernetes keeps a separate log file for each container. They are usually stored in <code>/var/log/containers</code> on the node that runs the container. A separate file is created for each container. If the container is restarted, its logs are written to a new file. Because of this, if the container is restarted while you&#8217;re following its log with <code>kubectl logs -f</code>, the command will terminate, and you&#8217;ll need to run it again to stream the new container&#8217;s logs.</p>
+</div>
+<div class="readable-text" data-hash="413a97fe514bef93938301022ca82b43" data-text-hash="350af2720a773e6239b79771fbb2ec3b" id="185" refid="185">
+<p>The <code>kubectl logs</code> command displays only the logs of the current container. To view the logs from the previous container, use the <code>--previous</code> (or <code>-p</code>) option.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="186" refid="186">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8c37a0440a5ee4e3443420fcc45c5e20" data-text-hash="b7ca7ac2ba40c8b2deb13becc158640a" id="187" refid="187">
+<p> Depending on your cluster configuration, the log files may also be rotated when they reach a certain size. In this case, <code>kubectl logs</code> will only display the current log file. When streaming the logs, you must restart the command to switch to the new file when the log is rotated.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6da737f0cc111dd69f2b4110098253d3" data-text-hash="17ccce66b5f7cfcb9267cbc16e136a33" id="188" refid="188">
+<p>When you delete a pod, all its log files are also deleted. To make pods&#8217; logs available permanently, you need to set up a central, cluster-wide logging system. Chapter 23 explains how.</p>
+</div>
+<div class="readable-text" data-hash="dbe2a70f6f5d85f99127e55d1eae2169" data-text-hash="6de418dc498ff4f480d8e52f4aa268b4" id="189" refid="189">
+<h4>What about applications that write their logs to files?</h4>
+</div>
+<div class="readable-text" data-hash="526a18c524c23cac694d9b3089cb1d7c" data-text-hash="712aab260f73fed45ba556b158319661" id="190" refid="190">
+<p>If your application writes its logs to a file instead of stdout, you may be wondering how to access that file. Ideally, you&#8217;d configure the centralized logging system to collect the logs so you can view them in a central location, but sometimes you just want to keep things simple and don&#8217;t mind accessing the logs manually. In the next two sections, you&#8217;ll learn how to copy log and other files from the container to your computer and in the opposite direction, and how to run commands in running containers. You can use either method to display the log files or any other file inside the container.</p>
+</div>
+<div class="readable-text" data-hash="9edb352b87081115ba03e2218864f927" data-text-hash="467139b70d6dcee938956406c7faccf8" id="191" refid="191">
+<h3 id="sigil_toc_id_74">5.3.3&#160;Copying files to and from containers</h3>
+</div>
+<div class="readable-text" data-hash="d02e903ced538a4e9a869d67849df1f7" data-text-hash="c69986c82f854db332600b10c173c1ee" id="192" refid="192">
+<p>Sometimes you may want to add a file to a running container or retrieve a file from it. Modifying files in running containers isn&#8217;t something you normally do - at least not in production - but it can be useful during development.</p>
+</div>
+<div class="readable-text" data-hash="0593e4bc371f0b86736aa8340566e2b7" data-text-hash="64f0ce66a948749d3546c8b71f0a82af" id="193" refid="193">
+<p>Kubectl offers the <code>cp</code> command to copy files or directories from your local computer to a container of any pod or from the container to your computer. For example, if you&#8217;d like to modify the HTML file that the <code>kiada</code> pod serves, you can use to following command to copy it to your local file system:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a695e3d1fca5941f8cbf81f960f7c27a" data-text-hash="3a68701b1bea657d69f093250b84829b" id="194" refid="194">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl cp kiada:html/index.html /tmp/index.html</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a61720783d5af34ec14b50b9fd9dd13e" data-text-hash="f851fb02b78f17ec583c877b9a9c935c" id="195" refid="195">
+<p>This command copies the file <code>/html/index.html</code> file from the pod named <code>kiada</code> to the <code>/tmp/index.html</code> file on your computer. You can now edit the file locally. Once you&#8217;re happy with the changes, copy the file back to the container with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="43d76d0881df4c0af1606d9579304904" data-text-hash="568f989f54d26a032664bb24d8eab148" id="196" refid="196">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl cp /tmp/index.html kiada:html/</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="70af55506ed0530daa2b5397d9df594b" data-text-hash="db8be44bc4ef00b1ed2a6d322b6eaefb" id="197" refid="197">
+<p>Hitting refresh <b>in</b> your browser should now include the changes you&#8217;ve made.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="198" refid="198">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="33f1bb88d08871f81adfbd93fbb8dd4f" data-text-hash="c89641f6173e18c90c725ca34aa0317e" id="199" refid="199">
+<p> The <code>kubectl cp</code> command requires the <code>tar</code> binary to be present in your container, but this requirement may change in the future.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="08b936287459f5ecca81bd3d884f4041" data-text-hash="040e525fd49c77d2f355c4e04af8dd41" id="200" refid="200">
+<h3 id="sigil_toc_id_75">5.3.4&#160;Executing commands in running containers</h3>
+</div>
+<div class="readable-text" data-hash="03e0f01e4a8aa1e57fd78983c5043fb4" data-text-hash="917a0e12001d1b0e0bf6ce0b85fe7b7e" id="201" refid="201">
+<p>When debugging an application running in a container, it may be necessary to examine the container and its environment from the inside. Kubectl provides this functionality, too. You can execute any binary file present in the container&#8217;s file system using the <code>kubectl exec</code> command.</p>
+</div>
+<div class="readable-text" data-hash="ad26abdfcecd519fca815f7ceadb7d5a" data-text-hash="e7db05de8755f173f1957d005efb7810" id="202" refid="202">
+<h4>Invoking a single command in the container</h4>
+</div>
+<div class="readable-text" data-hash="5f447bb972fa15889fcee9a47795022c" data-text-hash="ad26ba66f9b824d662169ba5629835ef" id="203" refid="203">
+<p>For example, you can list the processes running in the container in the <code>kiada</code> pod by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="824c9642fd2a3faa11cb45ee6da9790f" data-text-hash="7a9e651e9ca61eeb379ae823c743e8c5" id="204" refid="204">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada -- ps aux
+USER  PID %CPU %MEM    VSZ   RSS TTY STAT START TIME COMMAND
+root    1  0.0  1.3 812860 27356 ?   Ssl  11:54 0:00 node app.js #A
+root  120  0.0  0.1  17500  2128 ?   Rs   12:22 0:00 ps aux      #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIE5vZGUuanMgc2VydmVyCiNCIFRoZSBjb21tYW5kIHlvdeKAmXZlIGp1c3QgaW52b2tlZA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="21d337dbd092434e1aae4ca21cb020de" data-text-hash="b1634c077e55978dcacd24c831381fc1" id="205" refid="205">
+<p>This is the Kubernetes equivalent of the Docker command you used to explore the processes in a running container in chapter 2. It allows you to remotely run a command in any pod without having to log in to the node that hosts the pod. If you&#8217;ve used <code>ssh</code> to execute commands on a remote system, you&#8217;ll see that <code>kubectl</code> <code>exec</code> is not much different.</p>
+</div>
+<div class="readable-text" data-hash="1901679749424c1552896d3f538a860d" data-text-hash="c8dcaa889aa56d8c1d6a027c51d84f6d" id="206" refid="206">
+<p>In section 5.3.1 you executed the <code>curl</code> command in a one-off client pod to send a request to your application, but you can also run the command inside the <code>kiada</code> pod itself:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e5327109f6eb6cc3c471d9cd4da143da" data-text-hash="5ef2ad52c7ab18a2e57b4325d742fb99" id="207" refid="207">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada -- curl -s localhost:8080
+Kiada version 0.1. Request processed by "kiada". Client IP: ::1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="93ef90b622f5f6ea483400ba9a30852d" data-text-hash="eafb3f45afdfe06456534f6cdb07bb6c" id="208" refid="208">
+<h5>Why use a double dash in the kubectl exec command?</h5>
+</div>
+<div class="readable-text" data-hash="77a966100f15dd4d1852b582544f9fe1" data-text-hash="8b854f015264b253da539b5986aeb5e9" id="209" refid="209">
+<p>The double dash (<code>--</code>) in the command delimits kubectl arguments from the command to be executed in the container. The use of the double dash isn&#8217;t necessary if the command has no arguments that begin with a dash. If you omit the double dash in the previous example, the <code>-s</code> option is interpreted as an option for <code>kubectl</code> <code>exec</code> and results in the following misleading error:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="effcfa991740eae9acd0bf8b7438611c" data-text-hash="7e6e0f16684e386d6464bd49010e17fd" id="210" refid="210">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec kiada curl -s localhost:8080
+The connection to the server localhost:8080 was refused &#8211; did you specify the right host or port?</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8f5ec2db2a2f9e160bb350da8eef4902" data-text-hash="3cdd5f7a79e5623661b9fcb157a771fd" id="211" refid="211">
+<p>This may look like the Node.js server is refusing to accept the connection, but the issue lies elsewhere. The curl command is never executed. The error is reported by <code>kubectl</code> itself when it tries to talk to the Kubernetes API server at <code>localhost:8080</code>, which isn&#8217;t where the server is. If you run the <code>kubectl options</code> command, you&#8217;ll see that the <code>-s</code> option can be used to specify the address and port of the Kubernetes API server. Instead of passing that option to curl, kubectl adopted it as its own. Adding the double dash prevents this.</p>
+</div>
+<div class="readable-text" data-hash="2eaa3b8f8c0afcfba48fe15e7c64b183" data-text-hash="673def3e9bf9d8882469475026377a1e" id="212" refid="212">
+<p>Fortunately, to prevent scenarios like this, newer versions of kubectl are set to return an error if you forget the double dash.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="828b9578db9c52f55585c5c00b6312f5" data-text-hash="3e074ecc96bb69ac517b7edea93250d5" id="213" refid="213">
+<h4>Running an interactive shell in the container</h4>
+</div>
+<div class="readable-text" data-hash="e641be50f201faec1a3567243e44df2e" data-text-hash="cd6f4c0fe7c577b5491f803402442822" id="214" refid="214">
+<p>The two previous examples showed how a single command can be executed in the container. When the command completes, you are returned to your shell. If you want to run several commands in the container, you can run a shell in the container as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="54c32b99fa076637e4a11a5b703dfff9" data-text-hash="adaf3cc32212f167417933a9be0c46c2" id="215" refid="215">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it kiada -- bash
+root@kiada:/#         #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbW1hbmQgcHJvbXB0IG9mIHRoZSBzaGVsbCBydW5uaW5nIGluIHRoZSBjb250YWluZXI="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="81522db8057208abc655c93e2ac545f6" data-text-hash="80cb3d81ff3e26bf789a5f71e42462ce" id="216" refid="216">
+<p>The <code>-it</code> is short for two options: <code>-i</code> and <code>-t</code>, which indicate that you want to execute the <code>bash</code> command interactively by passing the standard input to the container and marking it as a terminal (TTY).</p>
+</div>
+<div class="readable-text" data-hash="9d67065ad256c9d964211935b069e953" data-text-hash="22a0282b8229d694eb88a40017426355" id="217" refid="217">
+<p>You can now explore the inside of the container by executing commands in the shell. For example, you can view the files in the container by running <code>ls -la</code>, view its network interfaces with <code>ip link</code>, or test its connectivity with <code>ping</code>. You can run any tool available in the container.</p>
+</div>
+<div class="readable-text" data-hash="b17f0bedd3961b1f63d7e5c269fe80a9" data-text-hash="bc060c4732474ab4678a28424e6640d4" id="218" refid="218">
+<h4>Not all containers allow you to run shells</h4>
+</div>
+<div class="readable-text" data-hash="f7b8c3d10031812178399da2217a3cca" data-text-hash="02a2d257f44927cc5e15f40f2ed39d3f" id="219" refid="219">
+<p>The container image of your application contains many important debugging tools, but this isn&#8217;t the case with every container image. To keep images small and improve security in the container, most containers used in production don&#8217;t contain any binary files other than those required for the container&#8217;s primary process. This significantly reduces the attack surface, but also means that you can&#8217;t run shells or other tools in production containers. Fortunately, a new Kubernetes feature called <i>ephemeral containers</i> allows you to debug running containers by attaching a debug container to them.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="04177f78c0764b38c4e63fbf110ba065" data-text-hash="18b8b73b2aba3086bc93f0b25a790365" id="220" refid="220">
+<h5>Note to MEAP readers</h5>
+</div>
+<div class="readable-text" data-hash="0eedd787104822a7b2c46ccade6ec37c" data-text-hash="17af09b338e237b414fc8a0a261ee6f1" id="221" refid="221">
+<p> Ephemeral containers are currently an alpha feature, which means they may change or even be removed at any time. This is also why they are currently not explained in this book. If they graduate to beta before the book goes into production, a section explaining them will be added.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="67c48c217c21ae3c7e8e908239ffbcf4" data-text-hash="bead0795a885a8fab2fcec5d2825d572" id="222" refid="222">
+<h3 id="sigil_toc_id_76">5.3.5&#160;Attaching to a running container</h3>
+</div>
+<div class="readable-text" data-hash="b7f005ff10da5d78d7a99c8fdf138742" data-text-hash="fb61b61a9e287655d92a5a4250e8a76d" id="223" refid="223">
+<p>The <code>kubectl attach</code> command is another way to interact with a running container. It attaches itself to the standard input, output and error streams of the main process running in the container. Normally, you only use it to interact with applications that read from the standard input.</p>
+</div>
+<div class="readable-text" data-hash="aab0c39ba5fa3cd74cb0456656944fdd" data-text-hash="c7b793fddba68f58a9db1ba64ce5efea" id="224" refid="224">
+<h4>Using kubectl attach to see what the application prints to standard output</h4>
+</div>
+<div class="readable-text" data-hash="5b669fe9c0a591eb32bd5a35ca8149e3" data-text-hash="b1974e58dea30efbc78023c0f0698a08" id="225" refid="225">
+<p>If the application doesn&#8217;t read from standard input, the <code>kubectl attach</code> command is no more than an alternative way to stream the application logs, as these are typically written to the standard output and error streams, and the <code>attach</code> command streams them just like the <code>kubectl logs -f</code> command does.</p>
+</div>
+<div class="readable-text" data-hash="a41d0d56c83bf9a50b2d517625bc28ae" data-text-hash="f9680a40f4c39734420edfcf16d18cbf" id="226" refid="226">
+<p>Attach to your <code>kiada</code> pod by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="af38bf86be4176a02391ba32dd5efad0" data-text-hash="ff8a6887c7209a9c3cb30460266d04d1" id="227" refid="227">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl attach kiada
+Defaulting container name to kiada.
+Use 'kubectl describe pod/kiada -n default' to see all of the containers in this pod.
+If you don't see a command prompt, try pressing enter.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="68fc75ebc77df1e4bef8fe5159614e24" data-text-hash="83148c8755b3b4e834c244e210270421" id="228" refid="228">
+<p>Now, when you send new HTTP requests to the application using <code>curl</code> in another terminal, you&#8217;ll see the lines that the application logs to standard output also printed in the terminal where the <code>kubectl</code> <code>attach</code> command is executed.</p>
+</div>
+<div class="readable-text" data-hash="d56a80543a3329dbb6b75f780ddd5d89" data-text-hash="cfe701d4c8dae93be93ed89063a724ae" id="229" refid="229">
+<h4>Using kubectl attach to write to the application&#8217;s standard input</h4>
+</div>
+<div class="readable-text" data-hash="e507ce0d525c3dc0b66e62445ae6f9f9" data-text-hash="8972ae83a560a46879d7afd3bf5b858e" id="230" refid="230">
+<p>The Kiada application version 0.1 doesn&#8217;t read from the standard input stream, but you&#8217;ll find the source code of version 0.2 that does this in the book&#8217;s code archive. This version allows you to set a status message by writing it to the standard input stream of the application. This status message will be included in the application&#8217;s response. Let&#8217;s deploy this version of the application in a new pod and use the <code>kubectl</code> <code>attach</code> command to set the status message.</p>
+</div>
+<div class="readable-text" data-hash="28e4c702938f52650ad2882736ec6ba3" data-text-hash="fc7b0f056766904e501c4d0056f64d9b" id="231" refid="231">
+<p>You can find the artifacts required to build the image in the <code>kiada-0.2/</code> directory. You can also use the pre-built image <code>docker.io/luksa/kiada:0.2</code>. The pod manifest is in the file <code>Chapter05/pod.kiada-stdin.yaml</code> and is shown in the following listing. It contains one additional line compared to the previous manifest (this line is highlighted in the listing).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="444fef1dec95adf9680b2191e0bdb365" data-text-hash="8c0ea4df6d17ef0b0e6d3d87a3d493ca" id="232" refid="232">
+<h5>Listing 5.2 Enabling standard input for a container</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-stdin    #A
+spec:
+  containers:
+  - name: kiada
+    image: luksa/kiada:0.2    #B
+    stdin: true    #C
+    ports:
+    - containerPort: 8080</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2QgaXMgbmFtZWQga2lhZGEtc3RkaW4KI0IgSXQgdXNlcyB0aGUgMC4yIHZlcnNpb24gb2YgdGhlIEtpYWRhIGFwcGxpY2F0aW9uCiNDIFRoZSBhcHBsaWNhdGlvbiBuZWVkcyB0byByZWFkIGZyb20gdGhlIHN0YW5kYXJkIGlucHV0IHN0cmVhbQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ef79fe3ad85d114d8a6a63a516f5cc18" data-text-hash="4a09d55536d8b6992d2d564f030b7e8c" id="233" refid="233">
+<p>As you can see in the listing, if the application running in a pod wants to read from standard input, you must indicate this in the pod manifest by setting the <code>stdin</code> field in the container definition to <code>true</code>. This tells Kubernetes to allocate a buffer for the standard input stream, otherwise the application will always receive an <code>EOF</code> when it tries to read from it.</p>
+</div>
+<div class="readable-text" data-hash="20251b9a4aefcfadb00bd9e037621c39" data-text-hash="771c2e03817cedd8a638c9d92da657d7" id="234" refid="234">
+<p>Create the pod from this manifest file with the <code>kubectl apply</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="93b4b1dbb0e6ea94ce9451714d8d2fdc" data-text-hash="917c5b25e2beb2472418bf57d615313d" id="235" refid="235">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada-stdin.yaml
+pod/kiada-stdin created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0270d2f3f1befbdd2bf835cb7dc029f5" data-text-hash="ba600e53fd2d2f4f14730a87a35ba8bc" id="236" refid="236">
+<p>To enable communication with the application, use the <code>kubectl port-forward</code> command again, but because the local port <code>8080</code> is still being used by the previously executed <code>port-forward</code> command, you must either terminate it or choose a different local port to forward to the new pod. You can do this as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f3332661d339ee0eb77a0b54c08794d5" data-text-hash="80011373f2723e13a69852d889b2f35f" id="237" refid="237">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward kiada-stdin 8888:8080
+Forwarding from 127.0.0.1:8888 -&gt; 8080
+Forwarding from [::1]:8888 -&gt; 8080</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="aad88da51ca10f61e4c56259000bb4dc" data-text-hash="c111a4fef6ab999085d4bbd4d6338799" id="238" refid="238">
+<p>The command-line argument <code>8888:8080</code> instructs the command to forward local port <code>8888</code> to the pod&#8217;s port <code>8080</code>.</p>
+</div>
+<div class="readable-text" data-hash="d26665a433884222c9f3bf83c595eceb" data-text-hash="715774e8a5a21208658a6ff053eaf17e" id="239" refid="239">
+<p>You can now reach the application at <a href=".html">http://localhost:8888</a>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="777b7f57df0e0091d1a44eecb39cb185" data-text-hash="df0a40351905962003e7bbedbab4b862" id="240" refid="240">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8888
+Kiada version 0.2. Request processed by "kiada-stdin". Client IP: ::ffff:127.0.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="20a359b0004646c59ca4d42ede5668a0" data-text-hash="ed8ac618e53cbb9189799ce83379a2b6" id="241" refid="241">
+<p>Let&#8217;s set the status message by using <code>kubectl attach</code> to write to the standard input stream of the application. Run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fb0d530861ef85c59a0c522c1c679131" data-text-hash="eb8be9421bf6d0b5cadee5abc4427a08" id="242" refid="242">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl attach -i kiada-stdin</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8da8d46349bbb894bf73a414a098b88f" data-text-hash="754cc5f1c00143e29dc8e8043816902e" id="243" refid="243">
+<p>Note the use of the additional option <code>-i</code> in the command. It instructs <code>kubectl</code> to pass its standard input to the container.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="244" refid="244">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4738beee13377286964f7e2f068c9e78" data-text-hash="483877592dfa2b7eae423dc69d06ff2a" id="245" refid="245">
+<p> Like the <code>kubectl</code> <code>exec</code> command, <code>kubectl</code> <code>attach</code> also supports the <code>--tty</code> or <code>-t</code> option, which indicates that the standard input is a terminal (TTY), but the container must be configured to allocate a terminal through the <code>tty</code> field in the container definition.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="36a05e2da28c9547c8a78c0d22ed69ed" data-text-hash="a1410a998954b7c179e4b25365b3f8c9" id="246" refid="246">
+<p>You can now enter the status message into the terminal and press the ENTER key. For example, type the following message:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8aea84c4375cae4e06cb38cff029d275" data-text-hash="af78f5036c439309d2869494e31ef481" id="247" refid="247">
+<div class="code-area-container">
+<pre class="code-area">This is my custom status message.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0fae809bc0b3f6dfe01b97cbe8d1a6b1" data-text-hash="cf1b028fa80589fcddbd28f334fa1dcb" id="248" refid="248">
+<p>The application prints the new message to the standard output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0c7361fecf8fd645bb94e6fdf9519773" data-text-hash="12e8553f58408fea27848614b02af60b" id="249" refid="249">
+<div class="code-area-container">
+<pre class="code-area">Status message set to: This is my custom status message.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="54ae49dc7775e6402edb5edccfafae17" data-text-hash="671b7f2a70f322b80933b0ac948a825f" id="250" refid="250">
+<p>To see if the application now includes the message in its responses to HTTP requests, re-execute the <code>curl</code> command or refresh the page in your web browser:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fbf0e861e01908aec162a2afd03635bf" data-text-hash="9e688f8cedfbcea15f9f3eefe1c3fe74" id="251" refid="251">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8888
+Kiada version 0.2. Request processed by "kiada-stdin". Client IP: ::ffff:127.0.0.1
+This is my custom status message.    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSGVyZeKAmXMgdGhlIG1lc3NhZ2UgeW91IHNldCB2aWEgdGhlIGt1YmVjdGwgYXR0YWNoIGNvbW1hbmQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b2c4cd541196d14d6879d12daae289c3" data-text-hash="33ba5b2f624020cb779e7003098705ed" id="252" refid="252">
+<p>You can change the status message again by typing another line in the terminal running the <code>kubectl attach</code> command. To exit the <code>attach</code> command, press Control-C or the equivalent key.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="253" refid="253">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="dcc679aa5b79a5a07b11a29248bac2e6" data-text-hash="755e8aa391a42b22c8124cb3eb7d8855" id="254" refid="254">
+<p> An additional field in the container definition, <code>stdinOnce</code>, determines whether the standard input channel is closed when the attach session ends. It&#8217;s set to <code>false</code> by default, which allows you to use the standard input in every <code>kubectl attach</code> session. If you set it to <code>true</code>, standard input remains open only during the first session.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b405714edf58102e8f12c717c4d4869b" data-text-hash="b8fe3e8edcf0ce6d9a93e19b7fd72912" id="255" refid="255">
+<h2 id="sigil_toc_id_77">5.4&#160;Running multiple containers in a pod</h2>
+</div>
+<div class="readable-text" data-hash="341d09d11982e5d1bebbd37577bfbce9" data-text-hash="820a12d223f592490d3b29cf1e1bf577" id="256" refid="256">
+<p>The Kiada application you deployed in section 5.2 only supports HTTP. Let's add TLS support so it can also serve clients over HTTPS. You could do this by adding code to the <code>app.js</code> file, but an easier option exists where you don&#8217;t need to touch the code at all.</p>
+</div>
+<div class="readable-text" data-hash="72bbf5f85dfe12a0ffaa742335e645d6" data-text-hash="f3bcdb09fd1f6c7ae2ec293b15ff643d" id="257" refid="257">
+<p>You can run a reverse proxy alongside the Node.js application in a sidecar container, as explained in section 5.1.2, and let it handle HTTPS requests on behalf of the application. A very popular software package that can provide this functionality is <i>Envoy</i>. The Envoy proxy is a high-performance open source service proxy originally built by Lyft that has since been contributed to the Cloud Native Computing Foundation. Let&#8217;s add it to your pod.</p>
+</div>
+<div class="readable-text" data-hash="fef43a4f67384a86480d0cc061e5cc42" data-text-hash="1d3f7d6666c0c8eaafff1a5c393cce83" id="258" refid="258">
+<h3 id="sigil_toc_id_78">5.4.1&#160;Extending the Kiada Node.js application using the Envoy proxy</h3>
+</div>
+<div class="readable-text" data-hash="bcad10aae2708f91b1c79a7dc129ad7b" data-text-hash="cd40ade96a67c6a51beade6ad699964d" id="259" refid="259">
+<p>Let me briefly explain what the new architecture of the application will look like. As shown in the next figure, the pod will have two containers - the Node.js and the new Envoy container. The Node.js container will continue to handle HTTP requests directly, but the HTTPS requests will be handled by Envoy. For each incoming HTTPS request, Envoy will create a new HTTP request that it will then send to the Node.js application via the local loopback device (via the localhost IP address).</p>
+</div>
+<div class="browsable-container figure-container" data-hash="71f0c4fdc956d389c74f5a509f5098ed" data-text-hash="689f0a5eceee2ba8ba78cada7c9499b7" id="260" refid="260">
+<h5>Figure 5.10 Detailed view of the pod&#8217;s containers and network interfaces</h5>
+<img alt="" data-processed="true" height="302" id="Picture_10" loading="lazy" src="EPUB/images/05image011.png" width="805">
+</div>
+<div class="readable-text" data-hash="8fdc7f117f07edb73700d91fe5d1203f" data-text-hash="cd39f8ef6782dc96af7c907254b2a054" id="261" refid="261">
+<p>Envoy also provides a web-based administration interface that will prove handy in some of the exercises in the next chapter.</p>
+</div>
+<div class="readable-text" data-hash="fcf0c4f8c84f391efd59a0d3eb630063" data-text-hash="dfbc49f9ec863d2c8ba0602dc1cf17cd" id="262" refid="262">
+<p>It&#8217;s obvious that if you implement TLS support within the Node.js application itself, the application will consume less computing resources and have lower latency because no additional network hop is required, but adding the Envoy proxy could be a faster and easier solution. It also provides a good starting point from which you can add many other features provided by Envoy that you would probably never implement in the application code itself. Refer to the Envoy proxy documentation at <a href=".html">envoyproxy.io</a> to learn more.</p>
+</div>
+<div class="readable-text" data-hash="b6e027b4e1c2d5969e5f262e22f8c9f1" data-text-hash="a2a77ea06ebf04f09e7a18865163a6d0" id="263" refid="263">
+<h3 id="sigil_toc_id_79">5.4.2&#160;Adding Envoy proxy to the pod</h3>
+</div>
+<div class="readable-text" data-hash="43aedff1e60b180c51008858bf79c291" data-text-hash="371979dd9bf0304b5c0634765bbdaa1d" id="264" refid="264">
+<p>You&#8217;ll create a new pod with two containers. You&#8217;ve already got the Node.js container, but you also need a container that will run Envoy.</p>
+</div>
+<div class="readable-text" data-hash="8a6e1e2df662a170fc2cd49829965e85" data-text-hash="a7861d40043a33df90dd8f0d6c091985" id="265" refid="265">
+<h4>Creating the Envoy container image</h4>
+</div>
+<div class="readable-text" data-hash="7b4bc1257229fd03ffcd63a34b8207f3" data-text-hash="107d174e8bfaa580dc046184adc27721" id="266" refid="266">
+<p>The authors of the proxy have published the official Envoy proxy container image at Docker Hub. You could use this image directly, but you would need to somehow provide the configuration, certificate, and private key files to the Envoy process in the container. You&#8217;ll learn how to do this in chapter 7. For now, you&#8217;ll use an image that already contains all three files.</p>
+</div>
+<div class="readable-text" data-hash="788a78811889dc8b686d43ff18f06587" data-text-hash="c0b8ca35429cade040ea68355b6b44b6" id="267" refid="267">
+<p>I&#8217;ve already created the image and made it available at <code>docker.io/luksa/kiada-ssl-proxy:0.1</code>, but if you want to build it yourself, you can find the files in the <code>kiada-ssl-proxy-image</code> directory in the book's code archive.</p>
+</div>
+<div class="readable-text" data-hash="8436e0c07c969c0ea0d221e3d5e08a10" data-text-hash="1c79e89cff7adf8d535b84d1e8feadf0" id="268" refid="268">
+<p>The directory contains the <code>Dockerfile</code>, as well as the private key and certificate that the proxy will use to serve HTTPS. It also contains the <code>envoy.conf</code> config file. In it, you&#8217;ll see that the proxy is configured to listen on port <code>8443</code>, terminate TLS, and forward requests to port <code>8080</code> on <code>localhost</code>, which is where the Node.js application is listening. The proxy is also configured to provide an administration interface on port <code>9901</code>, as explained earlier.</p>
+</div>
+<div class="readable-text" data-hash="fbc6cbf2c7be5b67c96c72bc01423d3d" data-text-hash="97f0f8832baa31083e2cf09f881509a5" id="269" refid="269">
+<h4>Creating the pod manifest</h4>
+</div>
+<div class="readable-text" data-hash="f587cfec50bb8a6a38013d92632f243d" data-text-hash="a8d801577e4389e9ed3eee8f86403c89" id="270" refid="270">
+<p>After building the image, you must create the manifest for the new pod. The following listing shows the contents of the pod manifest file <code>pod.kiada-ssl.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="086678523caf4826f39334c68f9192a2" data-text-hash="861d85f419e105ef6da0ff5447e52864" id="271" refid="271">
+<h5>Listing 5.3 Manifest of pod kiada-ssl</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-ssl                                
+spec:
+  containers:
+  - name: kiada                                  #A
+    image: luksa/kiada:0.2                       #A
+    ports:                                       #A
+    - name: http                                 #A
+      containerPort: 8080                        #A
+  - name: envoy                                  #B
+    image: luksa/kiada-ssl-proxy:0.1             #B
+    ports:                                       #B
+    - name: https                                #B
+      containerPort: 8443                        #B
+    - name: admin                                #B
+      containerPort: 9901                        #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbnRhaW5lciBydW5uaW5nIHRoZSBOb2RlLmpzIHNlcnZlciwgd2hpY2ggbGlzdGVucyBvbiBwb3J0IDgwODAuCiNCIFRoZSBjb250YWluZXIgcnVubmluZyB0aGUgRW52b3kgcHJveHkgb24gcG9ydHMgODQ0MyAoSFRUUFMpIGFuZCA5OTAxIChhZG1pbiku"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f4762364eb6ac6a3b113080f86b9427f" data-text-hash="ff60d3c54ed5a3181f08992014c30c90" id="272" refid="272">
+<p>The name of this pod is <code>kiada-ssl</code>. It has two containers: <code>kiada</code> and <code>envoy</code>. The manifest is only slightly more complex than the manifest in section 5.2.1. The only new fields are the port names, which are included so that anyone reading the manifest can understand what each port number stands for.</p>
+</div>
+<div class="readable-text" data-hash="494fc9ee9031cabc7465ebb2c52528ad" data-text-hash="fb35305bc76ab1cd12da5fa8a64a6ecf" id="273" refid="273">
+<h4>Creating the pod</h4>
+</div>
+<div class="readable-text" data-hash="cfc8aca67c5fff59471146e02d8f81e5" data-text-hash="4139930ddd10714a4bfa27425c2349b7" id="274" refid="274">
+<p>Create the pod from the manifest using the command <code>kubectl apply -f pod.kiada-ssl.yaml</code>. Then use the <code>kubectl get</code> and <code>kubectl describe</code> commands to confirm that the pod&#8217;s containers were successfully launched.</p>
+</div>
+<div class="readable-text" data-hash="e3abbc0e7184d2bccde479110a8cdf96" data-text-hash="689701d9dd8c69f6733f5d2bdb085eea" id="275" refid="275">
+<h3 id="sigil_toc_id_80">5.4.3&#160;Interacting with the two-container pod</h3>
+</div>
+<div class="readable-text" data-hash="1c2dfe3ca9a7f2f011f20827ea476892" data-text-hash="5814779cfe9e774bb2e80f7b06b9495c" id="276" refid="276">
+<p>When the pod starts, you can start using the application in the pod, inspect its logs and explore the containers from within.</p>
+</div>
+<div class="readable-text" data-hash="7a1fb8c9e51c9c7c51127c4d89d0bf73" data-text-hash="d778e8cb47f4f5e584589adc5aa754e1" id="277" refid="277">
+<h4>Communicating with the application</h4>
+</div>
+<div class="readable-text" data-hash="8a7eadbd008fb3c2a02438d1684efcf4" data-text-hash="3b4db84bf54a77c8cd02fe8e4740d12f" id="278" refid="278">
+<p>As before, you can use the <code>kubectl port-forward</code> to enable communication with the application in the pod. Because it exposes three different ports, you enable forwarding to all three ports as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0a822384b837ab7139ed3456b6acafaa" data-text-hash="e76489a60a2a3262e07d2cceb1ee29ee" id="279" refid="279">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward kiada-ssl 8080 8443 9901
+Forwarding from 127.0.0.1:8080 -&gt; 8080
+Forwarding from [::1]:8080 -&gt; 8080
+Forwarding from 127.0.0.1:8443 -&gt; 8443
+Forwarding from [::1]:8443 -&gt; 8443
+Forwarding from 127.0.0.1:9901 -&gt; 9901
+Forwarding from [::1]:9901 -&gt; 9901</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="35262c551067834a255cefc8553c59ad" data-text-hash="b18650dfaac788e73519b34043f5ca04" id="280" refid="280">
+<p>First, confirm that you can communicate with the application via HTTP by opening the URL <a href=".html">http://localhost:8080</a> in your browser or by using <code>curl</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="93333a3a51a3e47511413d2c2e6a97e5" data-text-hash="ce04902d9f5435c9259faf240fad3f26" id="281" refid="281">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8080
+Kiada version 0.2. Request processed by "kiada-ssl". Client IP: ::ffff:127.0.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="62b228a388a364df4cd590f01876a41a" data-text-hash="d6e23290fb1738c0ccb00edb2675ca22" id="282" refid="282">
+<p>If this works, you can also try to access the application over HTTPS at <a href=".html">https://localhost:8443</a>. With <code>curl</code> you can do this as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1de1d756b531fb0170e441e1d77e0815" data-text-hash="5f7939ee5d35f5c56e6d63cf0e286fd8" id="283" refid="283">
+<div class="code-area-container">
+<pre class="code-area">$ curl https://localhost:8443 --insecure
+Kiada version 0.2. Request processed by "kiada-ssl". Client IP: ::ffff:127.0.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3ab00db5e3f433102d5c09acff24cce7" data-text-hash="b813d007900dd2e0a522dc43ab359103" id="284" refid="284">
+<p>Success! The Envoy proxy handles the task perfectly. Your application now supports HTTPS using a sidecar container.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="c10cf2f7b2c9aeb5f2bebd1f6cc6ce2a" data-text-hash="62047bc001edb509c476b5aaea2190f8" id="285" refid="285">
+<h5>Why use the --insecure option?</h5>
+</div>
+<div class="readable-text" data-hash="ec89d4fb4158c28a2caee8f800c7ef4e" data-text-hash="54a0f4547b556a440be88d900dad3ccc" id="286" refid="286">
+<p>There are two reasons to use the <code>--insecure</code> option when accessing the service. The certificate used by the Envoy proxy is self-signed and was issued for the domain name <code>example.com</code>. You&#8217;re accessing the service through <code>localhost</code>, where the local <code>kubectl proxy</code> process is listening. Therefore, the hostname doesn&#8217;t match the name in the server certificate.</p>
+</div>
+<div class="readable-text" data-hash="edb1604318c2d87bf9777ec42c5aa97b" data-text-hash="30825d87e42b368cd0d4ce1fb1d06263" id="287" refid="287">
+<p>To make the names match, you can tell curl to send the request to <code>example.com</code>, but resolve it to <code>127.0.0.1</code> with the <code>--resolve</code> flag. This will ensure that the certificate matches the requested URL, but since the server&#8217;s certificate is self-signed, curl will still not accept it as valid. You can fix the problem by telling curl the certificate to use to verify the server with the <code>--cacert</code> flag. The whole command then looks like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="875b3da0fbbc7b07550e8a3c9c47b7e3" data-text-hash="0ee9af7c9b6e4fe24007cfcf94fe52cd" id="288" refid="288">
+<div class="code-area-container">
+<pre class="code-area">$ curl https://example.com:8443 --resolve example.com:8443:127.0.0.1 --cacert kiada-ssl-proxy-0.1/example-com.crt</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ad116456addf9d5c9a034fcdd4078d40" data-text-hash="7b9ad3bb9fc8220593a3610f29eb8986" id="289" refid="289">
+<p>That&#8217;s a lot of typing. That&#8217;s why I prefer to use the <code>--insecure</code> option or the shorter <code>-k</code> variant.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="29cb3f5b0136675592081a2740844d00" data-text-hash="650047c1be470917f83c5df47d300997" id="290" refid="290">
+<h4>Displaying logs of pods with multiple containers</h4>
+</div>
+<div class="readable-text" data-hash="c73c15d06264559d1f9f3d755ff07f15" data-text-hash="783beb0c4a4a301cc73489c784890329" id="291" refid="291">
+<p>The <code>kiada-ssl</code> pod contains two containers, so if you want to display the logs, you must specify the name of the container using the <code>--container</code> or <code>-c</code> option. For example, to view the logs of the <code>kiada</code> container, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e3735079796fad669cfdb9363f941757" data-text-hash="488293c1350cff5035453ccf1b924be5" id="292" refid="292">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-ssl -c kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ae1ad9065e4b2c5504476df4618d4f5f" data-text-hash="2992b6297b8289ed2b1f9e746b6c507a" id="293" refid="293">
+<p>The Envoy proxy runs in the container named <code>envoy</code>, so you display its logs as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1a77dea579595bdc1023bbc7f3b93b98" data-text-hash="c368e8b93983df149705fd452605b167" id="294" refid="294">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-ssl -c envoy</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c864ddaa1b2b8f2dbcd918dd2dc3dcf1" data-text-hash="01d23977863218d19aa1db97e44f5b9c" id="295" refid="295">
+<p>Alternatively, you can display the logs of both containers with the <code>--all-containers</code> option:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3b9bcfee096c8ccb98170b24c4283e20" data-text-hash="538ed72962e7377f94e54825bd699a41" id="296" refid="296">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-ssl --all-containers</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="16836a88e4be8fea6f47fa85977c3121" data-text-hash="0523db8fc5c84228dc43ad65fd01503b" id="297" refid="297">
+<p>You can also combine these commands with the other options explained in section 5.3.2.</p>
+</div>
+<div class="readable-text" data-hash="03432e77ca4a17dee89bc86b4e083b13" data-text-hash="b58446c9117e810c20122eab2af7281d" id="298" refid="298">
+<h4>Running commands in containers of multi-container pods</h4>
+</div>
+<div class="readable-text" data-hash="f3ef09c4c83824f6282a11faeb1890a9" data-text-hash="81c4e3f9c0eea1f8b048e3d8190f5a3b" id="299" refid="299">
+<p>If you&#8217;d like to run a shell or another command in one of the pod&#8217;s containers using the <code>kubectl exec</code> command, you also specify the container name using the <code>--container</code> or <code>-c</code> option. For example, to run a shell inside the envoy container, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="958252a052541def299adaa44a1c091b" data-text-hash="cfb0856071145977954b40e78a2e272e" id="300" refid="300">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it kiada-ssl -c envoy -- bash</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="301" refid="301">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="cab775a4321c2bdb51c509cc8e11d011" data-text-hash="37587db57c7e0c3d3a57744a50d8ecf1" id="302" refid="302">
+<p> If you don&#8217;t provide the name, <code>kubectl exec</code> defaults to the first container specified in the pod manifest.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="aa2dbf534f832f022e9b2a10c0c80c58" data-text-hash="d9015199c518de85202c6dbcb15b1123" id="303" refid="303">
+<h2 id="sigil_toc_id_81">5.5&#160;Running additional containers at pod startup</h2>
+</div>
+<div class="readable-text" data-hash="a0f1ef6f27c6f6fbef31cee87708ccc9" data-text-hash="a025708f6567ceb58e0c416013e0858e" id="304" refid="304">
+<p>When a pod contains more than one container, all the containers are started in parallel. Kubernetes doesn&#8217;t yet provide a mechanism to specify whether a container depends on another container, which would allow you to ensure that one is started before the other. However, Kubernetes allows you to run a sequence of containers to initialize the pod before its main containers start. This special type of container is explained in this section.</p>
+</div>
+<div class="readable-text" data-hash="6877e804b0dc44d4284e538408bd1037" data-text-hash="756d52bfd4134499db098483133de7cf" id="305" refid="305">
+<h3 id="sigil_toc_id_82">5.5.1&#160;Introducing init containers</h3>
+</div>
+<div class="readable-text" data-hash="388e33d48c6744a8353a6f21ac2a4f12" data-text-hash="ab203929ed11227698e64e7ab0199c21" id="306" refid="306">
+<p>A pod manifest can specify a list of containers to run when the pod starts and before the pod&#8217;s normal containers are started. These containers are intended to initialize the pod and are appropriately called <i>init containers</i>. As the following figure shows, they run one after the other and must all finish successfully before the main containers of the pod are started.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="5be2a707a11f4da0b8e76ffff2c3ed04" data-text-hash="09267eebb9008207aee52358edfc8353" id="307" refid="307">
+<h5>Figure 5.11 Time sequence showing how a pod&#8217;s init and regular containers are started</h5>
+<img alt="" data-processed="true" height="204" id="Picture_11" loading="lazy" src="EPUB/images/05image012.png" width="836">
+</div>
+<div class="readable-text" data-hash="0e1d96b874c3211f9a99d1de2af25e48" data-text-hash="b0dc66d51b1ec19e1ca9bfabd3a96367" id="308" refid="308">
+<p>Init containers are like the pod&#8217;s regular containers, but they don&#8217;t run in parallel - only one init container runs at a time.</p>
+</div>
+<div class="readable-text" data-hash="e4039cfb4e19c3f9e0f378e3e82644de" data-text-hash="6f65054a254ac45f0d84d22e7efb9b0c" id="309" refid="309">
+<h4>Understanding what init containers can do</h4>
+</div>
+<div class="readable-text" data-hash="551c65472d69c22caa01938ecc8d0842" data-text-hash="a834a8c190f61f47536c1747a5515621" id="310" refid="310">
+<p>Init containers are typically added to pods to achieve the following:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="47c442bb5104f8fc84a3505681445992" data-text-hash="47c442bb5104f8fc84a3505681445992" id="311" refid="311">Initialize files in the volumes used by the pod&#8217;s main containers. This includes retrieving certificates and private keys used by the main container from secure certificate stores, generating config files, downloading data, and so on.</li>
+<li class="readable-text" data-hash="30a0c8eb809719b0b4a149524ce7ba5f" data-text-hash="30a0c8eb809719b0b4a149524ce7ba5f" id="312" refid="312">Initialize the pod&#8217;s networking system. Because all containers of the pod share the same network namespaces, and thus the network interfaces and configuration, any changes made to it by an init container also affect the main container.</li>
+<li class="readable-text" data-hash="c88de9647d1f29652acb94ea16587766" data-text-hash="c88de9647d1f29652acb94ea16587766" id="313" refid="313">Delay the start of the pod&#8217;s main containers until a precondition is met. For example, if the main container relies on another service being available before the container is started, an init container can block until this service is ready.</li>
+<li class="readable-text" data-hash="118c94bc2483a035bda20471f6dd1a9a" data-text-hash="118c94bc2483a035bda20471f6dd1a9a" id="314" refid="314">Notify an external service that the pod is about to start running. In special cases where an external system must be notified when a new instance of the application is started, an init container can be used to deliver this notification.</li>
+</ul>
+<div class="readable-text" data-hash="72a51f5066e5043cee486a89170b93f4" data-text-hash="4fd0ddbcd5c1a261d252378119cc4267" id="315" refid="315">
+<p>You could perform these operations in the main container itself but using an init container is sometimes a better option and can have other advantages. Let&#8217;s see why.</p>
+</div>
+<div class="readable-text" data-hash="1db53b3fce85a218d47a309cb46cd2d8" data-text-hash="d2567016ba5a62be468bdb40b8e789c9" id="316" refid="316">
+<h4>Understanding when moving initialization code to init containers makes sense</h4>
+</div>
+<div class="readable-text" data-hash="3f8737675a05fbb685149e8805936f73" data-text-hash="f35af53a488fe4350da1641ba21b35a8" id="317" refid="317">
+<p>Using an init container to perform initialization tasks doesn&#8217;t require the main container image to be rebuilt and allows a single init container image to be reused with many different applications. This is especially useful if you want to inject the same infrastructure-specific initialization code into all your pods. Using an init container also ensures that this initialization is complete before any of the (possibly multiple) main containers start.</p>
+</div>
+<div class="readable-text" data-hash="e846f7d0ad471c119b7e22ef3fd2e3cd" data-text-hash="a3a8e537210caf6c46314ba3c1a31d70" id="318" refid="318">
+<p>Another important reason is security. By moving tools or data that could be used by an attacker to compromise your cluster from the main container to an init container, you reduce the pod&#8217;s attack surface.</p>
+</div>
+<div class="readable-text" data-hash="3c5940323907c329af73866907f4277d" data-text-hash="21b5cca64bb22c0cd89b628115949402" id="319" refid="319">
+<p>For example, imagine that the pod must be registered with an external system. The pod needs some sort of secret token to authenticate against this system. If the registration procedure is performed by the main container, this secret token must be present in its filesystem. If the application running in the main container has a vulnerability that allows an attacker to read arbitrary files on the filesystem, the attacker may be able to obtain this token. By performing the registration from an init container, the token must be available only in the filesystem of the init container, which an attacker can&#8217;t easily compromise.</p>
+</div>
+<div class="readable-text" data-hash="1838f00ba1d41f94dbe54e07c417040f" data-text-hash="7a331fb8fac0697a049b3e11d33e01f8" id="320" refid="320">
+<h3 id="sigil_toc_id_83">5.5.2&#160;Adding init containers to a pod</h3>
+</div>
+<div class="readable-text" data-hash="88d9493f0397b402390c1a23b87a7c2f" data-text-hash="27e3a7e0962038a1396f8cadeb4a93d1" id="321" refid="321">
+<p>In a pod manifest, init containers are defined in the <code>initContainers</code> field in the spec section, just as regular containers are defined in its <code>containers</code> field.</p>
+</div>
+<div class="readable-text" data-hash="7b397de5dd24aff7278d859f7649e67c" data-text-hash="0870692174f437ec9039a1bcc971a133" id="322" refid="322">
+<h4>Defining init containers in a pod manifest</h4>
+</div>
+<div class="readable-text" data-hash="1dc09c0a4215a35d8679bd81a1b44f05" data-text-hash="7f0883f7bae0ec87138f9125f3c60dc4" id="323" refid="323">
+<p>Let&#8217;s look at an example of adding two init containers to the kiada pod. The first init container emulates an initialization procedure. It runs for 5 seconds, while printing a few lines of text to standard output.</p>
+</div>
+<div class="readable-text" data-hash="cd4c89af261ed83d3c2e0b9940c72d75" data-text-hash="55d4bfa3b46fde2dbdeff4dc958e0c98" id="324" refid="324">
+<p>The second init container performs a network connectivity test by using the <code>ping</code> command to check if a specific IP address is reachable from within the pod. The IP address is configurable via a command-line argument which defaults to 1.1.1.1.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="325" refid="325">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8f817ea5fb7b1000ac7c6d051a512fd9" data-text-hash="da2e1c0de3893a9daf4cc073a85f1584" id="326" refid="326">
+<p> An init container that checks if specific IP addresses are reachable could be used to block an application from starting until the services it depends on become available.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c963aaaa26157c229e47be2fc7905383" data-text-hash="e8b042030c4a6e9d48587a71e6407188" id="327" refid="327">
+<p>You&#8217;ll find the <code>Dockerfile</code>s and other artifacts for both images in the book&#8217;s code archive, if you want to build them yourself. Alternatively, you can use the images that I&#8217;ve built.</p>
+</div>
+<div class="readable-text" data-hash="fb58d3c6c1cbc27ee01a69ec4c47fe97" data-text-hash="04bd271383dabc02b3c3e21c8975e210" id="328" refid="328">
+<p>A pod manifest file containing these two init containers is <code>pod.kiada-init.yaml</code>. Its contents are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1a3fe48a12afe416a057fad9da029556" data-text-hash="7fccbc08befaf965a74c478870d4a433" id="329" refid="329">
+<h5>Listing 5.4 Defining init containers in a pod manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: kiada-init
+spec:
+  initContainers:                                      #A
+  - name: init-demo                                    #B
+    image: luksa/init-demo:0.1                         #B
+  - name: network-check                                #C
+    image: luksa/network-connectivity-checker:0.1      #C
+  containers:                                          #D
+  - name: kiada                                        #D
+    image: luksa/kiada:0.2                             #D
+    stdin: true                                        #D
+    ports:                                             #D
+    - name: http                                       #D
+      containerPort: 8080                              #D
+  - name: envoy                                        #D
+    image: luksa/kiada-ssl-proxy:0.1                   #D
+    ports:                                             #D
+    - name: https                                      #D
+      containerPort: 8443                              #D
+    - name: admin                                      #D
+      containerPort: 9901                              #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5pdCBjb250YWluZXJzIGFyZSBzcGVjaWZpZWQgaW4gdGhlIGluaXRDb250YWluZXJzIGZpZWxkCiNCIFRoaXMgY29udGFpbmVyIHJ1bnMgZmlyc3QKI0MgVGhpcyBjb250YWluZXIgcnVucyBhZnRlciB0aGUgZmlyc3Qgb25lIGNvbXBsZXRlcwojRCBUaGVzZSBhcmUgdGhlIHBvZOKAmXMgcmVndWxhciBjb250YWluZXJzLiBUaGV5IHJ1biBhdCB0aGUgc2FtZSB0aW1lLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="52f4f2a71f6c1d80884d2674d9e610d1" data-text-hash="1269b00bb6f14643043638fe46ebbb97" id="330" refid="330">
+<p>As you can see, the definition of an init container is almost trivial. It&#8217;s sufficient to specify only the <code>name</code> and <code>image</code> for each container.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="331" refid="331">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="2e36b2db8c5858d6c9866a44ad1fac79" data-text-hash="fd41d242cbfb29fc237294847f490a37" id="332" refid="332">
+<p> Container names must be unique within the union of all init and regular containers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="faef87f6c5a316108e6029766523b8a8" data-text-hash="1d3b76aea4f19be9c48c0b3ca80e969a" id="333" refid="333">
+<h4>Deploying a pod with init containers</h4>
+</div>
+<div class="readable-text" data-hash="9298a56d2dca39ae2e2616551a66da16" data-text-hash="f64e2c1c15896b0a2ccc5ee4a24f2a00" id="334" refid="334">
+<p>Before you create the pod from the manifest file, run the following command in a separate terminal so you can see how the pod&#8217;s status changes as the init and regular containers start:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6221f680a6c735227194d901e79fa1a1" data-text-hash="047799d6c95040df2233eba9ba0bcf99" id="335" refid="335">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="59e6cfbe2b8d3612682d1d64ee02adb8" data-text-hash="afcc02371f0ee4d5d17765b5fb6e0620" id="336" refid="336">
+<p>You&#8217;ll also want to watch events in another terminal using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7549a6509924ef5eee17ad97e0a19a57" data-text-hash="a5eeb4bbaf53070a0e5ff9f9d8806ecf" id="337" refid="337">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get events -w</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e8b48f452a22f2ebb3f37abe5ed827ec" data-text-hash="c54bfa6bb2996bdf16dc7434e99ab2b3" id="338" refid="338">
+<p>When ready, create the pod by running the apply command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7028b6cccda29407b2de4f6b7d6f1b25" data-text-hash="045bbac3ead0b372f6ac7719f9a4db78" id="339" refid="339">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pod.kiada-init.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c9e8f408f0d9991cc50c6e63df6f6448" data-text-hash="10d999b7972d853da3e85d31632b1f51" id="340" refid="340">
+<h4>Inspecting the startup of a pod with init containers</h4>
+</div>
+<div class="readable-text" data-hash="d7cf827370b2943db70837de7eb143c8" data-text-hash="16b16aef72dfbfcc05062600dc7b6443" id="341" refid="341">
+<p>As the pod starts up, inspect the events that are shown by the <code>kubectl get events -w</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7f9cd82f24bc7146ffb39fad1b84b1ea" data-text-hash="b5e8474bb9fcf1596e77be9ce5fe329c" id="342" refid="342">
+<div class="code-area-container">
+<pre class="code-area">TYPE     REASON      MESSAGE
+Normal   Scheduled   Successfully assigned pod to worker2
+Normal   Pulling     Pulling image "luksa/init-demo:0.1"       #A
+Normal   Pulled      Successfully pulled image                 #A
+Normal   Created     Created container init-demo               #A
+Normal   Started     Started container init-demo               #A
+Normal   Pulling     Pulling image "luksa/network-connec...    #B
+Normal   Pulled      Successfully pulled image                 #B
+Normal   Created     Created container network-check           #B
+Normal   Started     Started container network-check           #B
+Normal   Pulled      Container image "luksa/kiada:0.1"         #C
+                     already present on machine                #C
+Normal   Created     Created container kiada                   #C
+Normal   Started     Started container kiada                   #C
+Normal   Pulled      Container image "luksa/kiada-ssl-         #C
+                     proxy:0.1" already present on machine     #C
+Normal   Created     Created container envoy                   #C
+Normal   Started     Started container envoy                   #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGZpcnN0IGluaXQgY29udGFpbmVy4oCZcyBpbWFnZSBpcyBwdWxsZWQgYW5kIHRoZSBjb250YWluZXIgaXMgc3RhcnRlZAojQiBBZnRlciB0aGUgZmlyc3QgaW5pdCBjb250YWluZXIgY29tcGxldGVzLCB0aGUgc2Vjb25kIGlzIHN0YXJ0ZWQKI0MgVGhlIHBvZOKAmXMgdHdvIG1haW4gY29udGFpbmVycyBhcmUgdGhlbiBzdGFydGVkIGluIHBhcmFsbGVs"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="99c990031ba65bc342247f61d06f1208" data-text-hash="8481bb24809e337a2074b8ed3fa3ab44" id="343" refid="343">
+<p>The listing shows the order in which the containers are started. The <code>init-demo</code> container is started first. When it completes, the <code>network-check</code> container is started, and when it completes, the two main containers, <code>kiada</code> and <code>envoy</code>, are started.</p>
+</div>
+<div class="readable-text" data-hash="e5ae900833e63b6a3f1775d0eea24525" data-text-hash="643ac640881324739bd6691e1673b27e" id="344" refid="344">
+<p>Now inspect the transitions of the pod&#8217;s status in the other terminal. They should look like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="93721c333e658038dafb7d3eecde5a84" data-text-hash="37c1892b4629c00bfef7053f6a53f8ac" id="345" refid="345">
+<div class="code-area-container">
+<pre class="code-area">NAME         READY   STATUS            RESTARTS   AGE
+kiada-init   0/2     Pending           0          0s
+kiada-init   0/2     Pending           0          0s
+kiada-init   0/2     Init:0/2          0          0s          #A
+kiada-init   0/2     Init:0/2          0          1s          #A
+kiada-init   0/2     Init:1/2          0          6s          #B
+kiada-init   0/2     PodInitializing   0          7s          #C
+kiada-init   2/2     Running           0          8s          #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGZpcnN0IGluaXQgY29udGFpbmVyIGlzIHJ1bm5pbmcKI0IgVGhlIGZpcnN0IGluaXQgY29udGFpbmVyIGlzIGNvbXBsZXRlLCB0aGUgc2Vjb25kIGlzIG5vdyBydW5uaW5nCiNDIEFsbCBpbml0IGNvbnRhaW5lcnMgaGF2ZSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5CiNEIFRoZSBwb2TigJlzIG1haW4gY29udGFpbmVycyBhcmUgcnVubmluZw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="37776352ea02e637f0442b73155e5149" data-text-hash="89a1f368707d48094d4f23e802342629" id="346" refid="346">
+<p>As the listing shows, when the init containers run, the pod&#8217;s status shows the number of init containers that have completed and the total number. When all init containers are done, the pod&#8217;s status is displayed as <code>PodInitializing</code>. At this point, the images of the main containers are pulled. When the containers start, the status changes to <code>Running</code>.</p>
+</div>
+<div class="readable-text" data-hash="bc5c206f95282494a545609ebc32b6b3" data-text-hash="5a93d67d1cb633345864d07856b274cd" id="347" refid="347">
+<h3 id="sigil_toc_id_84">5.5.3&#160;Inspecting init containers</h3>
+</div>
+<div class="readable-text" data-hash="40c63677c74b048277ae81fca84d579b" data-text-hash="1df2ab8a25a4d1744915df5f1fe06ee8" id="348" refid="348">
+<p>As with regular containers, you can run additional commands in a running init container using <code>kubectl exec</code> and display the logs using <code>kubectl</code> <code>logs</code>.</p>
+</div>
+<div class="readable-text" data-hash="4d83a9ac00f8eaaaf63b2f62c25623dc" data-text-hash="db525613b4c89a43aa147fac65cd8287" id="349" refid="349">
+<h4>Displaying the logs of an init container</h4>
+</div>
+<div class="readable-text" data-hash="2c1b74064f0019553de95a0e84c81465" data-text-hash="edad09ba55682af2ffb363df0f7a7820" id="350" refid="350">
+<p>The standard and error output, into which each init container can write, are captured exactly as they are for regular containers. The logs of an init container can be displayed using the <code>kubectl</code> <code>logs</code> command by specifying the name of the container with the <code>-c</code> option either while the container runs or after it has completed. To display the logs of the <code>network-check</code> container in the <code>kiada-init</code> pod, run the next command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a666afb2f1e6b438ea928c8567784c00" data-text-hash="3c9314c628ebbdf0416d72fdf9f18136" id="351" refid="351">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs kiada-init -c network-check
+Checking network connectivity to 1.1.1.1 ...
+Host appears to be reachable</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4810702adbf054f3467891bc07d5dc18" data-text-hash="1dc00f72dc3e800af46a36e43e37adff" id="352" refid="352">
+<p>The logs show that the <code>network-check</code> init container ran without errors. In the next chapter, you&#8217;ll see what happens if an init container fails.</p>
+</div>
+<div class="readable-text" data-hash="62374785b611067c3d34ef362364265f" data-text-hash="9394ed74963cd96ac00e07aa047c5ce9" id="353" refid="353">
+<h4>Entering a running init container</h4>
+</div>
+<div class="readable-text" data-hash="f502ff9b04cdfdaea8c618e576e124c0" data-text-hash="016e4a99cec41be132b2ed5c9cd53347" id="354" refid="354">
+<p>You can use the <code>kubectl exec</code> command to run a shell or a different command inside an init container the same way you can with regular containers, but you can only do this before the init container terminates. If you&#8217;d like to try this yourself, create a pod from the <code>pod.kiada-init-slow.yaml</code> file, which makes the <code>init-demo</code> container run for 60 seconds. When the pod starts, run a shell in the container with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c3a689ff6020ad37b7c7057544d1486b" data-text-hash="8cbc1485dc6a14160abf1b5bf77e13bf" id="355" refid="355">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it kiada-init-slow -c init-demo -- sh</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="954857e90bbb58317c76af94d7b7dcd9" data-text-hash="f1e2c755d8c7faf277569691aad87bde" id="356" refid="356">
+<p>You can use the shell to explore the container from the inside, but only for a short time. When the container&#8217;s main process exits after 60 seconds, the shell process is also terminated.</p>
+</div>
+<div class="readable-text" data-hash="7a48d6623a273973a2a659fc871cfa45" data-text-hash="4904c325cca99f31664bc76b4fc520c4" id="357" refid="357">
+<p>You typically enter a running init container only when it fails to complete in time, and you want to find the cause. During normal operation, the init container terminates before you can run the <code>kubectl exec</code> command.</p>
+</div>
+<div class="readable-text" data-hash="c34c1840a29fe5a22ad6c0f33d6dbba3" data-text-hash="3aa73f275fe894b0d0f7b4d4cc3084cd" id="358" refid="358">
+<h2 id="sigil_toc_id_85">5.6&#160;Deleting pods and other objects</h2>
+</div>
+<div class="readable-text" data-hash="ebe158c2b2e09a6b3ea6248e87c3a6a9" data-text-hash="8d898b7516497ae9f5a1a3194ac338f3" id="359" refid="359">
+<p>If you&#8217;ve tried the exercises in this chapter and in chapter 2, several pods and other objects now exist in your cluster. To close this chapter, you&#8217;ll learn various ways to delete them. Deleting a pod will terminate its containers and remove them from the node. Deleting a Deployment object causes the deletion of its pods, whereas deleting a LoadBalancer-typed Service deprovisions the load balancer if one was provisioned.</p>
+</div>
+<div class="readable-text" data-hash="1fa928aadff6cbb6140d5de683a023de" data-text-hash="00cfa765a766b9aaab7868206c8b81e3" id="360" refid="360">
+<h3 id="sigil_toc_id_86">5.6.1&#160;Deleting a pod by name</h3>
+</div>
+<div class="readable-text" data-hash="06171f6ce08301552bd41900c4a1012b" data-text-hash="b1ff148e12c3edb99330693a72e76abb" id="361" refid="361">
+<p>The easiest way to delete an object is to delete it by name.</p>
+</div>
+<div class="readable-text" data-hash="be0e591e07caa707a98f67dbf24c6f89" data-text-hash="51834c407734c9991e8892f2c8737c7f" id="362" refid="362">
+<h4>Deleting a single pod</h4>
+</div>
+<div class="readable-text" data-hash="c57fbf79b60c2dd710087d3ad7c3c549" data-text-hash="a33156692690e55ef9907b1d47d53413" id="363" refid="363">
+<p>Use the following command to remove the <code>kiada</code> pod from your cluster:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3de5b0bffdae8f5a07e9e62ac61891f8" data-text-hash="0dc24032ba4fb8dfd214d78df6d62804" id="364" refid="364">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po kiada
+pod "kiada" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d52b13f975e978445dd70d388cbc856c" data-text-hash="f4d81748a272944d6896545d858a6e9d" id="365" refid="365">
+<p>By deleting a pod, you state that you no longer want the pod or its containers to exist. The Kubelet shuts down the pod&#8217;s containers, removes all associated resources, such as log files, and notifies the API server after this process is complete. The Pod object is then removed.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="366" refid="366">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="c851050957401d21192caf1948b6a468" data-text-hash="b1e769590edabd8e74c790cf9afdb7d3" id="367" refid="367">
+<p> By default, the <code>kubectl delete</code> command waits until the object no longer exists. To skip the wait, run the command with the <code>--wait=false</code> option.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e583da47b8f0981152a95b10099de91e" data-text-hash="36c078dce84480fe0df8ef8b5317df73" id="368" refid="368">
+<p>While the pod is in the process of shutting down, its status changes to <code>Terminating</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8cbda11596e8731597ab4b9a0beb0f68" data-text-hash="276c2cd9be6a03b1e2f5d88773ea9b74" id="369" refid="369">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada
+NAME    READY   STATUS        RESTARTS   AGE
+kiada   1/1     Terminating   0          35m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3447ac4a51ae4a82b9c00f55276eda91" data-text-hash="7312ddf4613dc458097106e6003b2560" id="370" refid="370">
+<p>Knowing exactly how containers are shut down is important if you want your application to provide a good experience for its clients. This is explained in the next chapter, where we dive deeper into the life cycle of the pod and its containers.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="371" refid="371">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="86eb8091453de77448195cb3f362eaf5" data-text-hash="881011544b2dae5bcdfdeec2ceac0c24" id="372" refid="372">
+<p> If you&#8217;re familiar with Docker, you may wonder if you can stop a pod and start it again later, as you can with Docker containers. The answer is no. With Kubernetes, you can only remove a pod completely and create it again later.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="965a8bb81926ea6e5aed998715ad9d32" data-text-hash="0428002dee7044044e15816d47b26cf4" id="373" refid="373">
+<h4>Deleting multiple pods with a single command</h4>
+</div>
+<div class="readable-text" data-hash="db957cc180adc2bebac513a99ffddba6" data-text-hash="9ac1b99da20730aa94808c0b4f781aca" id="374" refid="374">
+<p>You can also delete multiple pods with a single command. If you ran the <code>kiada-init</code> and the <code>kiada-init-slow</code> pods, you can delete them both by specifying their names separated by a space, as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fc50158b8d9db6ca274586d93940587b" data-text-hash="767c0b562df5a52ce7f52c42c3034c28" id="375" refid="375">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po kiada-init kiada-init-slow
+pod "kiada-init" deleted
+pod "kiada-init-slow" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8e51230ab332e9e9dac1aa6d2a2732ae" data-text-hash="8aa87e4db526ecf150165a2bfbac985b" id="376" refid="376">
+<h3 id="sigil_toc_id_87">5.6.2&#160;Deleting objects defined in manifest files</h3>
+</div>
+<div class="readable-text" data-hash="1a4ea8f91f3ee03f1418b2344bb71394" data-text-hash="1a7263ce5203bdfa30faeffbcd4619bc" id="377" refid="377">
+<p>Whenever you create objects from a file, you can also delete them by passing the file to the <code>delete</code> command instead of specifying the name of the pod.</p>
+</div>
+<div class="readable-text" data-hash="e705df4abe89b709d81cc9097c3e8093" data-text-hash="a6bf0aad2cf715d74d3dad386b657929" id="378" refid="378">
+<h4>Deleting objects by specifying the manifest file</h4>
+</div>
+<div class="readable-text" data-hash="a2150b06012ea4dc8fbd74e28970fbbe" data-text-hash="883bb90a318ac458aa09d660b948070d" id="379" refid="379">
+<p>You can delete the <code>kiada-ssl</code> pod, which you created from the <code>pod.kiada-ssl.yaml</code> file, with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fd79c293ff85a411c81a9ca4bdb6da12" data-text-hash="107dfa1a8846ceb24e9f832253cc8d6e" id="380" refid="380">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete -f pod.kiada-ssl.yaml
+pod "kiada-ssl" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d6cd033d48bfdf7bc5ee687e36b84f16" data-text-hash="6fc426ed9e2520144c1b1f6df54505c2" id="381" refid="381">
+<p>In your case, the file contains only a single pod object, but you&#8217;ll typically come across files that contain several objects of different types that represent a complete application. This makes deploying and removing the application as easy as executing <code>kubectl apply -f app.yaml</code> and <code>kubectl delete -f app.yaml</code>, respectively.</p>
+</div>
+<div class="readable-text" data-hash="dfb1de6095cd7575be995cf00c1eec41" data-text-hash="dd29f7d1374462891d66dc1f50160fb6" id="382" refid="382">
+<h4>Deleting objects from multiple manifest files</h4>
+</div>
+<div class="readable-text" data-hash="824074c1fbabf07171d13ee09d10dfdb" data-text-hash="b3e6bb593f1ff8a42cf35f1039d1062d" id="383" refid="383">
+<p>Sometimes, an application is defined in several manifest files. You can specify multiple files by separating them with a comma. For example:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b90509d055aee860d749b33273eb321" data-text-hash="debbc5c4a8ea38e9d76de1ea712e11c3" id="384" refid="384">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete -f pod.kiada.yaml,pod.kiada-ssl.yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="385" refid="385">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a780a33afe38f1e9039947b2be41c050" data-text-hash="fd108a32c05173d412b31bfbb49a5672" id="386" refid="386">
+<p> You can also apply several files at the same time using this syntax (for example: <code>kubectl apply -f pod.kiada.yaml,pod.kiada-ssl.yaml</code>).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ebd5160b6239bb149fddce29bd315fc7" data-text-hash="2cf00b02374512a15d6587c130bfef95" id="387" refid="387">
+<p>I&#8217;ve never actually used this approach in the many years I&#8217;ve been using Kubernetes, but I often deploy all the manifest files from a file directory by specifying the directory name instead of the names of individual files. For example, you can deploy all the pods you created in this chapter again by running the following command in the base directory of this book&#8217;s code archive:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="55ba42a726d49981b5e2bc9be9bb5e6c" data-text-hash="b1d3d2e960671eafe806af7533762b5a" id="388" refid="388">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f Chapter05/</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c3dcd42cc6d9422d0049fbc59ededca2" data-text-hash="0d3e4de1bbe7e2c99a3aa072eb306057" id="389" refid="389">
+<p>This applies to all files in the directory that have the correct file extension (<code>.yaml</code>, <code>.json</code>, and similar). You can then delete the pods using the same method:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="daedf13730d84648c013acfa7fbfa048" data-text-hash="2a8a902b703d2d46b0a682f5a0e169f0" id="390" refid="390">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete -f Chapter05/</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="391" refid="391">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="41ae64fded6eebc04a3d7b634f58add7" data-text-hash="a42d9417e2cfcf8a8eab6a8d90cc0434" id="392" refid="392">
+<p> If your manifest files are stored in subdirectories, you must use the <code>--recursive</code> flag (or <code>-R</code>).</p>
+</div>
+</div>
+<div class="readable-text" data-hash="13285e9218eb6be059f68aa76965b7be" data-text-hash="accd7eeec616843c86606082d76785ee" id="393" refid="393">
+<h3 id="sigil_toc_id_88">5.6.3&#160;Deleting all pods</h3>
+</div>
+<div class="readable-text" data-hash="258ad94cf628e44a85e7d5da29fcb7e5" data-text-hash="c34c07eb66e2eeb30a03b2a878993d35" id="394" refid="394">
+<p>You&#8217;ve now removed all pods except <code>kiada-stdin</code> and the pods you created in chapter 3 using the <code>kubectl</code> <code>create deployment</code> command. Depending on how you&#8217;ve scaled the deployment, some of these pods should still be running:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c362f8ed7b5abd999ba176ffd78d8634" data-text-hash="aa1c7b7794cf71aa71612b216cf3e72c" id="395" refid="395">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+kiada-stdin             1/1     Running   0          10m
+kiada-9d785b578-58vhc   1/1     Running   0          1d
+kiada-9d785b578-jmnj8   1/1     Running   0          1d</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="be063348328eec5dac9f759afbe2005f" data-text-hash="fcd3b6ad1d7bcbba98fe6e63611caaf0" id="396" refid="396">
+<p>Instead of deleting these pods by name, we can delete them all using the <code>--all</code> option:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b0bce1adb6ba3099e5d96c2854ed8eaf" data-text-hash="ac09f6935f5adf74b43a7a5b3ac85cbf" id="397" refid="397">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po --all
+pod "kiada-stdin" deleted
+pod "kiada-9d785b578-58vhc" deleted
+pod "kiada-9d785b578-jmnj8" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6dca17ed066442c13675687735094959" data-text-hash="efb200eee2b22a7e92d43a7b579cabe3" id="398" refid="398">
+<p>Now confirm that no pods exist by executing the <code>kubectl get pods</code> command again:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b48fff22ed4c5ccfadae5b8fa82e8ea0" data-text-hash="77dafe007cda254aced3c469512b628c" id="399" refid="399">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po
+NAME                    READY   STATUS    RESTARTS   AGE
+kiada-9d785b578-cc6tk   1/1     Running   0          13s
+kiada-9d785b578-h4gml   1/1     Running   0          13s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3859521368ca8160174ad3a2826601b3" data-text-hash="5864d70667dece0099519e65f8358211" id="400" refid="400">
+<p>That was unexpected! Two pods are still running. If you look closely at their names, you&#8217;ll see that these aren&#8217;t the two you&#8217;ve just deleted. The <code>AGE</code> column also indicates that these are <i>new</i> pods. You can try to delete them as well, but you&#8217;ll see that no matter how often you delete them, new pods are created to replace them.</p>
+</div>
+<div class="readable-text" data-hash="5c098b5343877e0ca1d2478f9dfd5050" data-text-hash="9dae3021d8b75c3962da1a0126a46ac5" id="401" refid="401">
+<p>The reason why these pods keep popping up is because of the Deployment object. The controller responsible for bringing Deployment objects to life must ensure that the number of pods always matches the desired number of replicas specified in the object. When you delete a pod associated with the Deployment, the controller immediately creates a replacement pod.</p>
+</div>
+<div class="readable-text" data-hash="c9c42be300bbd8229d51f97f2a7a528c" data-text-hash="86813edbb8c5462c6d9000908528710d" id="402" refid="402">
+<p>To delete these pods, you must either scale the Deployment to zero or delete the object altogether. This would indicate that you no longer want this deployment or its pods to exist in your cluster.</p>
+</div>
+<div class="readable-text" data-hash="e31a618c243e05cc7dbad68c4d277872" data-text-hash="f5dd8e3411459f7ae147e1b175928810" id="403" refid="403">
+<h3 id="sigil_toc_id_89">5.6.4&#160;Deleting objects using the &#8220;all&#8221; keyword</h3>
+</div>
+<div class="readable-text" data-hash="235ce61bfb4ed636688b444afd02e8b5" data-text-hash="ecf923b12f9cc5b01f69f83fd00a3c60" id="404" refid="404">
+<p>You can delete everything you&#8217;ve created so far - including the deployment, its pods, and the service - with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="44d9ae710b02fecee76fcb9c4b9bef71" data-text-hash="c260ad369c0cbfdb260eda16d4a8049a" id="405" refid="405">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete all --all
+pod "kiada-9d785b578-cc6tk" deleted
+pod "kiada-9d785b578-h4gml" deleted
+service "kubernetes" deleted
+service "kiada" deleted
+deployment.apps "kiada" deleted
+replicaset.apps "kiada-9d785b578" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d02fa632e8774967bb2258047a1d4077" data-text-hash="e381e587f376a89b931775fa4f510456" id="406" refid="406">
+<p>The first <code>all</code> in the command indicates that you want to delete objects of all types. The <code>--all</code> option indicates that you want to delete all instances of each object type. You used this option in the previous section when you tried to delete all pods.</p>
+</div>
+<div class="readable-text" data-hash="4ca32622e1afecdf5db1381bef2988e2" data-text-hash="0417d615d3b68fb6f1a70ce3a23a21b3" id="407" refid="407">
+<p>When deleting objects, <code>kubectl</code> prints the type and name of each deleted object. In the previous listing, you should see that it deleted the pods, the deployment, and the service, but also a so-called replica set object. You&#8217;ll learn what this is in chapter 11, where we take a closer look at deployments.</p>
+</div>
+<div class="readable-text" data-hash="f98d26e7032ffd4554d4358f3b8ba249" data-text-hash="2e8c08b72b3e3909d038f6d3c636be43" id="408" refid="408">
+<p>You&#8217;ll notice that the delete command also deletes the built-in <code>kubernetes</code> service. Don&#8217;t worry about this, as the service is automatically recreated after a few moments.</p>
+</div>
+<div class="readable-text" data-hash="bbb7824c5edc8b67dbe878bf0d6b8505" data-text-hash="3e0db9c0f716dec0949618e9c0a4eebc" id="409" refid="409">
+<p>Certain objects aren&#8217;t deleted when using this method, because the keyword <code>all</code> does not include all object kinds. This is a precaution to prevent you from accidentally deleting objects that contain important information. The Event object kind is one example of this.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="410" refid="410">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d08621d2fd515c3db3a9a02541facb20" data-text-hash="4cf2463899a5c88cbda97b06ef0c0c60" id="411" refid="411">
+<p> You can specify multiple object types in the <code>delete</code> command. For example, you can use <code>kubectl delete events,all --all</code> to delete events along with all object kinds included in <code>all</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="89c1265530afe1c4f5384eead541d433" data-text-hash="64e37f37c617baa258aa71ad943ea7cd" id="412" refid="412">
+<h2 id="sigil_toc_id_90">5.7&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="dfdbc7a1410041b51c7283827030752f" data-text-hash="40caf5c915c6c11b47e1c99f898aba8f" id="413" refid="413">
+<p>In this chapter, you&#8217;ve learned:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="ff6e84e89f67917fb0eb8ecc0cea8142" data-text-hash="ff6e84e89f67917fb0eb8ecc0cea8142" id="414" refid="414">Pods run one or more containers as a co-located group. They are the unit of deployment and horizontal scaling. A typical container runs only one process. Sidecar containers complement the primary container in the pod.</li>
+<li class="readable-text" data-hash="6a50734b877419257bbe4ad6701ea86b" data-text-hash="6a50734b877419257bbe4ad6701ea86b" id="415" refid="415">Containers should only be part of the same pod if they must run together. A frontend and a backend process should run in separate pods. This allows them to be scaled individually.</li>
+<li class="readable-text" data-hash="d11315fdb8cf9fa583207794c634cae0" data-text-hash="d11315fdb8cf9fa583207794c634cae0" id="416" refid="416">When a pod starts, its init containers run one after the other. When the last init container completes, the pod&#8217;s main containers are started. You can use an init container to configure the pod from within, delay startup of its main containers until a precondition is met, or notify an external service that the pod is about to start running.</li>
+<li class="readable-text" data-hash="fa012d02e07136e4526a10dacf0b8664" data-text-hash="9ae1c058f6bb606b9196561d75fc5682" id="417" refid="417">The <code>kubectl</code> tool is used to create pods, view their logs, copy files to/from their containers, execute commands in those containers and enable communication with individual pods during development.</li>
+</ul>
+<div class="readable-text" data-hash="410aa68232b6a24b2ff5d574ec7d0e5e" data-text-hash="b028e5d9fb4d9f10f5c5c4005e1057c3" id="418" refid="418">
+<p>In the next chapter, you&#8217;ll learn about the lifecycle of the pod and its containers.</p>
+</div></div>
+
+        </body>
+        
+        

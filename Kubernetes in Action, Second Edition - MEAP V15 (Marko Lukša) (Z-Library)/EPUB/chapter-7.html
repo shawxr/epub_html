@@ -1,0 +1,1394 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="9ec8508f9049c1554eb7f3823b1cb0ec" data-text-hash="d7c1c6fa53015d1856f59880ed89071f" id="1" refid="1">
+<h1>7 Attaching storage volumes to Pods</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="b9be2b9cca89b64de3f63fa9cbe5b76b" data-text-hash="b9be2b9cca89b64de3f63fa9cbe5b76b" id="2" refid="2">Persisting files across container restarts</li>
+<li class="readable-text" data-hash="95b03f74d01ea868f1285354ca05ccc9" data-text-hash="95b03f74d01ea868f1285354ca05ccc9" id="3" refid="3">Sharing files between containers of the same pod</li>
+<li class="readable-text" data-hash="bef31a339cb2ea011d39646022eed6f9" data-text-hash="bef31a339cb2ea011d39646022eed6f9" id="4" refid="4">Sharing files between pods</li>
+<li class="readable-text" data-hash="66380a606f3f769f1b8dfb62ef13c7d4" data-text-hash="66380a606f3f769f1b8dfb62ef13c7d4" id="5" refid="5">Attaching network storage to pods</li>
+<li class="readable-text" data-hash="acadb52de8f366d248002398c1c9d1e0" data-text-hash="acadb52de8f366d248002398c1c9d1e0" id="6" refid="6">Accessing the host node filesystem from within a pod</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="aedd09692282f96a8e2452720c84ad32" data-text-hash="c522099ae51b66fbe5ea1843173c1f37" id="7" refid="7">
+<p>The previous two chapters focused on the pod&#8217;s containers, but they are only half of what a pod typically contains. They are typically accompanied by storage volumes that allow a pod&#8217;s containers to store data for the lifetime of the pod or beyond, or to share files with the other containers of the pod. This is the focus of this chapter.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="8" refid="8">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="09a0be8b3b403b6ef2e885e118eaf8ba" data-text-hash="38e39b46497c1015c752402bea93b912" id="9" refid="9">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter07</a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="7c832350575ddeddece361775eebc488" data-text-hash="bdae7c760ef53b2daef8368f1aab4928" id="10" refid="10">
+<h2 id="sigil_toc_id_112">7.1&#160;Introducing volumes</h2>
+</div>
+<div class="readable-text" data-hash="2239410461f18197f1ee62dbee9d23f7" data-text-hash="1b700e5a6c743ccba51a300481912eba" id="11" refid="11">
+<p>A pod is like a small logical computer that runs a single application. This application can consist of one or more containers that run the application processes. These processes share computing resources such as CPU, RAM, network interfaces, and others. In a typical computer, the processes use the same filesystem, but this isn&#8217;t the case with containers. Instead, each container has its own isolated filesystem provided by the container image.</p>
+</div>
+<div class="readable-text" data-hash="dde2e07e1f256532a2bb7a166c5116c9" data-text-hash="5e5def517d82d6c620ad4ae951a61f0a" id="12" refid="12">
+<p>When a container starts, the files in its filesystem are those that were added to its container image during build time. The process running in the container can then modify those files or create new ones. When the container is terminated and restarted, all changes it made to its files are lost, because the previous container is not really restarted, but completely replaced, as explained in the previous chapter. Therefore, when a containerized application is restarted, it can&#8217;t continue from the point where it was when it stopped. Although this may be okay for some types of applications, others may need the entire filesystem or at least part of it to be preserved on restart.</p>
+</div>
+<div class="readable-text" data-hash="9ee0fd70d156762c03c1f9dc962c4144" data-text-hash="8dde46b1d3158da0da63551d94d4e20e" id="13" refid="13">
+<p>This is achieved by adding a <i>volume</i> to the pod and <i>mounting</i> it into the container.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="079b754eeb5041e4c4cbe9936322a95c" data-text-hash="0b890b1926b90387673882e6ccae7fdc" id="14" refid="14">
+<h5>Definition</h5>
+</div>
+<div class="readable-text" data-hash="48cf5015b1e8b1170fcc689291bbe72d" data-text-hash="4bc9f2fb5699f20649e8a4d7e9b83244" id="15" refid="15">
+<p> <i>Mounting</i> is the act of attaching the filesystem of some storage device or volume into a specific location in the operating system&#8217;s file tree, as shown in figure 7.1. The contents of the volume are then available at that location.</p>
+</div>
+</div>
+<div class="browsable-container figure-container" data-hash="3343e6316afafb2678751e8e51741962" data-text-hash="45d3b0e18262a0c5879333bed2ae27b9" id="16" refid="16">
+<h5>Figure 7.1 Mounting a filesystem into the file tree</h5>
+<img alt="" data-processed="true" height="256" id="Picture_1" loading="lazy" src="EPUB/images/07image002.png" width="732">
+</div>
+<div class="readable-text" data-hash="87da8bb7bb0fa79b2a7d46111878c3a9" data-text-hash="0c785e7a5bd5aa2a3b04c864e13a0b66" id="17" refid="17">
+<h3 id="sigil_toc_id_113">7.1.1&#160;Demonstrating the need for volumes</h3>
+</div>
+<div class="readable-text" data-hash="96e3f4c3529a519b78be118bb810c37a" data-text-hash="a3df2990f8e6b0dad6d1a32497757fd3" id="18" refid="18">
+<p>In this chapter, you&#8217;ll build a new service that requires its data to be persisted. To do this, the pod that runs the service will need to contain a volume. But before we get to that, let me tell you about this service, and allow you to experience first-hand why it can&#8217;t work without a volume.</p>
+</div>
+<div class="readable-text" data-hash="6db1b4037a383f1eee7b3322a6b6d8a8" data-text-hash="f6c2997a78fdcd384791852b5c9cb130" id="19" refid="19">
+<h4>Introducing the Quiz service</h4>
+</div>
+<div class="readable-text" data-hash="0723b9359aca7990f3bb1c3c81cbe56f" data-text-hash="301687abecbf8820279ff0bed6cfe6e6" id="20" refid="20">
+<p>The first 14 chapters of this book aim to teach you about the main Kubernetes concepts by showing you how to deploy the Kubernetes in Action Demo Application Suite. You already know the three components that comprise it. If not, the following figure should refresh your memory.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="926a77029c12ff16ff3d8b5a0c25cdea" data-text-hash="1fb354e4aebb95242bacc1f81797c6e5" id="21" refid="21">
+<h5>Figure 7.2 How the Quiz service fits into the architecture of the Kiada Suite</h5>
+<img alt="" data-processed="true" height="205" id="Picture_2" loading="lazy" src="EPUB/images/07image003.png" width="830">
+</div>
+<div class="readable-text" data-hash="f62724c9ba50462746503b7724de87b9" data-text-hash="fe071b2c19cebc465d3106c58b7daf2f" id="22" refid="22">
+<p>You&#8217;ve already built the initial version of the Kiada web application and the Quote service. Now you&#8217;ll create the Quiz Service. It will provide the multiple-choice questions that the Kiada web application displays and store your answers to those questions.</p>
+</div>
+<div class="readable-text" data-hash="da88c3ae1dd72c6b20e743da352aed0f" data-text-hash="53a4e4110f4ea63361358b02b158610f" id="23" refid="23">
+<p>The Quiz service consists of a RESTful API frontend and a MongoDB database as the backend. Initially, you&#8217;ll run these two components in separate containers of the same pod, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="7716d4295db4b774f358f32f83243492" data-text-hash="b0f036f5724e3042438862328eaf9130" id="24" refid="24">
+<h5>Figure 7.3 The Quiz API and the MongoDB database run in the same pod</h5>
+<img alt="" data-processed="true" height="256" id="Picture_3" loading="lazy" src="EPUB/images/07image004.png" width="780">
+</div>
+<div class="readable-text" data-hash="ef78c12c22230dec417faa6e1d3a5008" data-text-hash="ec9423b1ec28897168e4d176ba280d13" id="25" refid="25">
+<p>As I explained in the pod introduction in chapter 5, creating pods like this is not the best idea, as it doesn&#8217;t allow for the containers to be scaled individually. The reason we&#8217;ll use a single pod is because you haven&#8217;t yet learned the correct way to make pods communicate with each other. You&#8217;ll learn this in chapter 11. That&#8217;s when you&#8217;ll split the two containers into separate pods.</p>
+</div>
+<div class="readable-text" data-hash="3d4bd3dc8c599dc59d7d646ff02f80de" data-text-hash="0f9dea789ba9c793147dc698cc75f968" id="26" refid="26">
+<h4>Building the Quiz API container</h4>
+</div>
+<div class="readable-text" data-hash="80395db7d5de3542283a2ed041d260dc" data-text-hash="7e4593cb5afcb14a9b04586f634d2017" id="27" refid="27">
+<p>The source code and the artefacts for the container image for the Quiz API component are in the Chapter07/quiz-api-0.1/ directory. The code is written in Go and built using a container. This may need further explanation for some readers. Instead of having to install the Go environment on your own computer to build the binary file from the Go source code, you build it in a container that already contains the Go environment. The result of the build is the <code>quiz-api</code> binary executable file that is written to the Chapter07/quiz-api-0.1/app/bin/ directory.</p>
+</div>
+<div class="readable-text" data-hash="34120ecf3b25ffdb3d27d09a8afb7918" data-text-hash="64f95f3651c0d958ea8476e1954ef4de" id="28" refid="28">
+<p>This file is then packaged into the <code>quiz-api:0.1</code> container image with a separate <code>docker build</code> command. If you wish, you can try building the binary and the container image yourself, but you can also use the image that I&#8217;ve built. It&#8217;s available at <code>docker.io/luksa/quiz-api:0.1</code>.</p>
+</div>
+<div class="readable-text" data-hash="fae9b8f730fd97852d163f8b092e2a31" data-text-hash="67992ac458bafa835661af1c41c93fe1" id="29" refid="29">
+<h4>Running the Quiz service in a pod without a volume</h4>
+</div>
+<div class="readable-text" data-hash="db5a3ec02686262da6f9fd4a8ec184be" data-text-hash="92fea1128f11d97fb0e0a75d60e577d1" id="30" refid="30">
+<p>The following listing shows the YAML manifest of the <code>quiz</code> pod. You can find it in the file <code>Chapter07/pod.quiz.novolume.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bf1d4b2a9d956be0a5271ab8230dd305" data-text-hash="fc097ab570d9a41cad2e5527ab14f9f4" id="31" refid="31">
+<h5>Listing 7.1 The Quiz pod with no volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz
+spec:    #A
+  containers:
+  - name: quiz-api    #B
+    image: luksa/quiz-api:0.1    #B
+    ports:
+    - name: http    #C
+      containerPort: 8080    #C
+  - name: mongo    #C
+    image: mongo    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2QgbWFuaWZlc3QgZGVmaW5lcyBjb250YWluZXJzLCBidXQgbm8gdm9sdW1lcy4KI0IgVGhlIHF1aXotYXBpIGNvbnRhaW5lciBydW5zIHRoZSBBUEkgc2VydmVyIHdyaXR0ZW4gaW4gR28uCiNDIFRoZSBtb25nbyBjb250YWluZXIgcnVucyB0aGUgTW9uZ29EQiBkYXRhYmFzZSBhbmQgcmVwcmVzZW50cyB0aGUgYmFja2VuZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="128431b28339dccd37d4b6fbcbeb3917" data-text-hash="2128ccf173e39692dc7f909718ace14b" id="32" refid="32">
+<p>The listing shows that two containers are defined in the pod. The <code>quiz-api</code> container runs the Quiz API component explained earlier, and the <code>mongo</code> container runs the MongoDB database that the API component uses to store data.</p>
+</div>
+<div class="readable-text" data-hash="cef1fb567ed12c058288ec37b62daa84" data-text-hash="4a60ecc09872ae326f18e9a8d3f7e834" id="33" refid="33">
+<p>Create the pod from the manifest and use <code>kubectl port-forward</code> to open a tunnel to the pod&#8217;s port 8080 so that you can talk to the Quiz API. To get a random question, send a GET request to the <code>/questions/random</code> URI as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c28fc2adcb75deac8900ec1b5745e01f" data-text-hash="89ca60e353e5fbc996567413e90a092f" id="34" refid="34">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8080/questions/random
+ERROR: Question random not found</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="651f22b2c19ba336e77923bea0eeb774" data-text-hash="023ed1638abf54740e0f5a99b6054c72" id="35" refid="35">
+<p>The database is still empty. You need to add questions to it.</p>
+</div>
+<div class="readable-text" data-hash="15e11f89eefb9abb4f051220b17e6725" data-text-hash="8a3025625219fa414c464090c989ae98" id="36" refid="36">
+<h4>Adding questions to the database</h4>
+</div>
+<div class="readable-text" data-hash="5c09b791770a85f58f0c19ef6d3710fa" data-text-hash="0f7237c57f2c472f81775d6efb37c7e2" id="37" refid="37">
+<p>The Quiz API doesn&#8217;t provide a way to add questions to the database, so you&#8217;ll have to insert it directly. You can do this via the mongo shell that&#8217;s available in the <code>mongo</code> container. Use <code>kubectl exec</code> to run the shell like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6c715eea6b2b93b29ce2284286499c9d" data-text-hash="c7a97c3bf5aa1ec6d32c4565b8c26406" id="38" refid="38">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo
+MongoDB shell version v4.4.2
+connecting to: mongodb://127.0.0.1:27017/...
+Implicit session: session { "id" : UUID("42671520-0cf7-...") }
+MongoDB server version: 4.4.2
+Welcome to the MongoDB shell.
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d79dbe8db6d78f932d26930caaa8c2c6" data-text-hash="c5e7704f77681d1420570cee6fa353c0" id="39" refid="39">
+<p>The Quiz API reads the questions from the <code>questions</code> collection in the <code>kiada</code> database. To add a question to that collection, type the following two commands (printed in bold):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a70fbc3a935f9f3d72b18b58c92545dd" data-text-hash="0f3718ba864e31b1e3faa161c5bcc96c" id="40" refid="40">
+<div class="code-area-container">
+<pre class="code-area">&gt; use kiada
+switched to db kiada
+&gt; db.questions.insert({
+... id: 1,
+... text: "What does k8s mean?",
+... answers: ["Kates", "Kubernetes", "Kooba Dooba Doo!"],
+... correctAnswerIndex: 1})
+WriteResult({ "nInserted" : 1 })</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="41" refid="41">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5bdf51cb3bd1227b8a7def020d6c5032" data-text-hash="6ab3f62f9e269d2b3dd0c3b5ce524556" id="42" refid="42">
+<p> Instead of typing all these commands, you can simply run the Chapter07/insert-question.sh shell script on your local computer to insert the question.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="aa7023bead4b9722fbcb3e18608312a7" data-text-hash="30e7c5fef5256ea36531877ee3adbba8" id="43" refid="43">
+<p>Feel free to add additional questions. When you&#8217;re done, exit the shell by pressing Control-D or typing the <code>exit</code> command.</p>
+</div>
+<div class="readable-text" data-hash="670c07605e57d7331da21a34a65ca863" data-text-hash="c92a8f26bb295d0d9dc3115ff30be5ab" id="44" refid="44">
+<h4>Reading questions from the database and the Quiz API</h4>
+</div>
+<div class="readable-text" data-hash="9c4db672e94deb71260e46c76baa74c6" data-text-hash="cf8019ac4d28632a2e3022f20306cc3d" id="45" refid="45">
+<p>To confirm that the questions that you&#8217;ve just inserted are now stored in the database, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8c3b9a4ac1674a410693946efe37e4b2" data-text-hash="cab4a14f05ecf36f84c66a4f4877bf7f" id="46" refid="46">
+<div class="code-area-container">
+<pre class="code-area">&gt; db.questions.find()
+{ "_id" : ObjectId("5fc249ac18d1e29fed666ab7"), "id" : 1, "text" : "What does k8s mean?",;
+"answers" : [ "Kates", "Kubernetes", "Kooba Dooba Doo!" ], "correctAnswerIndex" : 1 }</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ec9d33686b61075b47601785e406a922" data-text-hash="0f024e064e010df603906c2611b6e80c" id="47" refid="47">
+<p>Now try to retrieve a random question through the Quiz API:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="850d657350ec6576c8dfd599182ba4c7" data-text-hash="8ee71cae8a0f88b76eb9ed2b007eb544" id="48" refid="48">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:8080/questions/random
+{"id":1,"text":"What does k8s mean?","correctAnswerIndex":1,
+"answers":["Kates","Kubernetes","Kooba Dooba Doo!"]}</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c7f44fd036fe7504f64e927d5b27f4f5" data-text-hash="2d77cbcf322b64a43ef1e0f8f00dad4e" id="49" refid="49">
+<p>Good. It looks like the quiz pod provides the service we need for the Kiada Suite. But is that always the case?</p>
+</div>
+<div class="readable-text" data-hash="ad5241e2a273dd766a373b62b747a7ee" data-text-hash="4200ba1d8c1bcc62f3cf872db82f6589" id="50" refid="50">
+<h4>Restarting the MongoDB database</h4>
+</div>
+<div class="readable-text" data-hash="5b616ad9359c9dd06bda119a4591b6b4" data-text-hash="5aadd15197f36893adfc1201dec403be" id="51" refid="51">
+<p>Because the MongoDB database writes its files to the container&#8217;s filesystem, they are lost every time the container is restarted. You can confirm this by telling the database to shut down with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="79db04199bffc67cdd7236c2a42dd70d" data-text-hash="8f3fe725340aaf8a2f57a8decd53820f" id="52" refid="52">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo admin --eval "db.shutdownServer()"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7e14da1109a47cd680a80a5ce6ed8c0e" data-text-hash="1e70d5a2d683aad16d4bed431a8a1acc" id="53" refid="53">
+<p>When the database shuts down, the container stops, and Kubernetes starts a new one in its place. Because this is now a new container, with a fresh filesystem, it doesn&#8217;t contain the questions you entered earlier. You can confirm this is true with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8977b252e7911cad33520513920a83f2" data-text-hash="35253cde029868371c0a048211ad89d1" id="54" refid="54">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.count()"
+0    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlcmUgYXJlIG5vIHF1ZXN0aW9ucyBpbiB0aGUgZGF0YWJhc2U="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d2d21a00562ade3d2614740c0685a5cf" data-text-hash="7933f79e4c0425ecd76a8fa84fc851ac" id="55" refid="55">
+<p>Keep in mind that the <code>quiz</code> pod is still the same pod as before. The <code>quiz-api</code> container has been running fine this whole time. Only the <code>mongo</code> container was restarted. To be perfectly accurate, it was re-created, not restarted. You caused this by shutting down MongoDB, but it could happen for any reason. You&#8217;ll agree that it&#8217;s not acceptable that a simple restart causes data to be lost.</p>
+</div>
+<div class="readable-text" data-hash="23c2ae2d2e979cc7a81994d125aae1ca" data-text-hash="683b9b29ed0ae32d645b1a40f78c5e3f" id="56" refid="56">
+<p>To ensure that the data is persisted, it needs to be stored outside of the container - in a volume.</p>
+</div>
+<div class="readable-text" data-hash="25e1c5a797ed683309d5f5bc7fe38557" data-text-hash="5da86cdb3a22eea3b5ce4897a5c99c21" id="57" refid="57">
+<h3 id="sigil_toc_id_114">7.1.2&#160;Understanding how volumes fit into pods</h3>
+</div>
+<div class="readable-text" data-hash="9adff37a60659cd83cd8dd64e7943521" data-text-hash="c084bdf528a36fd99d5ced35ef3be96d" id="58" refid="58">
+<p>Like containers, volumes aren&#8217;t top-level resources like pods or nodes, but are a component within the pod and thus share its lifecycle. As the following figure shows, a volume is defined at the pod level and then mounted at the desired location in the container.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ebc66e1f651e44423b8bee10c099d9a5" data-text-hash="142dbad678fd45c13a50686997ff07a8" id="59" refid="59">
+<h5>Figure 7.4 Volumes are defined at the pod level and mounted in the pod&#8217;s containers</h5>
+<img alt="" data-processed="true" height="229" id="Picture_4" loading="lazy" src="EPUB/images/07image005.png" width="808">
+</div>
+<div class="readable-text" data-hash="38f32455f48dc51bdee8fdf55070a293" data-text-hash="4c2612b8dcf521530109826c9c6650c2" id="60" refid="60">
+<p>The lifecycle of a volume is tied to the lifecycle of the entire pod and is independent of the lifecycle of the container in which it is mounted. Due to this fact, volumes are also used to persist data across container restarts.</p>
+</div>
+<div class="readable-text" data-hash="7806e197eab5d34f1495f36326cfa1f4" data-text-hash="b9be2b9cca89b64de3f63fa9cbe5b76b" id="61" refid="61">
+<h4>Persisting files across container restarts</h4>
+</div>
+<div class="readable-text" data-hash="e6d5570c37b8be78633b010d73bb152e" data-text-hash="9029eb95e7ee23e711fb505145764af6" id="62" refid="62">
+<p>All volumes in a pod are created when the pod is set up - before any of its containers are started. They are torn down when the pod is shut down.</p>
+</div>
+<div class="readable-text" data-hash="6523f8b907c8c4ccb7f075e2d8ae346f" data-text-hash="9d5d19f5ca4b29a0eb012de12fe81912" id="63" refid="63">
+<p>Each time a container is (re)started, the volumes that the container is configured to use are mounted in the container&#8217;s filesystem. The application running in the container can read from the volume and write to it if the volume and mount are configured to be writable.</p>
+</div>
+<div class="readable-text" data-hash="0d4e18957b7e64523d927963d15a9937" data-text-hash="2b7d9a7a26b5889ac8f57b1c06993696" id="64" refid="64">
+<p>A typical reason for adding a volume to a pod is to persist data across container restarts. If no volume is mounted in the container, the entire filesystem of the container is ephemeral. Since a container restart replaces the entire container, its filesystem is also re-created from the container image. As a result, all files written by the application are lost.</p>
+</div>
+<div class="readable-text" data-hash="02de0436adbc6d2105968a8539970217" data-text-hash="567a85ab9d4ac4d706b057d6e8553ead" id="65" refid="65">
+<p>If, on the other hand, the application writes data to a volume mounted inside the container, as shown in the following figure, the application process in the new container can access the same data after the container is restarted.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="fa66f424674cb02421a9b9c8dc73c167" data-text-hash="2db9ef67584ecbb50d0d2e8f8417ab5d" id="66" refid="66">
+<h5>Figure 7.5 Volumes ensure that part of the container&#8217;s filesystem is persisted across restarts</h5>
+<img alt="" data-processed="true" height="399" id="Picture_5" loading="lazy" src="EPUB/images/07image006.png" width="751">
+</div>
+<div class="readable-text" data-hash="8d308d3e87dfb21f4ee37ea7c5a5f9f5" data-text-hash="7894c4fe87f8c2581324de5e6d4db145" id="67" refid="67">
+<p>It is up to the author of the application to determine which files must be retained on restart. Normally you want to preserve data representing the application&#8217;s state, but you may not want to preserve files that contain the application&#8217;s locally cached data, as this prevents the container from starting fresh when it&#8217;s restarted. Starting fresh every time may allow the application to heal itself when corruption of the local cache causes it to crash. Just restarting the container and using the same corrupted files could result in an endless crash loop.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="68" refid="68">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="6b8852f25ee417d0042d4998d8a29cca" data-text-hash="5f56ecba336eaca2470ad2132aee0f21" id="69" refid="69">
+<p> Before you mount a volume in a container to preserve files across container restarts, consider how this affects the container&#8217;s self-healing capability.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="87e021a95434613db7af5d89ca235f59" data-text-hash="e1a00f28aa1f20ab58c372ca116407fb" id="70" refid="70">
+<h4>Mounting multiple volumes in a container</h4>
+</div>
+<div class="readable-text" data-hash="ab91a6d04d1b3653fde59c965cc1dc7c" data-text-hash="3ed04d30fcf591fce4c7d294baf27616" id="71" refid="71">
+<p>A pod can have multiple volumes and each container can mount zero or more of these volumes in different locations, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="5efbea8b81f95301c78a8a8a746c02cb" data-text-hash="e6c4cfbcedf476822adb1233244247be" id="72" refid="72">
+<h5>Figure 7.6 A pod can contain multiple volumes and a container can mount multiple volumes</h5>
+<img alt="" data-processed="true" height="323" id="Picture_6" loading="lazy" src="EPUB/images/07image007.png" width="855">
+</div>
+<div class="readable-text" data-hash="eab897a203c01ae075259d87957c9b11" data-text-hash="dc02df07fb1bb44426197b86517e9053" id="73" refid="73">
+<p>The reason why you might want to mount multiple volumes in one container is that these volumes may serve different purposes and can be of different types with different performance characteristics.</p>
+</div>
+<div class="readable-text" data-hash="930ca8eb5da49f274a297290e1e71f08" data-text-hash="5ff05b1ac78704518b55af0ce6d90b9f" id="74" refid="74">
+<p>In pods with more than one container, some volumes can be mounted in some containers but not in others. This is especially useful when a volume contains sensitive information that should only be accessible to some containers.</p>
+</div>
+<div class="readable-text" data-hash="cad03fadc939e2c5ade9a008d5bddbb9" data-text-hash="be84df7ca8469dd0369c6b8814e68e5c" id="75" refid="75">
+<h4>Sharing files between multiple containers</h4>
+</div>
+<div class="readable-text" data-hash="91d89de939a87479f8cf8d4a1ba3db64" data-text-hash="620aa06dc214a3aafed799f0ebacb32c" id="76" refid="76">
+<p>A volume can be mounted in more than one container so that applications running in these containers can share files. As discussed in chapter 5, a pod can combine a main application container with sidecar containers that extend the behavior of the main application. In some cases, the containers must read or write the same files.</p>
+</div>
+<div class="readable-text" data-hash="6cfa4a7de1fc6084169db15b73f9836d" data-text-hash="77ca6cc8899c89bb74ec997c6f95c67c" id="77" refid="77">
+<p>For example, you could create a pod that combines a web server running in one container with a content-producing agent running in another container. The content agent container generates the static content that the web server then delivers to its clients. Each of the two containers performs a single task that has no real value on its own. However, as the next figure shows, if you add a volume to the pod and mount it in both containers, you enable these containers to become a complete system that provides a valuable service and is more than the sum of its parts.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="403475efaa3d1233f3071f92ecd2cc6a" data-text-hash="b0566f2909166aa3d8aff3b4aced5fb0" id="78" refid="78">
+<h5>Figure 7.7 A volume can be mounted into more than one container</h5>
+<img alt="" data-processed="true" height="261" id="Picture_7" loading="lazy" src="EPUB/images/07image008.png" width="796">
+</div>
+<div class="readable-text" data-hash="ba229c3a31fcbc753d4355089069c1c6" data-text-hash="c474c618b17f4814c3721a2901b1b857" id="79" refid="79">
+<p>The same volume can be mounted at different places in each container, depending on the needs of the container itself. If the content agent writes content to <code>/var/data</code>, it makes sense to mount the volume there. Since the web server expects the content to be in <code>/var/html</code>, the container running it has the volume mounted at this location.</p>
+</div>
+<div class="readable-text" data-hash="92312d169fa87796500edfb005b62f79" data-text-hash="bd48215a08137816dfc814beed737383" id="80" refid="80">
+<p>In the figure you&#8217;ll also notice that the volume mount in each container can be configured either as read/write or as read-only. Because the content agent needs to write to the volume whereas the web server only reads from it, the two mounts are configured differently. In the interest of security, it&#8217;s advisable to prevent the web server from writing to the volume, since this could allow an attacker to compromise the system if the web server software has a vulnerability that allows attackers to write arbitrary files to the filesystem and execute them.</p>
+</div>
+<div class="readable-text" data-hash="b52adfff84e3046fb6596251edaf1190" data-text-hash="48d16d641e91ed92d880ccf92fd0e950" id="81" refid="81">
+<p>Other examples of using a single volume in two containers are cases where a sidecar container runs a tool that processes or rotates the web server logs or when an init container creates configuration files for the main application container.</p>
+</div>
+<div class="readable-text" data-hash="810a90a2b89b997f4328a9a869e491c1" data-text-hash="d206cf51f9f6036a51beb0e5203d9ba8" id="82" refid="82">
+<h4>Persisting data across pod instances</h4>
+</div>
+<div class="readable-text" data-hash="6bb28d5ee37f2c22a428ad4542ecd280" data-text-hash="d818bb9b5d6b6d0d2ac1710db2306909" id="83" refid="83">
+<p>A volume is tied to the lifecycle of the pod and only exists for as long as the pod exists, but depending on the volume type, the files in the volume can remain intact after the pod and volume disappear and can later be mounted into a new volume.</p>
+</div>
+<div class="readable-text" data-hash="431f84be9c370e3dd3065a0fe1b96ff1" data-text-hash="3a191d49409d34500a623c240ce390f5" id="84" refid="84">
+<p>As the following figure shows, a pod volume can map to persistent storage outside the pod. In this case, the file directory representing the volume isn&#8217;t a local file directory that persists data only for the duration of the pod, but is instead a volume mount to an existing, typically network-attached storage volume (NAS) whose lifecycle isn&#8217;t tied to any pod. The data stored in the volume is thus persistent and can be used by the application even after the pod it runs in is replaced with a new pod running on a different worker node.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c09e4b5b3c60d42ea8b34bdd072cd1e7" data-text-hash="481a1570b8442fd36fd05bcd25cbf8db" id="85" refid="85">
+<h5>Figure 7.8 Pod volumes can also map to storage volumes that persist across pod restarts</h5>
+<img alt="" data-processed="true" height="295" id="Picture_8" loading="lazy" src="EPUB/images/07image009.png" width="859">
+</div>
+<div class="readable-text" data-hash="ec9b0eded2a3d8bc7d1c453bf915f101" data-text-hash="3a9e911017a4b693ed6d21766e21f733" id="86" refid="86">
+<p>If the pod is deleted and a new pod is created to replace it, the same network-attached storage volume can be attached to the new pod instance so that it can access the data stored there by the previous instance.</p>
+</div>
+<div class="readable-text" data-hash="b239bb3919190262fee001b63c7cf028" data-text-hash="f0060e3415ff1cadcbfa00ae96ec747c" id="87" refid="87">
+<h4>Sharing data between pods</h4>
+</div>
+<div class="readable-text" data-hash="c7c9479271c48ca665d6616f46f814bf" data-text-hash="50cce03b83b8fca09e683af4a01bc733" id="88" refid="88">
+<p>Depending on the technology that provides the external storage volume, the same external volume can be attached to multiple pods simultaneously, allowing them to share data. The following figure shows a scenario where three pods each define a volume that is mapped to the same external persistent storage volume.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="67e8a9200cabe61e8c6d35874c74616c" data-text-hash="5d8094d5f54d2f58a6d8a7ad8f1c24ec" id="89" refid="89">
+<h5>Figure 7.9 Using volumes to share data between pods</h5>
+<img alt="" data-processed="true" height="355" id="Picture_9" loading="lazy" src="EPUB/images/07image010.png" width="828">
+</div>
+<div class="readable-text" data-hash="c5cfd37725c02127558670c14b9e46fd" data-text-hash="fb260ff5d09b3b6aae12c2c4df57c730" id="90" refid="90">
+<p>In the simplest case, the persistent storage volume could be a simple local directory on the worker node&#8217;s filesystem, and the three pods have volumes that map to that directory. If all three pods are running on the same node, they can share files through this directory.</p>
+</div>
+<div class="readable-text" data-hash="027c13d27971b2105e6f735beda5b2a4" data-text-hash="be20143440745ecb812b5df9b94f9a28" id="91" refid="91">
+<p>If the persistent storage is a network-attached storage volume, the pods may be able to use it even when they are deployed to different nodes. However, this depends on whether the underlying storage technology supports concurrently attaching the network volume to multiple computers.</p>
+</div>
+<div class="readable-text" data-hash="515a85f22e947d004bd83ce4c1db4512" data-text-hash="9f175a9b126b2d90e6bb2d05f381b236" id="92" refid="92">
+<p>While technologies such as Network File System (NFS) allow you to attach the volume in read/write mode on multiple computers, other technologies typically available in cloud environments, such as the Google Compute Engine Persistent Disk, allow the volume to be used either in read/write mode on a single cluster node, or in read-only mode on many nodes.</p>
+</div>
+<div class="readable-text" data-hash="6e723c6f77378b2331126e7d121e8dde" data-text-hash="f27e8c1c2cf7942e9df0c07e77b3522d" id="93" refid="93">
+<h4>Introducing the available volume types</h4>
+</div>
+<div class="readable-text" data-hash="1a2d34bdcf6a416724e26bd98b7a81ff" data-text-hash="1dc5b48581b9c08b6b7517b09573b247" id="94" refid="94">
+<p>When you add a volume to a pod, you must specify the volume type. A wide range of volume types is available. Some are generic, while others are specific to the storage technologies used underneath. Here&#8217;s a non-exhaustive list of the supported volume types:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="4006ec8e95158ad00006ef661b389c3b" data-text-hash="6d68881c6119efe95dde7b4a30ce5cf3" id="95" refid="95"><code class="codechar">emptyDir</code>&#8212;A simple directory that allows the pod to store data for the duration of its life cycle. The directory is created just before the pod starts and is initially empty - hence the name. The <code class="codechar">gitRepo</code> volume, which is now deprecated, is similar, but is initialized by cloning a Git repository. Instead of using a <code class="codechar">gitRepo</code> volume, it is recommended to use an <code class="codechar">emptyDir</code> volume and initialize it using an init container.</li>
+<li class="readable-text" data-hash="c81f03e6f01240ae0c48cfcb66fc6b6c" data-text-hash="effb651fef44d8cd8075d47605a27020" id="96" refid="96"><code>hostPath</code>&#8212;Used for mounting files from the worker node&#8217;s filesystem into the pod.</li>
+<li class="readable-text" data-hash="83adfe69bae1c8d83474bb53969bee2b" data-text-hash="06caa34cecbee228984afebe25a26f91" id="97" refid="97"><code>nfs</code>&#8212;An NFS share mounted into the pod.</li>
+<li class="readable-text" data-hash="faf50c1d7c42ec4a97a13bcee7764a3e" data-text-hash="df819f7973d25ef816c65848bf99bc55" id="98" refid="98"><code>gcePersistentDisk</code> (Google Compute Engine Persistent Disk), <code>awsElasticBlockStore</code> (Amazon Web Services Elastic Block Store), <code>azureFile</code> (Microsoft Azure File Service), <code>azureDisk</code> (Microsoft Azure Data Disk)&#8212;Used for mounting cloud provider-specific storage.</li>
+<li class="readable-text" data-hash="1b72cea98aab8d0a6d53afd696970b1b" data-text-hash="b0c1a09a0da33317ea4a3d4385c9d767" id="99" refid="99"><code>cephfs</code>, <code>cinder</code>, <code>fc,</code> <code>flexVolume</code>, <code>flocker</code>, <code>glusterfs</code>, <code>iscsi</code>, <code>portworxVolume,</code> <code>quobyte</code>, <code>rbd</code>, <code>scaleIO,</code> <code>storageos</code>, <code>photonPersistentDisk,</code> <code>vsphereVolume</code>&#8212;Used for mounting other types of network storage.</li>
+<li class="readable-text" data-hash="4823fff3fb1e5257cb67c679c86ee61f" data-text-hash="36caaf32905aca66205d81993ebb3605" id="100" refid="100"><code>configMap</code>, <code>secret</code>, <code>downwardAPI,</code> and the <code>projected</code> volume type&#8212;Special types of volumes used to expose information about the pod and other Kubernetes objects through files. They are typically used to configure the application running in the pod. You&#8217;ll learn about them in chapter 9.</li>
+<li class="readable-text" data-hash="e71a9a818d5bc6ac0594f3067733c0ed" data-text-hash="64fce34118cccf079fa90267205d2bbf" id="101" refid="101"><code>persistentVolumeClaim</code>&#8212;A portable way to integrate external storage into pods. Instead of pointing directly to an external storage volume, this volume type points to a <code>PersistentVolumeClaim</code> object that points to a <code>PersistentVolume</code> object that finally references the actual storage. This volume type requires a separate explanation, which you&#8217;ll find in the next chapter.</li>
+<li class="readable-text" data-hash="faffbe3caf9135a92df919caf2e3a4aa" data-text-hash="bdf63cbf4e65ba0e38c35618e3c9dbfe" id="102" refid="102"><code>csi</code>&#8212;A pluggable way of adding storage via the Container Storage Interface. This volume type allows anyone to implement their own storage driver that is then referenced in the <code>csi</code> volume definition. During pod setup, the CSI driver is called to attach the volume to the pod.</li>
+</ul>
+<div class="readable-text" data-hash="6cdf546218ba0ca9eb98e2e4765f3f75" data-text-hash="07b2fee528978d5f420e9863982b1c93" id="103" refid="103">
+<p>These volume types serve different purposes. The following sections cover the most representative volume types and help you to gain a general understanding of volumes.</p>
+</div>
+<div class="readable-text" data-hash="3715af116308200367c49a7f37984f85" data-text-hash="bc8dc73573bb40cb8cb37b952ac254c6" id="104" refid="104">
+<h2 id="sigil_toc_id_115">7.2&#160;Using an emptyDir volume</h2>
+</div>
+<div class="readable-text" data-hash="33354db3e9139af21b5e5c141d373b51" data-text-hash="ae2086e3756712927d0c3f3ef14d7be7" id="105" refid="105">
+<p>The simplest volume type is <code>emptyDir</code>. As its name suggests, a volume of this type starts as an empty directory. When this type of volume is mounted in a container, files written by the application to the path where the volume is mounted are preserved for the duration of the pod&#8217;s existence.</p>
+</div>
+<div class="readable-text" data-hash="7e8419a4f140fbe60cacd4ac70e07d96" data-text-hash="b5613ed9ff0ed13461c15dc372d7a1e3" id="106" refid="106">
+<p>This volume type is used in single-container pods when data must be preserved even if the container is restarted. It&#8217;s also used when the container&#8217;s filesystem is marked read-only, and you want part of it to be writable. In pods with two or more containers, an <code>emptyDir</code> volume is used to share data between them.</p>
+</div>
+<div class="readable-text" data-hash="5b1493768a002e4938d1ea044253a964" data-text-hash="fb81c3e48969c1850a4ff279d3a1115d" id="107" refid="107">
+<h3 id="sigil_toc_id_116">7.2.1&#160;Persisting files across container restarts</h3>
+</div>
+<div class="readable-text" data-hash="7e3bc47d378fa31f72c8325243a17d6f" data-text-hash="0722e3c08a414b0ed41fef479a116a37" id="108" refid="108">
+<p>Let&#8217;s add an <code>emptyDir</code> volume to the quiz pod from section 7.1.1 to ensure that its data isn&#8217;t lost when the MongoDB container restarts.</p>
+</div>
+<div class="readable-text" data-hash="933e246d15ac7b6079fe064db6f50102" data-text-hash="1243b3b725b65c739218eef622dbbdc3" id="109" refid="109">
+<h4>Adding an emptyDir volume to a pod</h4>
+</div>
+<div class="readable-text" data-hash="da82fae8709688c637458f9dd908b6dd" data-text-hash="3bfd9c8ee37e968192bd1cd16343acce" id="110" refid="110">
+<p>You&#8217;ll modify the definition of the quiz pod so that the MongoDB process writes its files to the volume instead of the filesystem of the container it runs in, which is perishable. A visual representation of the pod is given in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c5060484b8edbe6d62e1ee1e611872d7" data-text-hash="2a8d1369a44eb7307d811b22bb6af308" id="111" refid="111">
+<h5>Figure 7.10 The quiz pod with an emptyDir volume for storing MongoDB data files</h5>
+<img alt="" data-processed="true" height="238" id="Picture_10" loading="lazy" src="EPUB/images/07image011.png" width="832">
+</div>
+<div class="readable-text" data-hash="141af1d46ac17842ba103f5f7dead122" data-text-hash="ec2d780f6d3dc977554620f91dfddda8" id="112" refid="112">
+<p>Two changes to the pod manifest are required to achieve this:</p>
+</div>
+<ol>
+<li class="readable-text" data-hash="4bb429b7ed72db866f19f89408cea9cf" data-text-hash="f3c342c9a7dbd67d97365a51a5d0e30c" id="113" refid="113">An <code class="codechar">emptyDir</code> volume must be added to the pod.</li>
+<li class="readable-text" data-hash="c320dee2ce4f2a969df68810a412541f" data-text-hash="c320dee2ce4f2a969df68810a412541f" id="114" refid="114">The volume must be mounted into the container.</li>
+</ol>
+<div class="readable-text" data-hash="9faf008691fa8c0042cfce2a1a13304c" data-text-hash="4c86b05133bf9902ff254212a0b26462" id="115" refid="115">
+<p>The following listing shows the new pod manifest with these two changes highlighted in bold. You&#8217;ll find the manifest in the file <code>pod.quiz.emptydir.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="69ac20b634b2ad7675d8291fda6bb8be" data-text-hash="265cd755c11acfc5c91f4d89b08fab8f" id="116" refid="116">
+<h5>Listing 7.2 The quiz pod with an emptyDir volume for the mongo container</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz
+spec:
+  volumes:    #A
+  - name: quiz-data    #A
+    emptyDir: {}    #A
+  containers:
+  - name: quiz-api
+    image: luksa/quiz-api:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+  - name: mongo
+    image: mongo
+    volumeMounts:    #B
+    - name: quiz-data    #B
+      mountPath: /data/db    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQW4gZW1wdHlEaXIgdm9sdW1lIHdpdGggdGhlIG5hbWUgcXVpei1kYXRhIGlzIGRlZmluZWQuCiNCIFRoZSBxdWl6LWRhdGEgdm9sdW1lIGlzIG1vdW50ZWQgaW50byB0aGUgbW9uZ28gY29udGFpbmVy4oCZcyBmaWxlc3lzdGVtIGF0IHRoZSBsb2NhdGlvbiAvZGF0YS9kYi4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4b26e527a9eeaeaab90d5fd137e91f96" data-text-hash="19768409c6cbda006223a4d72764d2e6" id="117" refid="117">
+<p>The listing shows that an <code>emptyDir</code> volume named <code>quiz-data</code> is defined in the <code>spec.volumes</code> array of the pod manifest and that it is mounted into the <code>mongo</code> container&#8217;s filesystem at the location <code>/data/db</code>. The following two sections explain more about the volume and the volume mount definitions.</p>
+</div>
+<div class="readable-text" data-hash="b1e18d642b08117305cdded86cab0274" data-text-hash="e005a98506c631925ca7059b0da187c5" id="118" refid="118">
+<h4>Configuring the emptyDir volume</h4>
+</div>
+<div class="readable-text" data-hash="972a9c7d133d9f7f894c518eb23a8317" data-text-hash="3c7048e15459d1c92537d37af7b24607" id="119" refid="119">
+<p>In general, each volume definition must include a <code>name</code> and a type, which is indicated by the name of the nested field (for example: <code>emptyDir</code>, <code>gcePersistentDisk</code>, <code>nfs</code>, and so on). This field typically contains several sub-fields that allow you to configure the volume. The set of sub-fields that you set depends on the volume type.</p>
+</div>
+<div class="readable-text" data-hash="9a44086b260da734af60372732e52898" data-text-hash="4e3dc139ece04191005ac1c1ab0b1fa8" id="120" refid="120">
+<p>For example, the <code>emptyDir</code> volume type supports two fields for configuring the volume. They are explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="fb34061f45cda60258b2bc90b9279129" data-text-hash="c56fb01b2fd039d7b774d5053f5082ad" id="121" refid="121">
+<h5>Table 7.1 Configuration options for an emptyDir volume</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Field</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>medium
+</pre> </td>
+<td> <p>The type of storage medium to use for the directory. If left empty, the default medium of the host node is used (the directory is created on one of the node&#8217;s disks). The only other supported option is <code>Memory</code>, which causes the volume to use <code>tmpfs</code>, a virtual memory filesystem where the files are kept in memory instead of on the hard disk.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>sizeLimit
+</pre> </td>
+<td> <p>The total amount of local storage required for the directory, whether on disk or in memory. For example, to set the maximum size to ten mebibytes, you set this field to <code>10Mi</code>.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="122" refid="122">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="acad8e8d9a0d934e6e89f181b71d3e3d" data-text-hash="4e23e7359d2156694bc3c0ce62b2ae95" id="123" refid="123">
+<p> The <code>emptyDir</code> field in the volume definition defines neither of these properties. The curly braces <code>{}</code> have been added to indicate this explicitly, but they can be omitted.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="1b3711b349476e9ded0589afb95274bf" data-text-hash="0ff253b7c83677f6e81bde3096ca8cc3" id="124" refid="124">
+<h4>Mounting the volume in a container</h4>
+</div>
+<div class="readable-text" data-hash="7a1b80b1d9f9235a091bddff4960be66" data-text-hash="a7bdfe693bd4457add67710ad5b71960" id="125" refid="125">
+<p>Defining a volume in the pod is only half of what you need to do to make it available in a container. The volume must also be mounted in the container. This is done by referencing the volume by name in the <code>volumeMounts</code> array in the container definition.</p>
+</div>
+<div class="readable-text" data-hash="c36410e5e7315165709591fc014f64c4" data-text-hash="5278567fec16ef564932b4dfb2f7f736" id="126" refid="126">
+<p>In addition to the <code>name</code>, a volume mount definition must also include the <code>mountPath</code> - the path within the container where the volume should be mounted. In listing 7.2, the volume is mounted at <code>/data/db</code> because that&#8217;s where MongoDB stores its files. You want these files to be written to the volume instead of the container&#8217;s filesystem, which is ephemeral.</p>
+</div>
+<div class="readable-text" data-hash="e3b6f1c7004dcb10a96a39199fc62f9f" data-text-hash="121b6894925db6a734fc1b2ca155c44d" id="127" refid="127">
+<p>The full list of supported fields in a volume mount definition is presented in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="1a0dc94ebf0a9da9883547264a82d308" data-text-hash="7ccd5a72925b08fb6f715a7766fe5e2c" id="128" refid="128">
+<h5>Table 7.2 Configuration options for a volume mount</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Field</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>name
+</pre> </td>
+<td> <p>The name of the volume to mount. This must match one of the volumes defined in the pod.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>mountPath
+</pre> </td>
+<td> <p>The path within the container at which to mount the volume.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>readOnly
+</pre> </td>
+<td> <p>Whether to mount the volume as read-only. Defaults to <code>false</code>.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>mountPropagation
+</pre> </td>
+<td> <p>Specifies what should happen if additional filesystem volumes are mounted inside the volume.</p> <p>Defaults to <code>None</code>, which means that the container won&#8217;t receive any mounts that are mounted by the host, and the host won&#8217;t receive any mounts that are mounted by the container.</p> <p><code>HostToContainer</code> means that the container will receive all mounts that are mounted into this volume by the host, but not the other way around.</p> <p><code>Bidirectional</code> means that the container will receive mounts added by the host, and the host will receive mounts added by the container.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>subPath
+</pre> </td>
+<td> <p>Defaults to <code>""</code> which indicates that the entire volume is to be mounted into the container. When set to a non-empty string, only the specified <code>subPath</code> within the volume is mounted into the container.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>subPathExpr
+</pre> </td>
+<td> <p>Just like <code>subPath</code> but can have environment variable references using the syntax <code>$(ENV_VAR_NAME)</code>. Only environment variables that are explicitly defined in the container definition are applicable. Implicit variables such as <code>HOSTNAME</code> will not be resolved. You&#8217;ll learn how to specify environment variables in chapter 9.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="3324e6179432845503be28059ed10835" data-text-hash="afba00e325a4320ce2a49f9bed65d25f" id="129" refid="129">
+<p>In most cases, you only specify the <code>name</code>, <code>mountPath</code> and whether the mount should be <code>readOnly</code>. The <code>mountPropagation</code> option comes into play for advanced use-cases where additional mounts are added to the volume&#8217;s file tree later, either from the host or from the container. The <code>subPath</code> and <code>subPathExpr</code> options are useful when you want to use a single volume with multiple directories that you want to mount to different containers instead of using multiple volumes.</p>
+</div>
+<div class="readable-text" data-hash="de9291e40bdfbb4e3435c00e3cf454f6" data-text-hash="a87442eaad620359710d055300af3b98" id="130" refid="130">
+<p>The <code>subPathExpr</code> option is also used when a volume is shared by multiple pod replicas. In chapter 9, you&#8217;ll learn how to use the Downward API to inject the name of the pod into an environment variable. By referencing this variable in <code>subPathExpr</code>, you can configure each replica to use its own subdirectory based on its name.</p>
+</div>
+<div class="readable-text" data-hash="47a386abb47e8809f5f11440b843f021" data-text-hash="20ff89950a3c82a59a6125ae417da0b9" id="131" refid="131">
+<h4>Understanding the lifespan of an emptyDir volume</h4>
+</div>
+<div class="readable-text" data-hash="ec489082394e343cd961e3e73c889ef9" data-text-hash="2d4277f149e4037ffa3c7f43e4c3895d" id="132" refid="132">
+<p>If you replace the quiz pod with the one in listing 7.2 and insert questions into the database, you&#8217;ll notice that the questions you add to the database remain intact, regardless of how often the container is restarted. This is because the volume&#8217;s lifecycle is tied to that of the pod.</p>
+</div>
+<div class="readable-text" data-hash="ce2d856f19b7e8282e4b891a60e19d45" data-text-hash="e61da4cd06a66500305e78c3a4aa0080" id="133" refid="133">
+<p>To see this is the case, insert the question(s) into the MongoDB database as you did in section 7.1.1. I suggest using the shell script in the file Chapter07/insert-question.sh so that you don&#8217;t have to type the entire question JSON again. After you add the question, count the number of questions in the database as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e39378f01b257411d42210bd54e6a46e" data-text-hash="f02b2b5ff23f5450dafb90930c228bd2" id="134" refid="134">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.count()"
+1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG51bWJlciBvZiBxdWVzdGlvbnMgaW4gdGhlIGRhdGFiYXNl"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="518d065dff96d034b0f32e7e7767446a" data-text-hash="9da5dc2d7ea6d38f4b52f7a3dbb3dc9e" id="135" refid="135">
+<p>Now shut down the MongoDB server:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="79db04199bffc67cdd7236c2a42dd70d" data-text-hash="8f3fe725340aaf8a2f57a8decd53820f" id="136" refid="136">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo admin --eval "db.shutdownServer()"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f3a6606b2e44cd27c952cd857c9eb99f" data-text-hash="9d4689ed5771693976fa852ce0be0aae" id="137" refid="137">
+<p>Check that the <code>mongo</code> container was restarted:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8b0c229b360ec997c3f755ed861fafeb" data-text-hash="20dedc43114ec5b579440ec40d0ecc80" id="138" refid="138">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po quiz
+NAME   READY   STATUS    RESTARTS   AGE
+quiz   2/2     Running   1          10m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHJlc3RhcnQgY291bnQgc2hvd3MgdGhhdCBvbmUgY29udGFpbmVyIHdhcyByZXN0YXJ0ZWQ="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7683424e96fe1e0866327b538ec0c82e" data-text-hash="1a7b57c916db9d2082d9cb56ef243c53" id="139" refid="139">
+<p>After the container restarts, recheck the number of questions in the database:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f907aa055b2a36327c4df51d476956ee" data-text-hash="f02b2b5ff23f5450dafb90930c228bd2" id="140" refid="140">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.count()"
+1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRhdGEgaGFzIHN1cnZpdmVkIHRoZSBjb250YWluZXIgcmVzdGFydA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b7b037b9dd53e2b6879c5da7802e5811" data-text-hash="6f77b79d4057f23b777ccfc0c305d228" id="141" refid="141">
+<p>Restarting the container no longer causes the files to disappear because they no longer reside in the container&#8217;s filesystem. They are stored in the volume. But where exactly is that? Let&#8217;s find out.</p>
+</div>
+<div class="readable-text" data-hash="23ceaa79baaadd14f6fe9e20c9ba22de" data-text-hash="d4e1d80d27745baac3eac45fb5056cc1" id="142" refid="142">
+<h4>Understanding where the files in an emptyDir volume are stored</h4>
+</div>
+<div class="readable-text" data-hash="8686196e8e564c75d100401b60ec3733" data-text-hash="2fa73496c708cdd6eaff0ec5d8391cba" id="143" refid="143">
+<p>As you can see in the following figure, the files in an <code>emptyDir</code> volume are stored in a directory in the host node&#8217;s filesystem. It&#8217;s nothing but a normal file directory. This directory is mounted into the container at the desired location.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b3bd0c84fb354011c91a811478ea777a" data-text-hash="093685a555275e99a3e73df1340c1a74" id="144" refid="144">
+<h5>Figure 7.11 The emptyDir is a normal file directory in the node&#8217;s filesystem that&#8217;s mounted into the container</h5>
+<img alt="" data-processed="true" height="418" id="Picture_11" loading="lazy" src="EPUB/images/07image012.png" width="802">
+</div>
+<div class="readable-text" data-hash="9937c490301f11f7708ee7a92c9ba702" data-text-hash="2223de876dc9c148d128b6f996dee82e" id="145" refid="145">
+<p>The directory is typically located at the following location in the node&#8217;s filesystem:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9f5dd91f73cdb179884d88dd7da6e524" data-text-hash="1c10621d61c3225406a4f89bad7a3d37" id="146" refid="146">
+<div class="code-area-container">
+<pre class="code-area">/var/lib/kubelet/pods/&lt;pod_UID&gt;/volumes/kubernetes.io~empty-dir/&lt;volume_name&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="214733ac49d6f855751b810634b93b75" data-text-hash="9373071c3de255f40475df4236d57394" id="147" refid="147">
+<p>The <code>pod_UID</code> is the unique ID of the pod, which you&#8217;ll find the Pod object&#8217;s <code>metadata</code> section. If you want to see the directory for yourself, run the following command to get the <code>pod_UID</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="18c9ce92abe7051cb4e2368a642293b4" data-text-hash="42a29fca8e1df1af6482278421084142" id="148" refid="148">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po quiz -o json | jq .metadata.uid
+"4f49f452-2a9a-4f70-8df3-31a227d020a1"</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="59dd6eb3089463c48793a4c42d9941cb" data-text-hash="28f47907104c4524b406344a8a828fc9" id="149" refid="149">
+<p>The <code>volume_name</code> is the name of the volume in the pod manifest - in the quiz pod, the name is <code>quiz-data</code>.</p>
+</div>
+<div class="readable-text" data-hash="dba84b3fa65314df506e012c2865ee40" data-text-hash="894ee2bb054df8d50a7af955d48b51b8" id="150" refid="150">
+<p>To get the name of the node that runs the pod, use <code>kubectl get po quiz -o wide</code> or the following alternative:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="52f34a43e262b123837e2bfca37beaba" data-text-hash="9270b349a6136ae8775651feaa4aef89" id="151" refid="151">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po quiz -o json | jq .spec.nodeName</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4d24c10504bcffae46c757997d6506b7" data-text-hash="be9089c58d74b01f06c81848b66725cb" id="152" refid="152">
+<p>Now you have everything you need. Try to log into the node and inspect the contents of the directory. You&#8217;ll notice that the files match those in the <code>mongo</code> container&#8217;s <code>/data/db</code> directory.</p>
+</div>
+<div class="readable-text" data-hash="919c76e2d0cb5210bcc421c41f9d79c1" data-text-hash="2eb73eb3ca1f6d75ea76a55c8439b914" id="153" refid="153">
+<p>If you delete the pod, the directory is deleted. This means that the data is lost once again. You&#8217;ll learn how to persist it properly by using external storage volumes in section 7.3.</p>
+</div>
+<div class="readable-text" data-hash="6589dded151136b132f56f220e046bf0" data-text-hash="e248c1dcd64dab0a5aaafceb65328b8b" id="154" refid="154">
+<h4>Creating the emptyDir volume in memory</h4>
+</div>
+<div class="readable-text" data-hash="4a2458c9d710c211305f3122a30b1105" data-text-hash="a77778c94893778cebe711cc0bf6487f" id="155" refid="155">
+<p>The <code>emptyDir</code> volume in the previous example created a directory on the actual drive of the worker node that runs your pod, so its performance depends on the type of drive installed on the node. If you want the I/O operations on the volume to be as fast as possible, you can instruct Kubernetes to create the volume using the <i>tmpfs</i> filesystem, which keeps files in memory. To do this, set the <code>emptyDir&#8217;s</code> <code>medium</code> field to <code>Memory</code> as in the following snippet:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5934ef210b0addb96d75aa2bac039cf5" data-text-hash="2188ae88abb14a97662e971a625ca1ea" id="156" refid="156">
+<div class="code-area-container">
+<pre class="code-area">volumes:
+  - name: content
+    emptyDir:
+      medium: Memory    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBkaXJlY3Rvcnkgc2hvdWxkIGJlIHN0b3JlZCBpbiBtZW1vcnku"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="996c0377771cf5e3a20d63069fac85b2" data-text-hash="b033bc2ca9f936c414713f97b4aca5d0" id="157" refid="157">
+<p>Creating the <code>emptyDir</code> volume in memory is also a good idea whenever it&#8217;s used to store sensitive data. Because the data is not written to disk, there is less chance that the data will be compromised and persisted longer than desired. As you&#8217;ll learn in chapter 9, Kubernetes uses the same in-memory approach when it exposes the data from the <i>Secret</i> object kind in the container.</p>
+</div>
+<div class="readable-text" data-hash="6b09947d61aa9a5c86b4b96a7aea06c3" data-text-hash="e7738c9b755e963fba0aca8d4f688360" id="158" refid="158">
+<h4>Specifying the size limit for the emptyDir volume</h4>
+</div>
+<div class="readable-text" data-hash="343135363aaeadbeed7f5597cf268078" data-text-hash="9e32486e23303cafd0ccedd79a81ab7c" id="159" refid="159">
+<p>The size of an <code>emptyDir</code> volume can be limited by setting the <code>sizeLimit</code> field. Setting this field is especially important for in-memory volumes when the overall memory usage of the pod is limited by so-called <i>resource limits</i>. You&#8217;ll learn about this in chapter 20.</p>
+</div>
+<div class="readable-text" data-hash="f32a1f28957becf79fb712047ce778ce" data-text-hash="3e8605691a0975f8b627348b34eb7718" id="160" refid="160">
+<p>Next, let&#8217;s see how an <code>emptyDir</code> volume is used to share files between containers of the same pod.</p>
+</div>
+<div class="readable-text" data-hash="87dab6d73092a0de2f1121e691825ad7" data-text-hash="9092a313b4160ed679d9cfc500e662ad" id="161" refid="161">
+<h3 id="sigil_toc_id_117">7.2.2&#160;Populating an emptyDir volume with data using an init container</h3>
+</div>
+<div class="readable-text" data-hash="cacadda958d531bf3b22b2e263eae934" data-text-hash="cdd4b65ee121728c9c7a020c8c80d0a2" id="162" refid="162">
+<p>Every time you create the quiz pod from the previous section, the MongoDB database is empty, and you have to insert the questions manually. Let&#8217;s improve the pod by automatically populating the database when the pod starts.</p>
+</div>
+<div class="readable-text" data-hash="642b9165fe6c874f15e87bdb9b69f656" data-text-hash="8426c8b8321f7f05b1f780635d04cb61" id="163" refid="163">
+<p>Many ways of doing this exist. You could run the MongoDB container locally, insert the data, commit the container state into a new image and use that image in your pod. But then you&#8217;d have to repeat the process every time a new version of the MongoDB container image is released.</p>
+</div>
+<div class="readable-text" data-hash="21887634adf996a1b741c6ece61f12ea" data-text-hash="906ee95d620744077e0fee073571f037" id="164" refid="164">
+<p>Fortunately, the MongoDB container image provides a mechanism to populate the database the first time it&#8217;s started. On start-up, if the database is empty, it invokes any .js and .sh files that it finds in the /docker-entrypoint-initdb.d directory. All you need to do is get the file into that location. Again, you could build a new MongoDB image with the file in that location, but you&#8217;d run into the same problem as described previously. An alternative solution is to use a volume to inject the file into that location of the MongoDB container&#8217;s filesystem. But how do you get the file into the volume in the first place?</p>
+</div>
+<div class="readable-text" data-hash="6881ceaafe1e301cc7e81cb426729060" data-text-hash="41fa009e5b9b9cdb12877dc941a8948d" id="165" refid="165">
+<p>Kubernetes provides a special type of volume that is initialized by cloning a Git repository - the <code>gitRepo</code> volume. However, this type of volume is now deprecated. The proposed alternative is to use an <code>emptyDir</code> volume that you initialize with an init container that executes the <code>git clone</code> command. You could use this approach, but this would mean that the pod must make a network call to fetch the data.</p>
+</div>
+<div class="readable-text" data-hash="1119c7e57d93e8f8521c80d96a9eddd1" data-text-hash="010bf29edae6fdd5197b19c9b65ed148" id="166" refid="166">
+<p>Another, more generic way of populating an <code>emptyDir</code> volume, is to package the data into a container image and copy the data files from the container to the volume when the container starts. This removes the dependency on any external systems and allows the pod to run regardless of the network connectivity status.</p>
+</div>
+<div class="readable-text" data-hash="19e0b46aef981abcce0bc3d3b1a24f2f" data-text-hash="3dc07df31c767b4b4cf36030b6c194cb" id="167" refid="167">
+<p>To help you visualize the pod, look at the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="2ba42b84a93f1ddae9ed2ac19f1fa62b" data-text-hash="256c7de730f8ff3b0f8ea72fcde8b0d0" id="168" refid="168">
+<h5>Figure 7.12 Using an init container to initialize an emptyDir volume</h5>
+<img alt="" data-processed="true" height="245" id="Picture_12" loading="lazy" src="EPUB/images/07image013.png" width="832">
+</div>
+<div class="readable-text" data-hash="270e4c659764a1a56d690f3fdff1c138" data-text-hash="64db9e9fcb05fae2712c7a882ecbf4df" id="169" refid="169">
+<p>When the pod starts, first the volumes and then the init container is created. The initdb volume is mounted into this init container. The container image contains the insert-questions.js file, which the container copies to the volume when it runs. Then the copy operation is complete, the init container finishes and the pod&#8217;s main containers are started. The initdb volume is mounted into the mongo container at the location where MongoDB looks for database initialization scripts. On first start-up, MongoDB executes the insert-questions.js script. This inserts the questions into the database. As in the previous version of the pod, the database files are stored in the quiz-data volume to allow the data to survive container restarts.</p>
+</div>
+<div class="readable-text" data-hash="2c8e5f3e2193813f0b8ad3b215e742d9" data-text-hash="4f3b919054bc91246595131d88dadee6" id="170" refid="170">
+<p>You&#8217;ll find the insert-questions.js file and the Dockerfile required to build init container image in the book&#8217;s code repository. The following listing shows part of the insert-questions.js file.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2295a06d42614f84222fe1ad531c8e60" data-text-hash="2550e434e8fb2cfa229d4eaeb3194263" id="171" refid="171">
+<h5>Listing 7.3 The contents of the insert-questions.js file</h5>
+<div class="code-area-container">
+<pre class="code-area">db.getSiblingDB("kiada").questions.insertMany(    #A
+[{    #B
+    "id": 1,    #B
+    "text": "What is kubectl?",    #B
+    ...    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb21tYW5kIGluc2VydHMgZG9jdW1lbnRzIGludG8gdGhlIHF1ZXN0aW9ucyBjb2xsZWN0aW9uIG9mIHRoZSBraWFkYSBkYXRhYmFzZS4KI0IgVGhpcyBpcyB0aGUgZmlyc3QgZG9jdW1lbnQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0c59fc7f4b26d365f35f5dea055135cc" data-text-hash="875d737b35d56ec650ec31435753173b" id="172" refid="172">
+<p>The Dockerfile for the container image is shown in the next listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e79933ce8cc1ab5352f750096235cdac" data-text-hash="a69158328a48c8fbd037f5ca80b5ef6c" id="173" refid="173">
+<h5>Listing 7.4 Dockerfile for the quiz-initdb-script-installer:0.1 container image</h5>
+<div class="code-area-container">
+<pre class="code-area">FROM busybox
+COPY insert-questions.js /    #A
+CMD cp /insert-questions.js /initdb.d/ \    #B
+    &amp;&amp; echo "Successfully copied insert-questions.js to /initdb.d" \    #B
+    || echo "Error copying insert-questions.js to /initdb.d"    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWRkcyB0aGUgZmlsZSB0byB0aGUgY29udGFpbmVyIGltYWdlCiNCIFdoZW4gdGhlIGNvbnRhaW5lciBydW5zLCBpdCBjb3BpcyB0aGUgZmlsZSB0byB0aGUgL2RvY2tlci1lbnRyeXBvaW50LWluaXRkYi5kIGRpcmVjdG9yeSBhbmQgcHJpbnRzIGEgc3RhdHVzIG1lc3NhZ2UgdG8gdGhlIHN0YW5kYXJkIG91dHB1dC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8944e720362525dc43a449a1ad7cef1f" data-text-hash="4244874fc360cbd751c14585c2f84229" id="174" refid="174">
+<p>Use these two files to build the image or use the image that I&#8217;ve built. You&#8217;ll find it at <code>docker.io/luksa/quiz-initdb-script-installer:0.1</code>.</p>
+</div>
+<div class="readable-text" data-hash="889d2ffce6a9b029ec435270cfdd9d0b" data-text-hash="e92252ce012ea1315b3bf2a0c3eb5982" id="175" refid="175">
+<p>After you&#8217;ve got the container image, modify the pod manifest from the previous section so its contents match the next listing (the resulting file is <code>pod.quiz.emptydir.init.yaml</code>). The lines that you must add are highlighted in bold font.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6f5700caca6c102282c6c01622ec3911" data-text-hash="7081458d2e1db0dfff3a7071a429bee8" id="176" refid="176">
+<h5>Listing 7.5 Using an init container to initialize an emptyDir volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz
+spec:
+  volumes:
+  - name: initdb    #A
+    emptyDir: {}    #A
+  - name: quiz-data
+    emptyDir: {}
+  initContainers:
+  - name: installer    #B
+    image: luksa/quiz-initdb-script-installer:0.1    #B
+    volumeMounts:    #B
+    - name: initdb    #B
+      mountPath: /initdb.d    #B
+  containers:
+  - name: quiz-api
+    image: luksa/quiz-api:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+  - name: mongo
+    image: mongo
+    volumeMounts:
+    - name: quiz-data
+      mountPath: /data/db
+    - name: initdb    #C
+      mountPath: /docker-entrypoint-initdb.d/    #C
+      readOnly: true    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGluaXRkYiBlbXB0eURpciB2b2x1bWUgaXMgZGVmaW5lZCBoZXJlLgojQiBUaGUgdm9sdW1lIGlzIG1vdW50ZWQgaW4gdGhlIGluaXQgY29udGFpbmVyIGF0IHRoZSBsb2NhdGlvbiB0byB3aGljaCB0aGUgY29udGFpbmVyIGNvcGllcyB0aGUgaW5zZXJ0LXF1ZXN0aW9ucy5qcyBmaWxlLgojQyBUaGUgc2FtZSB2b2x1bWUgaXMgYWxzbyBtb3VudGVkIGluIHRoZSBtb25nbyBjb250YWluZXIgYXQgdGhlIGxvY2F0aW9uIHdoZXJlIE1vbmdvREIgbG9va3MgZm9yIGluaXRpYWxpemF0aW9uIHNjcmlwdHMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9293df838b3f37d71a50ade69f711e6e" data-text-hash="af462654481a0b4121096a6c7826c331" id="177" refid="177">
+<p>The listing shows that the initdb volume is mounted into the init container. After this container copies the insert-questions.js file to the volume, it terminates and allows the mongo and quiz-api containers to start. Because the initdb volume is mounted in the /docker-entrypoint-initdb.d directory in the mongo container, MongoDB executes the .js file, which populates the database with questions.</p>
+</div>
+<div class="readable-text" data-hash="acc0c93c47c6c6f406e16fc1620711fe" data-text-hash="095ccee8f235306eadac5aa7e1a99992" id="178" refid="178">
+<p>You can delete the old quiz pod and deploy this new version of the pod. You&#8217;ll see that the database gets populated every time you deploy the pod.</p>
+</div>
+<div class="readable-text" data-hash="9edea940b9c4acc42659ea7c42b32568" data-text-hash="6bf4b7d9238261da3a10a0a65e17cb20" id="179" refid="179">
+<h3 id="sigil_toc_id_118">7.2.3&#160;Sharing files between containers</h3>
+</div>
+<div class="readable-text" data-hash="48ad37fd6086aaca1c3988407ad1e557" data-text-hash="b1a96987363be410932a189b2b4df64e" id="180" refid="180">
+<p>As you saw in the previous section, an emptyDir volume can be initialized with an init container and then used by one of the pod&#8217;s main containers. But a volume can also be used by multiple main containers concurrently. The quiz-api and the mongo containers that are in the quiz pod don&#8217;t need to share files, so you&#8217;ll use a different example to learn how volumes are shared between containers.</p>
+</div>
+<div class="readable-text" data-hash="96a00c0ccc4cabae79202397a310a9e3" data-text-hash="e664f9ebb2bf275c789c546ba5eabbf7" id="181" refid="181">
+<p>Remember the quote pod from the previous chapter? The one that uses a post-start hook to run the <code>fortune</code> command. The command writes a quote from this book into a file that is then served by the Nginx web server. The quote pod currently serves the same quote throughout the lifetime of the pod. This isn&#8217;t that interesting. Let&#8217;s build a new version of the pod, where a new quote is served every 60 seconds.</p>
+</div>
+<div class="readable-text" data-hash="5879df2149e7c1444f7a04b13e47cf27" data-text-hash="685b7fc78eaecd0295db727b85ba3a72" id="182" refid="182">
+<p>You&#8217;ll retain Nginx as the web server but will replace the post-start hook with a container that periodically runs the <code>fortune</code> command to update the file where the quote is stored. Let&#8217;s call this container <code>quote-writer</code>. The Nginx server will continue to be in the <code>nginx</code> container.</p>
+</div>
+<div class="readable-text" data-hash="cfc22d2078a19bab5a83fec6cba32c3c" data-text-hash="e57403c0f4ca37c9edb85a8fdb0daada" id="183" refid="183">
+<p>As visualized in the following figure, the pod now has two containers instead of one. To allow the <code>nginx</code> container to see the file that the <code>quote-writer</code> creates, a volume must be defined in the pod and mounted into both containers.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="1d78b01d1158cdf664eb7a715c3fa770" data-text-hash="8271035363844a85d63497a92eca07fd" id="184" refid="184">
+<h5>Figure 7.13 The new version of the Quote service uses two containers and a shared volume</h5>
+<img alt="" data-processed="true" height="371" id="Picture_13" loading="lazy" src="EPUB/images/07image014.png" width="890">
+</div>
+<div class="readable-text" data-hash="cc35ab551cecdc055fd67aa1e9453fcf" data-text-hash="1cc2dd47d18580a61cf9d94acd4f08da" id="185" refid="185">
+<h4>Creating a pod with two containers and a shared volume</h4>
+</div>
+<div class="readable-text" data-hash="688f6aca6562d69386768e25dc43fd64" data-text-hash="4db5b7a498ba5c167e6166033a145a31" id="186" refid="186">
+<p>The image for the <code>quote-writer</code> container is available at <code>docker.io/luksa/quote-writer:0.1</code>, but you can also build it yourself from the files in the Chapter07/quote-writer-0.1 directory. The <code>nginx</code> container will continue to use the existing <code>nginx:alpine</code> image.</p>
+</div>
+<div class="readable-text" data-hash="4a5f0f0fdcf3a52f26711bb16eca81a8" data-text-hash="d9b1e99ad5dc92c6acd92666768b629f" id="187" refid="187">
+<p>The pod manifest for the new quote pod is shown in the next listing. You can find it in file <code>pod.quote.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="55331c5ea03faedd325c6e196d5c6348" data-text-hash="e54155d2689ded86e008d16a2b6c6eb8" id="188" refid="188">
+<h5>Listing 7.6 A pod with two containers that share a volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quote
+spec:
+  volumes:    #A
+  - name: shared    #A
+    emptyDir: {}    #A
+  containers:
+  - name: quote-writer    #B
+    image: luksa/quote-writer:0.1    #B
+    volumeMounts:    #C
+    - name: shared    #C
+      mountPath: /var/local/output    #C
+  - name: nginx    #D
+    image: nginx:alpine    #D
+    volumeMounts:    #E
+    - name: shared    #E
+      mountPath: /usr/share/nginx/html    #E
+      readOnly: true    #E
+    ports:
+    - name: http
+      containerPort: 80</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQW4gZW1wdHlEaXIgdm9sdW1lIHdpdGggdGhlIG5hbWUgc2hhcmVkIGlzIGRlZmluZWQuCiNCIFRoZSBxdW90ZS13cml0ZXIgY29udGFpbmVyIHdyaXRlcyB0aGUgcXVvdGUgdG8gYSBmaWxlLgojQyBUaGUgc2hhcmVkIHZvbHVtZSBpcyBtb3VudGVkIGludG8gdGhlIHF1b3RlLXdyaXRlciBjb250YWluZXIuCiNEIFRoZSBuZ2lueCBjb250YWluZXIgc2VydmVzIHRoZSBxdW90ZSBmaWxlLgojRSBUaGUgc2hhcmVkIHZvbHVtZSBpcyBtb3VudGVkIGludG8gdGhlIG5naW54IGNvbnRhaW5lci4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="53a2061caab474154f403e59927b5704" data-text-hash="2d888d805c984e797ff6be5e99d65454" id="189" refid="189">
+<p>The pod consists of two containers and a single volume, which is mounted in both containers, but at a different location in each container. The reason for this is that the <code>quote-writer</code> container writes the <code>quote</code> file to the <code>/var/local/output</code> directory, whereas the <code>nginx</code> container serves files from the <code>/usr/share/nginx/html</code> directory.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="190" refid="190">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="189f46d11031c99b27330acbf878c476" data-text-hash="2edcb14a1a568ea39b2e5fb8fc853fa0" id="191" refid="191">
+<p> Since the two containers start at the same time, there can be a short period where nginx is already running, but the quote hasn&#8217;t been generated yet. One way of making sure this doesn&#8217;t happen is to generate the initial quote using an init container, as explained in section 7.2.3.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="37ee3ebf86aada51f273b1cd92e4a670" data-text-hash="38b56f3443a187a39a298d62606752c3" id="192" refid="192">
+<h4>Running the pod</h4>
+</div>
+<div class="readable-text" data-hash="483ecf5546f4b7f459606068e1fe4341" data-text-hash="d4a2709b4511bcaa494a2d53fa81ba28" id="193" refid="193">
+<p>When you create the pod from the manifest, the two containers start and continue running until the pod is deleted. The <code>quote-writer</code> container writes a new quote to the file every 60 seconds, and the <code>nginx</code> container serves this file. After you create the pod, use the <code>kubectl</code> <code>port-forward</code> command to open a communication tunnel to the pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fc9afe03d6c57b2b8a7684a5d1d69269" data-text-hash="c1aadb426bd7b6281ecd8d29d5f40030" id="194" refid="194">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl port-forward quote 1080:80</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0c93193cc4edc594dd7cb14455f353be" data-text-hash="cafcbb287c82fc02203635cd76dfb7e0" id="195" refid="195">
+<p>In another terminal, verify that the server responds with a different quote every 60 seconds by running the following command several times:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="27d10ca7682a5324d32659f37e7f0aa9" data-text-hash="a914fe6c405247aaec88b4996ea1e13d" id="196" refid="196">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:1080/quote</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="dfe76fa8ac5a63d2748d610e6d583812" data-text-hash="7aa4b325a4ef42ebb925c956f2582371" id="197" refid="197">
+<p>Alternatively, you can also display the contents of the file using either of the following two commands:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1ebd76712415ecf3356e0b3f66c62aff" data-text-hash="a8d871ac3ad036be0a7ae247ef389eb2" id="198" refid="198">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec quote -c quote-writer -- cat /var/local/output/quote
+$ kubectl exec quote -c nginx -- cat /usr/share/nginx/html/quote</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9927e303161217786a30a0aa217a60f1" data-text-hash="fd3124dcf90fc5d38eb6c09318f890f8" id="199" refid="199">
+<p>As you can see, one of them prints the contents of the file from within the <code>quote-writer</code> container, whereas the other command prints the contents from within the <code>nginx</code> container. Because the two paths point to the same <code>quote</code> file on the shared volume, the output of the commands is identical.</p>
+</div>
+<div class="readable-text" data-hash="9caf8f95c50aeedcebff356dcbb257d0" data-text-hash="97b45e7a8d63b63837931a642f30e795" id="200" refid="200">
+<h2 id="sigil_toc_id_119">7.3&#160;Using external storage in pods</h2>
+</div>
+<div class="readable-text" data-hash="255d760dff6a2c553b477dbc7c169396" data-text-hash="e0fa720b57455dd4eb47231cc87cda27" id="201" refid="201">
+<p>An <code>emptyDir</code> volume is a dedicated directory created specifically for and used exclusively by the pod in which the volume is defined. When the pod is deleted, the volume and its contents are deleted. However, other types of volumes don&#8217;t create a new directory, but instead mount an existing external directory in the filesystem of the container. The contents of this volume can survive multiple instantiations of the same pod and can even be shared by multiple pods. These are the types of volumes we&#8217;ll explore next.</p>
+</div>
+<div class="readable-text" data-hash="9b56126bf398732dd31d46469f2ddebc" data-text-hash="bef285794d7cbe0b4826d9e9338e93c9" id="202" refid="202">
+<p>To learn how external storage is used in a pod, you&#8217;ll create a pod that runs the document-oriented database MongoDB. To ensure that the data stored in the database is persisted, you&#8217;ll add a volume to the pod and mount it in the container at the location where MongoDB writes its data files.</p>
+</div>
+<div class="readable-text" data-hash="540109532b772082695d769860948781" data-text-hash="d7d3da702c8f189a13a26467fa6bf330" id="203" refid="203">
+<p>The tricky part of this exercise is that the type of persistent volumes available in your cluster depends on the environment in which the cluster is running. At the beginning of this book, you learned that Kubernetes could reschedule a pod to another node at any time. To ensure that the quiz pod can still access its data, it should use network-attached storage instead of the worker node&#8217;s local drive.</p>
+</div>
+<div class="readable-text" data-hash="8d3e8e763a0beefdec2693398d3ac2ea" data-text-hash="4eb44711267f506482f434ae4a09a27d" id="204" refid="204">
+<p>Ideally, you should use a proper Kubernetes cluster, such as GKE, for the following exercises. Unfortunately, clusters provisioned with Minikube or kind don&#8217;t provide any kind of network storage volume out of the box. So, if you&#8217;re using either of these tools, you&#8217;ll need to resort to using node-local storage provided by the so-called <code>hostPath</code> volume type, but this volume type is not explained until section 7.4.</p>
+</div>
+<div class="readable-text" data-hash="ac73b2f745e9c5120ee72aab29f20a9e" data-text-hash="5ee16716d4f81c4f6f328bfc6986cc2a" id="205" refid="205">
+<h3 id="sigil_toc_id_120">7.3.1&#160;Using a Google Compute Engine Persistent Disk as a volume</h3>
+</div>
+<div class="readable-text" data-hash="b6e2b4166d46a342500ffc3c4b9b778b" data-text-hash="e4196e68b322ddd04fe5789534eaf7a2" id="206" refid="206">
+<p>If you use Google Kubernetes Engine to run the exercises in this book, your cluster nodes run on Google Compute Engine (GCE). In GCE, persistent storage is provided via GCE Persistent Disks. Kubernetes supports adding them to your pods via the <code>gcePersistentDisk</code> volume type.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="207" refid="207">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="39263a2b193db518af21824f99974a4b" data-text-hash="35908508b39dee92d3b00afe76c42782" id="208" refid="208">
+<p> To adapt this exercise for use with other cloud providers, use the appropriate volume type supported by the cloud provider. Consult the documentation provided by the cloud provider to determine how to create the storage volume and how to mount it into the pod.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6f9f70df00ad24345a0608e5978ae5c6" data-text-hash="1950a4643341d5bfce3451ae42d0b90a" id="209" refid="209">
+<h4>Creating a GCE Persistent Disk</h4>
+</div>
+<div class="readable-text" data-hash="c86f840382198609218de6a091de7582" data-text-hash="d059b02bdd762feacfa9d82616483225" id="210" refid="210">
+<p>Before you can use the GCE Persistent Disk volume in your pod, you must create the disk itself. It must reside in the same zone as your Kubernetes cluster. If you don&#8217;t remember in which zone you created the cluster, you can see it by listing your Kubernetes clusters using the <code>gcloud</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="438b142d71c716e0d44dee31106dac48" data-text-hash="792c95275aa2bb168bfb7330da5deea3" id="211" refid="211">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud container clusters list
+NAME    ZONE             MASTER_VERSION   MASTER_IP        ...
+kiada   europe-west3-c   1.14.10-gke.42   104.155.84.137   ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d856c1cd3eee634cf19f7497181ccfa3" data-text-hash="0ead50e51ff543da682075e1c91bb6b9" id="212" refid="212">
+<p>In my case, the command output indicates that the cluster is in zone <code>europe-west3-c</code>, so I have to create the GCE Persistent Disk there. Create the disk in the correct zone as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c458e1e6cda145411ed24e5494ab4cb7" data-text-hash="bfbd641eef1fb0ee3eeeb18a177a1903" id="213" refid="213">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud compute disks create --size=10GiB --zone=europe-west3-c quiz-data
+WARNING: You have selected a disk size of under [200GB]. This may result in poor I/O performance. 
+For more information, see: https://developers.google.com/compute/docs/disks#pdperformance.
+Created [https://www.googleapis.com/.../zones/europe-west3-c/disks/quiz-data].
+NAME       ZONE            SIZE_GB  TYPE         STATUS
+quiz-data  europe-west3-c  10       pd-standard  READY</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="019bfca0127dd7a50bc0e3acb1206fe3" data-text-hash="8669dd45d2db9413384336be4a8bdba8" id="214" refid="214">
+<p>This command creates a GCE Persistent Disk called <code>quiz-data</code> with 10GiB of space. You can freely ignore the disk size warning, because it doesn&#8217;t affect the exercises you&#8217;re about to run. You may also see an additional warning that the disk is not yet formatted. You can ignore that, too, because formatting is done automatically when you use the disk in your pod.</p>
+</div>
+<div class="readable-text" data-hash="5425f7351746bf44a707d3e06324f1d2" data-text-hash="90c71db0b0958d91ce72399581dfb92a" id="215" refid="215">
+<h4>Creating a pod with a gcePersistentDisk volume</h4>
+</div>
+<div class="readable-text" data-hash="a2f6b2125c9735d0a4066980ce9e2bb0" data-text-hash="dba4126cb182192b2a829f7976375f57" id="216" refid="216">
+<p>Now that you have set up your physical storage, you can use it in a volume inside your quiz pod. You&#8217;ll create the pod from the YAML in the following listing (file <code>pod.quiz.gcepd.yaml</code>). The highlighted lines are the only difference from the <code>pod.quiz.emptydir.yaml</code> file that you deployed in section 7.2.1.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3cd34f0dee169cbc5056a6cf301a35ad" data-text-hash="e5891e4e67680833d0fdf1d6c5b8a6d1" id="217" refid="217">
+<h5>Listing 7.7 Using a gcePersistentDisk volume in the quiz pod</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz
+spec:
+  volumes:
+  - name: quiz-data
+    gcePersistentDisk:    #A
+      pdName: quiz-data     #B
+      fsType: ext4     #C
+  containers:
+  - name: quiz-api
+    image: luksa/quiz-api:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+  - name: mongo
+    image: mongo
+    volumeMounts:
+    - name: quiz-data
+      mountPath: /data/db</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHZvbHVtZSBwb2ludHMgdG8gYSBHQ0UgUGVyc2lzdGVudCBEaXNrIHlvdSBjcmVhdGVkIGVhcmxpZXIuCiNCIFRoZSBuYW1lIG9mIHRoZSBHQ0UgUGVyc2lzdGVudCBEaXNrCiNDIFRoZSBmaWxlc3lzdGVtIHR5cGU="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="218" refid="218">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d3b573b0477cd4d9c6c53d981557ccc4" data-text-hash="695edc03f84d2e86644032834bec7236" id="219" refid="219">
+<p> If you created your cluster with Minikube or kind, you can&#8217;t use a GCE Persistent Disk. Use the file <code>pod.quiz.hostpath.yaml</code>, which uses a <code>hostPath</code> volume in place of the GCE PD. This type of volume uses node-local instead of network storage, so you must ensure that the pod is always deployed to the same node. This is always true in Minikube because it creates a single node cluster. However, if you&#8217;re using kind, create the pod from the file <code>pod.quiz.hostpath.kind.yaml</code> to ensure that the pod is always deployed to the same node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="4b209d5c727428fc668f141e0f96cabb" data-text-hash="85fd45304715bc36dff3c5bf5f99ac74" id="220" refid="220">
+<p>The pod is visualized in the following figure. It contains a single volume that refers to the GCE Persistent Disk you created earlier. The volume is mounted in the <code>mongo</code> container at <code>/data/db</code>. This ensures that MongoDB writes its files to the persistent disk.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="37feef2abeb94db654914322fc2e5261" data-text-hash="caa67c389f34ae7cafdf8348ff725674" id="221" refid="221">
+<h5>Figure 7.14 A GCE Persistent Disk referenced in a pod volume and mounted into the mongo container</h5>
+<img alt="" data-processed="true" height="234" id="Picture_14" loading="lazy" src="EPUB/images/07image015.png" width="708">
+</div>
+<div class="readable-text" data-hash="bb54e5ec8a38a432db3806f2623ae70a" data-text-hash="c10a27e7009ce8085fa8649a89bcabd0" id="222" refid="222">
+<h4>Verifying that the GCE Persistent Disk persists data</h4>
+</div>
+<div class="readable-text" data-hash="f37bfe406d7c22faa8c813f178c87c23" data-text-hash="0a443745dbf39ede11dc79dbce2990f3" id="223" refid="223">
+<p>Use the shell script in the file Chapter07/insert-question.sh to add a question to the MongoDB database. Confirm that the question is stored by using the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e39378f01b257411d42210bd54e6a46e" data-text-hash="f02b2b5ff23f5450dafb90930c228bd2" id="224" refid="224">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.count()"
+1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG51bWJlciBvZiBxdWVzdGlvbnMgaW4gdGhlIGRhdGFiYXNl"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2c7c86b1b1827b084ce0da6d93771320" data-text-hash="5f1342331947b89669f977b67a816142" id="225" refid="225">
+<p>Okay, the database has the data. MongoDB&#8217;s data files are stored in the <code>/data/db</code> directory, which is where you mounted the GCE Persistent Disk. Therefore, the data files should be stored on the GCE PD.</p>
+</div>
+<div class="readable-text" data-hash="d4359361839c1187375d43d67dc9f605" data-text-hash="4fe0365acb32e170726b7e2a23eb9f14" id="226" refid="226">
+<p>You can now safely delete the quiz pod and recreate it:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="af82e6eb2e0e626984742f21be075bef" data-text-hash="2dfdb7502cf28fdfdd1caa2dcbc9c3db" id="227" refid="227">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pod quiz
+pod "quiz" deleted
+$ kubectl apply -f pod.quiz.gcepd.yaml
+pod "quiz" created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="54b28586e84ffea9cc63b385d639cd1c" data-text-hash="c6040806400d3eee247aae25541402fb" id="228" refid="228">
+<p>Since the new pod is an exact replica of the previous, it points to the same GCE Persistent Disk as the previous pod did. The mongo container should see the files that it wrote earlier, even if the new pod is scheduled to another node.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="229" refid="229">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="ed6b764f11cfca6d1d3403f0383b1cad" data-text-hash="f67ff3909af8d1a3d0da1ceca444dcde" id="230" refid="230">
+<p> You can see what node a pod is scheduled to by running <code>kubectl</code> <code>get</code> <code>po</code> <code>-o</code> <code>wide</code>.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="231" refid="231">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="ae44cc1f68787365fa78aa77f7a0351f" data-text-hash="206dff2a5da541b0e86c3c1640b7b1c4" id="232" refid="232">
+<p> If you use a kind-provisioned cluster, the pod is always scheduled to the same node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="46e2aec8c3603c6fb90db023494eed48" data-text-hash="c1b2a9e0fd70a6d58ad937d985113540" id="233" refid="233">
+<p>After the pod starts, recheck the number of questions in the database:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5d0e98552f7b9baa58f4c47977282e1c" data-text-hash="f02b2b5ff23f5450dafb90930c228bd2" id="234" refid="234">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.count()"
+1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRhdGEgaXMgc3RpbGwgcHJlc2VudA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8e064d12132a9e16c664450ed2d81864" data-text-hash="917fb3c9b472cebb149108a47d39555c" id="235" refid="235">
+<p>As expected, the data still exists even though you deleted and recreated the pod. This confirms that you can use a GCE Persistent Disk to persist data across multiple instantiations of the same pod. To be perfectly precise, it isn&#8217;t the same pod. These are two pods whose volumes point to the same underlying persistent storage volume.</p>
+</div>
+<div class="readable-text" data-hash="2c42376742c4875843944a3b7b3a4eb1" data-text-hash="c146e2356a9911212b776b09b746b93a" id="236" refid="236">
+<p>You might wonder if you can use the same persistent disk in two or more pods at the same time. The answer to this question is not straightforward, because it requires the understanding of how external volumes are mounted in pods. I&#8217;ll explain this in section 7.3.3. Before I do that, I need to explain how use external storage when your cluster doesn&#8217;t run on Google&#8217;s infrastructure.</p>
+</div>
+<div class="readable-text" data-hash="d4c0a062a4033da89d501ba774242dfc" data-text-hash="46a97bdda51160000c021479efa5d426" id="237" refid="237">
+<h3 id="sigil_toc_id_121">7.3.2&#160;Using other persistent volume types</h3>
+</div>
+<div class="readable-text" data-hash="cc6bce579e305d6e48d0dda71cbc63c0" data-text-hash="4693b7a9da4a15213bfbe278927b37b8" id="238" refid="238">
+<p>In the previous exercise, I explained how to add persistent storage to a pod running in Google Kubernetes Engine. If you run your cluster elsewhere, you should use whatever volume type is supported by the underlying infrastructure.</p>
+</div>
+<div class="readable-text" data-hash="a2ea6a7fc10198249acf63aa1fd9c033" data-text-hash="ade8f4f11b7591edb3fc0a5d56b2b43d" id="239" refid="239">
+<p>For example, if your Kubernetes cluster runs on Amazon&#8217;s AWS EC2, you can use an <code>awsElasticBlockStore</code> volume. If your cluster runs on Microsoft Azure, you can use the <code>azureFile</code> or the <code>azureDisk</code> volume. I won&#8217;t go into detail about how to do this, but it&#8217;s practically the same as in the previous example. You first need to create the actual underlying storage and then set the right fields in the volume definition.</p>
+</div>
+<div class="readable-text" data-hash="5761d21ada58853ad03487c56300c135" data-text-hash="9d88c2b8e6972f8bcc9904feb89060f3" id="240" refid="240">
+<h4>Using an AWS Elastic Block Store volume</h4>
+</div>
+<div class="readable-text" data-hash="d0ce6a4001d00bd9178d3df455e014b4" data-text-hash="ff6e7466a9ddbe26666b74241bf98e44" id="241" refid="241">
+<p>For example, if you want to use an AWS Elastic Block Store volume instead of the GCE Persistent Disk, you only need to change the volume definition as shown in the following listing (file <code>pod.quiz.aws.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3869d7565e36aaefc77adc6bca85a3bb" data-text-hash="bb549919c1d3ac16844b893465c160bc" id="242" refid="242">
+<h5>Listing 7.8 Using an awsElasticBlockStore volume in the quiz pod</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz 
+spec:
+  volumes:                       
+  - name: quiz-data           
+    awsElasticBlockStore:    #A
+      volumeID: quiz-data    #B
+      fsType: ext4    #C
+  containers:
+  - ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB2b2x1bWUgcmVmZXJzIHRvIGFuIGF3c0VsYXN0aWNCbG9ja1N0b3JlLgojQiBUaGUgSUQgb2YgdGhlIEVCUyB2b2x1bWUKI0MgVGhlIGZpbGVzeXN0ZW0gdHlwZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6cd9d06145d486a50ae191ebfea6a022" data-text-hash="8f2966cdaaf0d5feb2c0b3219435ae6a" id="243" refid="243">
+<h4>Using an NFS volume</h4>
+</div>
+<div class="readable-text" data-hash="3a94d79b142686f4af16982f8cea1234" data-text-hash="4f6b023791bc7ebdaf00cda1bbceae05" id="244" refid="244">
+<p>If your cluster runs on your own servers, you have a range of other supported options for adding external storage to your pods. For example, to mount an NFS share, you specify the NFS server address and the exported path, as shown in the following listing (file <code>pod.quiz.nfs.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="15fe3ae3cde8bfd1fe8055e79aedebeb" data-text-hash="0cf9b3b365cd8dab747272e540fe6b7a" id="245" refid="245">
+<h5>Listing 7.9 Using an nfs volume in the quiz pod</h5>
+<div class="code-area-container">
+<pre class="code-area">...
+  volumes:                       
+  - name: quiz-data           
+    nfs:    #A
+      server: 1.2.3.4    #B
+      path: /some/path    #C
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyB2b2x1bWUgcmVmZXJzIHRvIGFuIE5GUyBzaGFyZS4KI0IgSVAgYWRkcmVzcyBvZiB0aGUgTkZTIHNlcnZlcgojQyBGaWxlIHBhdGggZXhwb3J0ZWQgYnkgdGhlIHNlcnZlcg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="246" refid="246">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="3d212df13a280903bfc5c751d7dd0aa9" data-text-hash="90a1af2c5c8b46d3cc482a8737acbf7b" id="247" refid="247">
+<p> Although Kubernetes supports nfs volumes, the operating system running on the worker nodes provisioned by Minikube or kind might not support mounting nfs volumes.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="92e92e4061c88e8a58df96d41b7966d5" data-text-hash="6fe4a084bad90231ba9c87cc78e6450e" id="248" refid="248">
+<h4>Using other storage technologies</h4>
+</div>
+<div class="readable-text" data-hash="cd340d69b96208ca9da0ca0effa8a9e3" data-text-hash="7a7f80a9afb300f38fea79587f280294" id="249" refid="249">
+<p>Other supported options are <code>iscsi</code> for mounting an iSCSI disk resource, <code>glusterfs</code> for a GlusterFS mount, <code>rbd</code> for a RADOS Block Device, <code>flexVolume</code>, <code>cinder</code>, <code>cephfs</code>, <code>flocker</code>, <code>fc</code> (Fibre Channel), and others. You don&#8217;t need to understand all these technologies. They&#8217;re mentioned here to show you that Kubernetes supports a wide range of these technologies, and you can use the technologies that are available in your environment or that you prefer.</p>
+</div>
+<div class="readable-text" data-hash="187a70d9133ede4d7eb1e40cf6d90f1f" data-text-hash="095d519367050601875c41498af6ca90" id="250" refid="250">
+<p>For details on the properties that you need to set for each of these volume types, you can either refer to the Kubernetes API definitions in the Kubernetes API reference or look up the information by running <code>kubectl</code> <code>explain pod.spec.volumes</code>. If you&#8217;re already familiar with a particular storage technology, you should be able to use the <code>explain</code> command to easily find out how to configure the correct volume type (for example, for iSCSI you can see the configuration options by running <code>kubectl explain pod.spec.volumes.iscsi</code>).</p>
+</div>
+<div class="readable-text" data-hash="9248e5686acd740af9f6cc19d23be465" data-text-hash="a8518e116ec447288ecf3969e83058e7" id="251" refid="251">
+<h4>Why does Kubernetes force software developers to understand low-level storage?</h4>
+</div>
+<div class="readable-text" data-hash="f1500437e652dccdd2c47a503ffc65ad" data-text-hash="bab5d87fffd128b640a07f97ef49d15d" id="252" refid="252">
+<p>If you&#8217;re a software developer and not a system administrator, you might wonder if you really need to know all this low-level information about storage volumes? As a developer, should you have to deal with infrastructure-related storage details when writing the pod definition, or should this be left to the cluster administrator?</p>
+</div>
+<div class="readable-text" data-hash="ef50e11f84394fd0b2004e958e65d40b" data-text-hash="517e49db72b0d744846df9d0a2104e8d" id="253" refid="253">
+<p>At the beginning of this book, I explained that Kubernetes abstracts away the underlying infrastructure. The configuration of storage volumes explained earlier clearly contradicts this. Furthermore, including infrastructure-related information, such as the NFS server hostname directly in a pod manifest means that this manifest is tied to this specific Kubernetes cluster. You can&#8217;t use the same manifest without modification to deploy the pod in another cluster.</p>
+</div>
+<div class="readable-text" data-hash="12f44d2fcc6445bceace12a21f1870d0" data-text-hash="570f804f6d74fb9e728bd7365cec4053" id="254" refid="254">
+<p>Fortunately, Kubernetes offers another way to add external storage to your pods. One that divides the responsibility for configuring and using the external storage volume into two parts. The low-level part is managed by cluster administrators, while software developers only specify the high-level storage requirements for their applications. Kubernetes then connects the two parts.</p>
+</div>
+<div class="readable-text" data-hash="9c22ddc4e9377f2542696f8d8f44d6f8" data-text-hash="fc13feb495a9369bb92eb16eb4c4bce0" id="255" refid="255">
+<p>You&#8217;ll learn about this in the next chapter, but first you need a basic understanding of pod volumes. You&#8217;ve already learned most of it, but I still need to explain some details.</p>
+</div>
+<div class="readable-text" data-hash="674bbb19b3be44e9e4043c32c5a6b110" data-text-hash="2c4455f4a1271065271402dd0a26b202" id="256" refid="256">
+<h3 id="sigil_toc_id_122">7.3.3&#160;Understanding how external volumes are mounted</h3>
+</div>
+<div class="readable-text" data-hash="23c9b3d4e15695e00c252301906e6f32" data-text-hash="883bbed55f6c07d149bdaf19d3a9ad05" id="257" refid="257">
+<p>To understand the limitations of using external volumes in your pods, whether a pod references the volume directly or indirectly, as explained in the next chapter, you must be aware of the caveats associated with the way network storage volumes are actually attached to the pods.</p>
+</div>
+<div class="readable-text" data-hash="76e32e7419eadabb49397aaaf8073990" data-text-hash="3a0963de600aad6dd525696ea5df4c34" id="258" refid="258">
+<p>Let&#8217;s return to the issue of using the same network storage volume in multiple pods at the same time. What happens if you create a second pod and point it to the same GCE Persistent Disk?</p>
+</div>
+<div class="readable-text" data-hash="73bc955a20df83fb7020092f6a866201" data-text-hash="dc8131d6e2c655ee4eaf2089a1b26c8d" id="259" refid="259">
+<p>I&#8217;ve prepared a manifest for a second MongoDB pod that uses the same GCE Persistent Disk. The manifest can be found in the file <code>pod.quiz2.gcepd.yaml</code>. If you use it to create the second pod, you&#8217;ll notice that it never runs. It never gets past the <code>ContainerCreating</code> status:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a302843328746205333446a09418b6c0" data-text-hash="c647b381cf9f61f22c055cd86bb2f6a3" id="260" refid="260">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po
+NAME       READY   STATUS              RESTARTS   AGE
+quiz       2/2     Running             0          10m
+quiz2      0/2     ContainerCreating   0          2m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="261" refid="261">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="aaac6519610ae9e0ee6548100146d40a" data-text-hash="c443d82d3bc6eefbd8db0d71011c7210" id="262" refid="262">
+<p> If your GKE cluster has a single worker node and the pod&#8217;s status is <code>Pending</code>, the reason could be that there isn&#8217;t enough unallocated CPU for the pod to fit on the node. Resize the cluster to at least two nodes with the command <code>gcloud container clusters resize &lt;cluster-name&gt; --size &lt;number-of-nodes&gt;</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="8ec7844fcf9c1044060e53a8a9744b0a" data-text-hash="27d85771437831df1ceb8cd23b699aa4" id="263" refid="263">
+<p>You can see why this is the case with the <code>kubectl describe pod quiz2</code> command. At the very bottom, you see a <code>FailedAttachVolume</code> event generated by the <code>attachdetach-controller</code>. The event has the following message:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c1a1a58d6a862faf3f741fefec4d15ca" data-text-hash="cd3703fa8df4a9962f7ec32b2b8178a1" id="264" refid="264">
+<div class="code-area-container">
+<pre class="code-area">AttachVolume.Attach failed for volume "quiz-data" : googleapi: Error 400: 
+RESOURCE_IN_USE_BY_ANOTHER_RESOURCE -    #A
+The disk resource    
+'projects/kiada/zones/europe-west3-c/disks/quiz-data' is already being used by 
+'projects/kiada/zones/europe-west3-c/instances/gke-kiada-default-pool-xyz-1b27'    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEdDRSBQZXJzaXN0ZW50IERpc2sgaXMgYWxyZWFkeSBiZWluZyB1c2VkIGJ5IGFub3RoZXIgbm9kZS4KI0IgVGhlIHdvcmtlciBub2RlIHRoYXQgdGhlIEdDRSBQRCBpcyBhdHRhY2hlZCB0bw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e0ccd0f493e66ec45c041dbfb14d9913" data-text-hash="81c6d2bc5a3662e7133fced6c9c9fe64" id="265" refid="265">
+<p>The message indicates that the node hosting the <code>quiz2</code> pod can&#8217;t attach the external volume because it&#8217;s already in use by another node. If you check where the two pods are scheduled, you&#8217;ll see that they are not on the same node:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8208dbcde05fe0ba44a05e05008b5a3f" data-text-hash="f1fdcbe0b5a6cf3b8905764557d12707" id="266" refid="266">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -o wide
+NAME    READY   STATUS            ... NODE
+quiz    2/2     Running           ... gke-kiada-default-pool-xyz-1b27
+quiz2   0/2     ContainerCreating ... gke-kiada-default-pool-xyz-gqbj</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1e691b24ebd943ba403e39c9cfe27995" data-text-hash="fe790d8e8a6f6aef44866bf12ec97d67" id="267" refid="267">
+<p>The <code>quiz</code> pod runs on node <code>xyz-1b27</code>, whereas <code>quiz2</code> is on node <code>xyz-gqbj</code>. As is typically the case in cloud environments, you can&#8217;t mount the same GCE Persistent Disk on multiple hosts simultaneously in read/write mode. You can only mount it on multiple hosts if you use the read-only mode.</p>
+</div>
+<div class="readable-text" data-hash="96a3dc9717f4f779a3e79a4293cc595c" data-text-hash="bd58a86d336c510a42753c80e84c92dd" id="268" refid="268">
+<p>Interestingly, the error message doesn&#8217;t say that the disk is being used by the <code>quiz</code> pod, but by the node hosting the pod. This is an often overlooked detail about how external volumes are mounted into pods.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="269" refid="269">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="691603b08901594427edb01174048f91" data-text-hash="987cf99b63279213e0bb01ecdc2e3bd9" id="270" refid="270">
+<p> Use the following command to see which network volumes that are attached to a node: <code>kubectl get node &lt;node-name&gt; -o json | jq .status.volumesAttached</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5a228db4c9b4d1acbaa5a154bf03e6d5" data-text-hash="eeed24fc7597c61d2b1a16082b4ffefc" id="271" refid="271">
+<p>As the following figure shows, a network volume is mounted by the host node, and then the pod is given access to the mount point. The underlying storage technology may not allow a volume to be attached to more than one node at a time in read/write mode, but multiple pods on the same node <i>can</i> all use the volume in read/write mode.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="6e86fc537656c8b8857e53a6d293d239" data-text-hash="28d7deb95800e3b3df671f47921531e7" id="272" refid="272">
+<h5>Figure 7.15 Network volumes are mounted by the host node and then exposed in pods</h5>
+<img alt="" data-processed="true" height="327" id="Picture_15" loading="lazy" src="EPUB/images/07image016.png" width="840">
+</div>
+<div class="readable-text" data-hash="4d0938a6afa27e54c47350b442dee707" data-text-hash="22c579fdce18638bccfd652183b8bb29" id="273" refid="273">
+<p>For most storage technologies available in the cloud, you can typically use the same network volume on multiple nodes simultaneously if you mount them in read-only mode. For example, pods scheduled to different nodes can use the same GCE Persistent Disk if it is mounted in read-only mode, as shown in the next listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b33f734575ae497b9183a43b98f38d24" data-text-hash="e9270cd7f72c1e729e8256a760fc13f9" id="274" refid="274">
+<h5>Listing 7.10 Mounting a GCE Persistent Disk in read-only mode</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: Pod
+spec:
+  volumes:
+  - name: my-volume
+    gcePersistentDisk:
+      pdName: my-volume
+      fsType: ext4 
+      readOnly: true     #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBHQ0UgUGVyc2lzdGVudCBEaXNrIGlzIG1vdW50ZWQgaW4gcmVhZC1vbmx5IG1vZGU="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="403473040b1e3e699aec6e4d648c2434" data-text-hash="b61952dff774d3aae20257a83ad1e099" id="275" refid="275">
+<p>It is important to consider this network storage limitation when designing the architecture of your distributed application. Replicas of the same pod typically can&#8217;t use the same network volume in read/write mode. Fortunately, Kubernetes takes care of this, too. In chapter 13, you&#8217;ll learn how to deploy stateful applications, where each pod instance gets its own network storage volume.</p>
+</div>
+<div class="readable-text" data-hash="068e699ca6d7528b4bf3d9671737caa6" data-text-hash="c82b1260f9b92ea56479f18fe29d3c27" id="276" refid="276">
+<p>You&#8217;re now done playing with these two quiz pods, so you can delete them. But don&#8217;t delete the underlying GCE Persistent Disk yet. You&#8217;ll use it again in the next chapter.</p>
+</div>
+<div class="readable-text" data-hash="a1e6cd1f4e8df3a7cb303ea0250686b4" data-text-hash="349caa9025aabdc9bbca17824830c6e9" id="277" refid="277">
+<h2 id="sigil_toc_id_123">7.4&#160;Accessing files on the worker node&#8217;s filesystem</h2>
+</div>
+<div class="readable-text" data-hash="83fdecebc5eb5157cbfedb0107f75e17" data-text-hash="9c4444b731387b5ec7bf5be087099d68" id="278" refid="278">
+<p>Most pods shouldn&#8217;t care which host node they are running on, and they shouldn&#8217;t access any files on the node&#8217;s filesystem. System-level pods are the exception. They may need to read the node&#8217;s files or use the node&#8217;s filesystem to access the node&#8217;s devices or other components via the filesystem. Kubernetes makes this possible through the <code>hostPath</code> volume type. I already mentioned it in the previous section, but this is where you&#8217;ll learn when to actually use it.</p>
+</div>
+<div class="readable-text" data-hash="69c57365eed529e9cc992f7b52c507a4" data-text-hash="bbfc8ae2c717a839c708efaa33c69eff" id="279" refid="279">
+<h3 id="sigil_toc_id_124">7.4.1&#160;Introducing the hostPath volume</h3>
+</div>
+<div class="readable-text" data-hash="9298e6c3dc04841e1af31fec946ed4a4" data-text-hash="ff067026052376534468412d341ba520" id="280" refid="280">
+<p>A <code>hostPath</code> volume points to a specific file or directory in the filesystem of the host node, as shown in the next figure. Pods running on the same node and using the same path in their <code>hostPath</code> volume have access to the same files, whereas pods on other nodes do not.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="09dd75bac8feff7141cdd86771115e0f" data-text-hash="c1abfd135b8e7349063d005ddcd22e33" id="281" refid="281">
+<h5>Figure 7.16 A <code>hostPath</code> volume mounts a file or directory from the worker node&#8217;s filesystem into the container.</h5>
+<img alt="" data-processed="true" height="316" id="Picture_16" loading="lazy" src="EPUB/images/07image017.png" width="865">
+</div>
+<div class="readable-text" data-hash="d74574b4e316ee78d5db74d9bc2dac8a" data-text-hash="017e45412751fa0984e02eab4847fe60" id="282" refid="282">
+<p>A <code>hostPath</code> volume is not a good place to store the data of a database unless you ensure that the pod running the database always runs on the same node. Because the contents of the volume are stored on the filesystem of a specific node, the database pod will not be able to access the data if it gets rescheduled to another node.</p>
+</div>
+<div class="readable-text" data-hash="e284dd1f112b5c74d80dba16609a8fba" data-text-hash="b1c1cf4c029d55f56f0638ec3aa13e7d" id="283" refid="283">
+<p>Typically, a <code>hostPath</code> volume is used in cases where the pod needs to read or write files in the node&#8217;s filesystem that the processes running on the node read or generate, such as system-level logs.</p>
+</div>
+<div class="readable-text" data-hash="371eb66b14d57f8d6f510b0b0a4133a8" data-text-hash="d05fce674a1262cee287af4c0da2aac7" id="284" refid="284">
+<p>The <code>hostPath</code> volume type is one of the most dangerous volume types in Kubernetes and is usually reserved for use in privileged pods only. If you allow unrestricted use of the <code>hostPath</code> volume, users of the cluster can do anything they want on the node. For example, they can use it to mount the Docker socket file (typically <code>/var/run/docker.sock</code>) in their container and then run the Docker client within the container to run any command on the host node as the root user. You&#8217;ll learn how to prevent this in chapter 24.</p>
+</div>
+<div class="readable-text" data-hash="6ca958a9c156dd8dfeec6ccac31fba37" data-text-hash="a368bdc0b106c4158554baaccf1da9c1" id="285" refid="285">
+<h3 id="sigil_toc_id_125">7.4.2&#160;Using a hostPath volume</h3>
+</div>
+<div class="readable-text" data-hash="f5fc0a179310a753a2a7f2648abc9c07" data-text-hash="fd978fa015803305da6cbf4a15c42962" id="286" refid="286">
+<p>To demonstrate how dangerous <code>hostPath</code> volumes are, let&#8217;s deploy a pod that allows you to explore the entire filesystem of the host node from within the pod. The pod manifest is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="53317e278df97e007d5d4dac898c3cce" data-text-hash="c515fe48b7501f0aa915075365af55b8" id="287" refid="287">
+<h5>Listing 7.11 Using a hostPath volume to gain access to the host node&#8217;s filesystem</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: node-explorer
+spec:
+  volumes:
+  - name: host-root                      #A
+    hostPath:                            #A
+      path: /                            #A
+  containers:
+  - name: node-explorer
+    image: alpine
+    command: ["sleep", "9999999999"]
+    volumeMounts:                        #B
+    - name: host-root                    #B
+      mountPath: /host                   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGhvc3RQYXRoIHZvbHVtZSBwb2ludHMgdG8gdGhlIHJvb3QgZGlyZWN0b3J5IG9uIHRoZSBub2Rl4oCZcyBmaWxlc3lzdGVtLgojQiBUaGUgdm9sdW1lIGlzIG1vdW50ZWQgaW4gdGhlIGNvbnRhaW5lciBhdCAvaG9zdC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e1855f84a007335b2792cbf6517b0bb3" data-text-hash="b9d0a85b3031c0992772ba7974d84102" id="288" refid="288">
+<p>As you can see in the listing, a <code>hostPath</code> volume must specify the <code>path</code> on the host that it wants to mount. The volume in the listing will point to the root directory on the node&#8217;s filesystem, providing access to the entire filesystem of the node the pod is scheduled to.</p>
+</div>
+<div class="readable-text" data-hash="a6a2655ebe4b684bbaeb7c63ddae7e44" data-text-hash="11d0b4e9f7ea0dd2cb3ded0b55aca97e" id="289" refid="289">
+<p>After creating the pod from this manifest using <code>kubectl apply</code>, run a shell in the pod with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f2f4ef484445f07f0ff2d1306ab5e52a" data-text-hash="96b57525203497d5280c67cb223a2258" id="290" refid="290">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it node-explorer -- sh</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5e37e442dcbc8d2205cb8be33b7769ca" data-text-hash="5e9b42aff51acce72ccc1308b06e9f42" id="291" refid="291">
+<p>You can now navigate to the root directory of the node&#8217;s filesystem by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="71cc70446add69325ca80b82d6503f23" data-text-hash="b49d743fcf1d49e439b81df152847a33" id="292" refid="292">
+<div class="code-area-container">
+<pre class="code-area">/ # cd /host</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="98f31625f134f0a3201d4420a11c4a5b" data-text-hash="f0fa1431f66e1327dce7072f587fba61" id="293" refid="293">
+<p>From here, you can explore the files on the host node. Since the container and the shell command are running as root, you can modify any file on the worker node. Be careful not to break anything.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="294" refid="294">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f8ea73c20486c4a3d9f56864a17d75f4" data-text-hash="d89f82d155b78d53f972a18f365eff4c" id="295" refid="295">
+<p> If your cluster has more than one worker node, the pod runs on a randomly selected one. If you&#8217;d like to deploy the pod on a specific node, edit the file <code>node-explorer.specific-node.pod.yaml</code>, which you&#8217;ll find in the book&#8217;s code archive, and set the <code>.spec.nodeName</code> field to the name of the node you&#8217;d like to run the pod on. You&#8217;ll learn about scheduling pods to a specific node or a set of nodes in later chapters.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="33153eb94aa2a16a7ef5101bd7a7e0da" data-text-hash="60aea714157f9b4823ffba46e70786ae" id="296" refid="296">
+<p>Now imagine you&#8217;re an attacker that has gained access to the Kubernetes API and are able to deploy this type of pod in a production cluster. Unfortunately, at the time of writing, Kubernetes doesn&#8217;t prevent regular users from using <code>hostPath</code> volumes in their pods and is therefore totally unsecure. As already mentioned, you&#8217;ll learn how to secure the cluster from this type of attack in chapter 24.</p>
+</div>
+<div class="readable-text" data-hash="7d03c62aca802a98c2e49b25f724141f" data-text-hash="462e62277de08a99f577eea4f90cdc41" id="297" refid="297">
+<h4>Specifying the type for a hostPath volume</h4>
+</div>
+<div class="readable-text" data-hash="0a90d17dd7a76d174b4a88797a6817f6" data-text-hash="0f1d4f4ac623d790170bd3f0ae739fb0" id="298" refid="298">
+<p>In the previous example, you only specified the path for the <code>hostPath</code> volume, but you can also specify the <code>type</code> to ensure that the path represents what the process in the container expects (a file, a directory, or something else).</p>
+</div>
+<div class="readable-text" data-hash="562694f563f51e9511411a6b023c6bbc" data-text-hash="281f360beeeb5b138da4f72128e48a5c" id="299" refid="299">
+<p>The following table explains the supported <code>hostPath</code> types:</p>
+</div>
+<div class="browsable-container" data-hash="74f164045b2236d41b8952885c2118ae" data-text-hash="758223b985350c5e1e6023aaede791ea" id="300" refid="300">
+<h5>Table 7.3 Supported hostPath volume types</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Type</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>&lt;empty&gt;
+</pre> </td>
+<td> <p>Kubernetes performs no checks before it mounts the volume.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Directory
+</pre> </td>
+<td> <p>Kubernetes checks if a directory exists at the specified path. You use this type if you want to mount a pre-existing directory into the pod and want to prevent the pod from running if the directory doesn&#8217;t exist.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>DirectoryOrCreate
+</pre> </td>
+<td> <p>Same as <code>Directory</code>, but if nothing exists at the specified path, an empty directory is created.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>File
+</pre> </td>
+<td> <p>The specified path must be a file.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>FileOrCreate
+</pre> </td>
+<td> <p>Same as <code>File</code>, but if nothing exists at the specified path, an empty file is created.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>BlockDevice
+</pre> </td>
+<td> <p>The specified path must be a block device.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>CharDevice
+</pre> </td>
+<td> <p>The specified path must be a character device.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Socket
+</pre> </td>
+<td> <p>The specified path must be a UNIX socket.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="e459872f71ff93c8b0bdd409cb4a79bc" data-text-hash="45b9c7d9f24bbd42df6548bd9123be97" id="301" refid="301">
+<p>If the specified path doesn&#8217;t match the type, the pod&#8217;s containers don&#8217;t run. The pod&#8217;s events explain why the hostPath type check failed.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="302" refid="302">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="1002407bed04fd453ce789fd0abff249" data-text-hash="4f26d3c10b34eef30938081f1e2dc792" id="303" refid="303">
+<p> When the type is <code>FileOrCreate</code> or <code>DirectoryOrCreate</code> and Kubernetes needs to create the file/directory, its file permissions are set to <code>644</code> (<code>rw-r--r--</code>) and <code>755</code> (<code>rwxr-xr-x</code>), respectively. In either case, the file/directory is owned by the user and group used to run the Kubelet.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="a48bef8fecb53b3fa31dfa39d2e34eab" data-text-hash="5cbdef227e4144064e51fae3a0f1d775" id="304" refid="304">
+<h2 id="sigil_toc_id_126">7.5&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="6c22e5f6768e34d0f97727ed1910c6e0" data-text-hash="b75e47a39a72947daad16a0b8037c81a" id="305" refid="305">
+<p>This chapter has explained the basics of adding volumes to pods, but this was only the beginning. You&#8217;ll learn more about this topic in the next chapter. So far, you&#8217;ve learned the following:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="bbf721b69273c085055a10e5ec78a99b" data-text-hash="bbf721b69273c085055a10e5ec78a99b" id="306" refid="306">Pods consist of containers and volumes. Each volume can be mounted at the desired location in the container&#8217;s filesystem.</li>
+<li class="readable-text" data-hash="86c2f9104d3dacaa1b2347818fa9c63b" data-text-hash="86c2f9104d3dacaa1b2347818fa9c63b" id="307" refid="307">Volumes are used to persist data across container restarts, share data between the containers in the pod, and even share data between the pods.</li>
+<li class="readable-text" data-hash="75ecc40ec9f01308586ce4cff83e63c3" data-text-hash="d57f685df391f5b8fd228ac197398d50" id="308" refid="308">Many volume types exist. Some are generic and can be used in any cluster regardless of the cluster environment, while others, such as the <code>gcePersistentDisk</code>, can only be used if the cluster runs on a specific cloud provider&#8217;s infrastructure.</li>
+<li class="readable-text" data-hash="79a259e57fa73cb7bfcb11b3460bfdfb" data-text-hash="15cc65d1cb45f1d5de28ea95cc8b9d33" id="309" refid="309">An <code>emptyDir</code> volume is used to store data for the duration of the pod. It starts as an empty directory just before the pod&#8217;s containers are started and is deleted when the pod terminates.</li>
+<li class="readable-text" data-hash="d9c29ff5cc732bc5a859590133ad24b1" data-text-hash="1d755c680404103c01a35efc97c43bbf" id="310" refid="310">The <code>gitRepo</code> volume is a deprecated volume type that is initialized by cloning a Git repository. Alternatively, an <code>emptyDir</code> volume can be used in combination with an init container that initializes the volume from Git or any other source.</li>
+<li class="readable-text" data-hash="16b24e102c66873b10e26c383b5824b1" data-text-hash="16b24e102c66873b10e26c383b5824b1" id="311" refid="311">Network volumes are typically mounted by the host node and then exposed to the pod(s) on that node.</li>
+<li class="readable-text" data-hash="22890138c4cfff6448d0db10d07cacf9" data-text-hash="22890138c4cfff6448d0db10d07cacf9" id="312" refid="312">Depending on the underlying storage technology, you may or may not be able to mount a network storage volume in read/write mode on multiple nodes simultaneously.</li>
+<li class="readable-text" data-hash="0e44bed8b0f7cca9259d97a6d47b2a11" data-text-hash="0e44bed8b0f7cca9259d97a6d47b2a11" id="313" refid="313">By using a proprietary volume type in a pod manifest, the pod manifest is tied to a specific Kubernetes cluster. The manifest must be modified before it can be used in another cluster. Chapter 8 explains how to avoid this issue.</li>
+<li class="readable-text" data-hash="15e6fd5a4b1e3da4f4c2e0601bbf9a02" data-text-hash="b35e7fd70cbdf60cc15e1ecbcdd695b8" id="314" refid="314">The <code>hostPath</code> volume allows a pod to access any path in filesystem of the worker node. This volume type is dangerous because it allows users to make changes to the configuration of the worker node and run any process they want on the node.</li>
+</ul>
+<div class="readable-text" data-hash="f690f2a0b4ee5e29865d3c81babf8a32" data-text-hash="165aab91bf0e06736ab107a1798a8034" id="315" refid="315">
+<p>In the next chapter, you&#8217;ll learn how to abstract the underlying storage technology away from the pod manifest and make the manifest portable to any other Kubernetes cluster.</p>
+</div></div>
+
+        </body>
+        
+        

@@ -1,0 +1,1927 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="f91a096c8f5357f25766af74d47b3745" data-text-hash="dce33c8f5fdeca1e1c4d05536cdaa080" id="1" refid="1">
+<h1>8 Persisting data in PersistentVolumes</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="ee864b267a1bd5dbde6b59a9bbe226e7" data-text-hash="ee864b267a1bd5dbde6b59a9bbe226e7" id="2" refid="2">Using PersistentVolume objects to represent persistent storage</li>
+<li class="readable-text" data-hash="574a8dfde1b35f57b0c522940904b8c3" data-text-hash="574a8dfde1b35f57b0c522940904b8c3" id="3" refid="3">Claiming persistent volumes with PersistentVolumeClaim objects</li>
+<li class="readable-text" data-hash="f8027a4b3734efcc646d7b9f5c4b3bff" data-text-hash="f8027a4b3734efcc646d7b9f5c4b3bff" id="4" refid="4">Dynamic provisioning of persistent volumes</li>
+<li class="readable-text" data-hash="bd3a8d8c9b8858851bb5f7cf13cb63d6" data-text-hash="bd3a8d8c9b8858851bb5f7cf13cb63d6" id="5" refid="5">Using node-local persistent storage</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="0e2c52aa6fce9360e353270958f96974" data-text-hash="b7a606c59394bd844b0e32362287642b" id="6" refid="6">
+<p>The previous chapter taught you how to mount a network storage volume into your pods. However, the experience was not ideal because you needed to understand the environment your cluster was running in to know what type of volume to add to your pod. For example, if your cluster runs on Google&#8217;s infrastructure, you must define a <code>gcePersistentDisk</code> volume in your pod manifest. You can&#8217;t use the same manifest to run your application on Amazon because GCE Persistent Disks aren&#8217;t supported in their environment. To make the manifest compatible with Amazon, one must modify the volume definition in the manifest before deploying the pod.</p>
+</div>
+<div class="readable-text" data-hash="810f15503a849230ad2406bdc8628a44" data-text-hash="9dd5bd318baa7ff9205a28d08ca81655" id="7" refid="7">
+<p>You may remember from chapter 1 that Kubernetes is supposed to standardize application deployment between cloud providers. Using proprietary storage volume types in pod manifests goes against this premise.</p>
+</div>
+<div class="readable-text" data-hash="f99d1f9f2531f70453928218175e4c29" data-text-hash="8ca50977427ed3c90b3b15a61e5ca858" id="8" refid="8">
+<p>Fortunately, there is a better way to add persistent storage to your pods. One where you don&#8217;t refer to a specific storage technology within the pod. This chapter explains this improved approach.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="9" refid="9">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4265990f0bb8c27ffc36c2f7c66e678b" data-text-hash="ff1474cfee34ddd004a7758ad9eab299" id="10" refid="10">
+<p> You&#8217;ll find the code files for this chapter at <a href="master.html"><span>https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter08</span></a></p>
+</div>
+</div>
+<div class="readable-text" data-hash="bbe0939971a416f9df7a4b11c4cfe67c" data-text-hash="f47791d8aece99b2d4164120cf16b74b" id="11" refid="11">
+<h2 id="sigil_toc_id_127">8.1&#160;Decoupling pods from the underlying storage technology</h2>
+</div>
+<div class="readable-text" data-hash="8399e35a1c2790029e00c61fb39b722f" data-text-hash="7e1ba94ecb0cea8849d2897b734ca41c" id="12" refid="12">
+<p>Ideally, a developer who deploys their applications on Kubernetes shouldn&#8217;t need to know what storage technology the cluster provides, just as they don&#8217;t need to know the characteristics of the physical servers used to run the pods. Details of the infrastructure should be handled by the people who run the cluster.</p>
+</div>
+<div class="readable-text" data-hash="3559c5cbec967cd39d86f7d8d9eba2f0" data-text-hash="c05c930d7e9bbb720e6293241f17e16a" id="13" refid="13">
+<p>For this reason, when you deploy an application to Kubernetes, you typically don&#8217;t refer directly to the external storage in the pod manifest, as you did in the previous chapter. Instead, you use an indirect approach that is explained in the following section.</p>
+</div>
+<div class="readable-text" data-hash="486d205444ecef88d2033b74fc58b4f5" data-text-hash="78b9d71067df9492cd6d9fae43da30d5" id="14" refid="14">
+<p>One of the examples in the previous chapter shows how to use an NFS file share in a pod. The volume definition in the pod manifest contains the IP address of the NFS server and the file path exported by that server. This ties the pod definition to a specific cluster and prevents it from being used elsewhere.</p>
+</div>
+<div class="readable-text" data-hash="f8f7353aa71b10a2a6329360a02de3a0" data-text-hash="bf0c7ff64a070522d1e1a41ee1bfc897" id="15" refid="15">
+<p>As illustrated in the following figure, if you were to deploy this pod to a different cluster, you would typically need to change at least the NFS server IP. This means that the pod definition isn&#8217;t portable across clusters. It must be modified each time you deploy it in a new Kubernetes cluster.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="0e909433f8ec1d414e653d4d396478ab" data-text-hash="67309d1c3f456a457dd47e257c5b2add" id="16" refid="16">
+<h5>Figure 8.1 A pod manifest with infrastructure-specific volume information is not portable to other clusters</h5>
+<img alt="" data-processed="true" height="410" id="Picture_1" loading="lazy" src="EPUB/images/08image002.png" width="853">
+</div>
+<div class="readable-text" data-hash="ee8edeead0cf0675916f85f52045236c" data-text-hash="efa9a97b221d2ed2d6f513e3cbca109c" id="17" refid="17">
+<h3 id="sigil_toc_id_128">8.1.1&#160;Introducing persistent volumes and claims</h3>
+</div>
+<div class="readable-text" data-hash="e11d41c0e63bd694156e6fe156bf980a" data-text-hash="0f3f3006619debd4fc6840012c7cae92" id="18" refid="18">
+<p>To make pod manifests portable across different cluster environments, the environment-specific information about the actual storage volume is moved to a PersistentVolume object, as shown in the next figure. A PersistentVolumeClaim object connects the pod to this PersistentVolume object.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d4fbd5c02ed4c9fe35c988148e034c26" data-text-hash="5616a13dd760ec03ee4ff9c111ac55df" id="19" refid="19">
+<h5>Figure 8.2 Using persistent volumes and persistent volume claims to attach network storage to pods</h5>
+<img alt="" data-processed="true" height="296" id="Picture_2" loading="lazy" src="EPUB/images/08image003.png" width="811">
+</div>
+<div class="readable-text" data-hash="2502ff123a68e5936fb57225e61a8203" data-text-hash="8d884386899ce46b1b2d48a8bc192514" id="20" refid="20">
+<p>These two objects are explained next.</p>
+</div>
+<div class="readable-text" data-hash="131c60e541959d90f1feecf51acfb61d" data-text-hash="afb207ff5af1ca12e0ee56d57bebceb6" id="21" refid="21">
+<h4>Introducing persistent volumes</h4>
+</div>
+<div class="readable-text" data-hash="872157a02f274c29d11addef845e887e" data-text-hash="24e0dd7326ff3ff0a342c5bc106c6ee5" id="22" refid="22">
+<p>As the name suggests, a PersistentVolume object represents a storage volume that is used to persist application data. As shown in the previous figure, the PersistentVolume object stores the information about the underlying storage and decouples this information from the pod.</p>
+</div>
+<div class="readable-text" data-hash="c5dfb773409d772ccdb15529f1c5c773" data-text-hash="6ee52daaf2a6c0f9e4dfbbc6487b8698" id="23" refid="23">
+<p>When this infrastructure-specific information isn&#8217;t in the pod manifest, the same manifest can be used to deploy pods in different clusters. Of course, each cluster must now contain a PersistentVolume object with this information. I agree that this approach doesn&#8217;t seem to solve anything, since we&#8217;ve only moved information into a different object, but you&#8217;ll see later that this new approach enables things that weren&#8217;t possible before.</p>
+</div>
+<div class="readable-text" data-hash="bf682bc0217f959c79b29265993b92a5" data-text-hash="a76c0abd6ea33429174d837854b6eeaf" id="24" refid="24">
+<h4>Introducing persistent volume claims</h4>
+</div>
+<div class="readable-text" data-hash="23db6aa5023a6d8ffdd1a93baeade154" data-text-hash="7d410a8961338b6b792cc103c1109779" id="25" refid="25">
+<p>A pod doesn&#8217;t refer directly to the PersistentVolume object. Instead, it points to a PersistentVolumeClaim object, which then points to the PersistentVolume.</p>
+</div>
+<div class="readable-text" data-hash="503ee1ceaa82ad832554c4d016cc7d2c" data-text-hash="b58b42d204bb54dfafc47bcdee0748c4" id="26" refid="26">
+<p>As its name suggests, a PersistentVolumeClaim object represents a user&#8217;s claim on the persistent volume. Because its lifecycle is not tied to that of the pod, it allows the ownership of the persistent volume to be decoupled from the pod. Before a user can use a persistent volume in their pods, they must first claim the volume by creating a PersistentVolumeClaim object. After claiming the volume, the user has exclusive rights to it and can use it in their pods. They can delete the pod at any time, and they won&#8217;t lose ownership of the persistent volume. When the volume is no longer needed, the user releases it by deleting the PersistentVolumeClaim object.</p>
+</div>
+<div class="readable-text" data-hash="ff2e0850a02a16fa4d0d49d602586e96" data-text-hash="0778049a0c20091bdc65f5a382fff6e9" id="27" refid="27">
+<h4>Using a persistent volume claim in a pod</h4>
+</div>
+<div class="readable-text" data-hash="9c8b79f02f6247685a0baf81cb7bcca4" data-text-hash="65697383869c8b0cabb33ce14239bb31" id="28" refid="28">
+<p>To use the persistent volume in a pod, in its manifest you simply refer to the name of the persistent volume claim that the volume is bound to.</p>
+</div>
+<div class="readable-text" data-hash="52b03d9bf76503b597cf8f43c36f5988" data-text-hash="bf16f8311c6b1151144f4ae9d20621c0" id="29" refid="29">
+<p>For example, if you create a persistent volume claim that gets bound to a persistent volume that represents an NFS file share, you can attach the NFS file share to your pod by adding a volume definition that points to the PersistentVolumeClaim object. The volume definition in the pod manifest only needs to contain the name of the persistent volume claim and no infrastructure-specific information, such as the IP address of the NFS server.</p>
+</div>
+<div class="readable-text" data-hash="ef56033d162d56f21701ef2e75f8e8f3" data-text-hash="e56c846179f23c3cc9a2f8cbebaab217" id="30" refid="30">
+<p>As the following figure shows, when this pod is scheduled to a worker node, Kubernetes finds the persistent volume that is bound to the claim referenced in the pod, and uses the information in the PersistentVolume object to mount the network storage volume in the pod&#8217;s container.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b7807deb0ef2ecbece3b002bcca3e80e" data-text-hash="3d3e48255e83c311c016a27425f064e0" id="31" refid="31">
+<h5>Figure 8.3 Mounting a persistent volume into the pod&#8217;s container(s)</h5>
+<img alt="" data-processed="true" height="244" id="Picture_3" loading="lazy" src="EPUB/images/08image004.png" width="817">
+</div>
+<div class="readable-text" data-hash="2a4fc2948bd529714f6f5a43f34b5b90" data-text-hash="ef49cd93a07de5ae8948a1758a0e6102" id="32" refid="32">
+<h4>Using a claim in multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="09ed54be550992e9a9f0d4a7c8380ec6" data-text-hash="33a669e0648a5e1625e6c7c5a43e9ddd" id="33" refid="33">
+<p>Multiple pods can use the same storage volume if they refer to the same persistent volume claim and therefore transitively to the same persistent volume, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="61c9d5e9deeaab9f581b8f833c4261b4" data-text-hash="4f9b52d336f08d37d19f89559048f672" id="34" refid="34">
+<h5>Figure 8.4 Using the same persistent volume claim in multiple pods</h5>
+<img alt="" data-processed="true" height="401" id="Picture_4" loading="lazy" src="EPUB/images/08image005.png" width="794">
+</div>
+<div class="readable-text" data-hash="cadaaa87e9635ee2faa21e2d86447f0b" data-text-hash="2b3902eadfab1dece2afe4832773a8ad" id="35" refid="35">
+<p>Whether these pods must all run on the same cluster node or can access the underlying storage from different nodes depends on the technology that provides that storage. If the underlying storage technology supports attaching the storage to many nodes concurrently, it can be used by pods on different nodes. If not, the pods must all be scheduled to the node that attached the storage volume first.</p>
+</div>
+<div class="readable-text" data-hash="c6e4bebb728157402d9d24bdaaa12400" data-text-hash="2cb1737de6a2aba7094cbb840e74f29e" id="36" refid="36">
+<h3 id="sigil_toc_id_129">8.1.2&#160;Understanding the benefits of using persistent volumes and claims</h3>
+</div>
+<div class="readable-text" data-hash="130922251f992ffa80428c27aea1be63" data-text-hash="d0add2141a41b900d7014bfd6c2e9a01" id="37" refid="37">
+<p>A system where you must use two additional objects to let a pod use a storage volume is more complex than the simple approach explained in the previous chapter, where the pod simply referred to the storage volume directly. Why is this new approach better?</p>
+</div>
+<div class="readable-text" data-hash="9c7f7e385287ac0ec967afb77c3a1e2b" data-text-hash="2a1595a92a92a19cef85b775b6e21f27" id="38" refid="38">
+<p>The biggest advantage of using persistent volumes and claims is that the infrastructure-specific details are now decoupled from the application represented by the pod. Cluster administrators, who know the data center better than anyone else, can create the PersistentVolume objects with all their infrastructure-related low-level details, while software developers focus solely on describing the applications and their needs via the Pod and PersistentVolumeClaim objects.</p>
+</div>
+<div class="readable-text" data-hash="2c18fdfc8424c1e7b41c211ada8e92c5" data-text-hash="3fa654b4bce0a7587a70a8e94abddccd" id="39" refid="39">
+<p>The following figure shows how the two user roles and the objects they create fit together.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="4e46321daf7c47b36869b426745fa3d5" data-text-hash="64d7014fc0a99c4d3f789011818ec129" id="40" refid="40">
+<h5>Figure 8.5 Persistent volumes are provisioned by cluster admins and consumed by pods through persistent volume claims.</h5>
+<img alt="" data-processed="true" height="417" id="Picture_5" loading="lazy" src="EPUB/images/08image006.png" width="842">
+</div>
+<div class="readable-text" data-hash="b3089e344d6b77b322b20dc0b319e33f" data-text-hash="b3709831757fb715fe5fc744104e38a0" id="41" refid="41">
+<p>Instead of the developer adding a technology-specific volume to their pod, the cluster administrator sets up the underlying storage and then registers it in Kubernetes by creating a PersistentVolume object through the Kubernetes API.</p>
+</div>
+<div class="readable-text" data-hash="b38be7492f08e8b6fb7faa0c3c8ec8a2" data-text-hash="79e9ac5aeb8ce966beb601afe97a92e8" id="42" refid="42">
+<p>When a cluster user needs persistent storage in one of their pods, they first create a PersistentVolumeClaim object in which they either refer to a specific persistent volume by name, or specify the minimum volume size and access mode required by the application, and let Kubernetes find a persistent volume that meets these requirements. In both cases, the persistent volume is then bound to the claim and is given exclusive access. The claim can then be referenced in a volume definition within one or more pods. When the pod runs, the storage volume configured in the PersistentVolume object is attached to the worker node and mounted into the pod&#8217;s containers.</p>
+</div>
+<div class="readable-text" data-hash="a0194cfe18f8635b65a2d68808c0f7a5" data-text-hash="9fcd6c85427b7cc459696eb2c80abcae" id="43" refid="43">
+<p>It&#8217;s important to understand that the application developer can create the manifests for the Pod and the PersistentVolumeClaim objects without knowing anything about the infrastructure on which the application will run. Similarly, the cluster administrator can provision a set of storage volumes of varying sizes in advance without knowing much about the applications that will use them.</p>
+</div>
+<div class="readable-text" data-hash="5a09a8191929df53554f76c557fb59fa" data-text-hash="d91773bc2cf70c0fdeead91f7e84ca24" id="44" refid="44">
+<p>Furthermore, by using dynamic provisioning of persistent volumes, as discussed later in this chapter, administrators don&#8217;t need to pre-provision volumes at all. If an automated volume provisioner is installed in the cluster, the physical storage volume and the PersistentVolume object are created on demand for each PersistentVolumeClaim object that users create.</p>
+</div>
+<div class="readable-text" data-hash="980488f1a8dae148d9a5371666e56069" data-text-hash="c982e5bad247a8d946395731c7392cc2" id="45" refid="45">
+<h2 id="sigil_toc_id_130">8.2&#160;Creating persistent volumes and claims</h2>
+</div>
+<div class="readable-text" data-hash="e5eb7d767b21773c23881cd1879adfd1" data-text-hash="8c5a3850d936613de1c70079ebe5162c" id="46" refid="46">
+<p>Now that you have a basic understanding of persistent volumes and claims and their relationship to the pods, let&#8217;s revisit the quiz pod from the previous chapter. You may remember that this pod contains a <code>gcePersistentDisk</code> volume. You&#8217;ll modify that pod&#8217;s manifest to make it use the GCE Persistent Disk via a PersistentVolume object.</p>
+</div>
+<div class="readable-text" data-hash="f2c897881e08b1c7b6ed56b053a6f123" data-text-hash="3484b3028310cec9a6eab73fa3076311" id="47" refid="47">
+<p>As explained earlier, there are usually two different types of Kubernetes users involved in the provisioning and use of persistent volumes. In the following exercises, you will first take on the role of the cluster administrator and create some persistent volumes. One of them will point to the existing GCE Persistent Disk. Then you&#8217;ll take on the role of a regular user to create a persistent volume claim to get ownership of that volume and use it in the quiz pod.</p>
+</div>
+<div class="readable-text" data-hash="390736b440517a165616e078a7dee309" data-text-hash="8887e43dbcb12a4f7f5a5ebc2fc931d2" id="48" refid="48">
+<h3 id="sigil_toc_id_131">8.2.1&#160;Creating a PersistentVolume object</h3>
+</div>
+<div class="readable-text" data-hash="06ca992692cdfe1cef3d0d49973e70a8" data-text-hash="06ff2b8b6b34985fb316068a322012e0" id="49" refid="49">
+<p>Imagine being the cluster administrator. The development team has asked you to provide two persistent volumes for their applications. One will be used to store the data files used by MongoDB in the quiz pod, and the other will be used for something else.</p>
+</div>
+<div class="readable-text" data-hash="deacb41ae6acabe72dbfac3cbaed98b4" data-text-hash="1fc1984b039bdf7510fabcc9b5241b73" id="50" refid="50">
+<p>If you use Google Kubernetes Engine to run these examples, you&#8217;ll create persistent volumes that point to GCE Persistent Disks (GCE PD). For the quiz data files, you can use the GCE PD that you provisioned in the previous chapter.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="51" refid="51">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d5cfff18310341457aedec0166c6cf55" data-text-hash="efa4f140c348500c3d649dce4d754a60" id="52" refid="52">
+<p> If you use a different cloud provider, consult the provider&#8217;s documentation to learn how to create the physical volume in their environment. If you use Minikube, kind, or any other type of cluster, you don&#8217;t need to create volumes because you&#8217;ll use a persistent volume that refers to a local directory on the worker node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="3c8339f297fe628eaec4d12d0cada33a" data-text-hash="fb44132c53ddb9613c2377eb2eb84117" id="53" refid="53">
+<h4>Creating a persistent volume with GCE Persistent Disk as the underlying storage</h4>
+</div>
+<div class="readable-text" data-hash="e2127da0e172b59e7262079d9a82ea8a" data-text-hash="e24450c69e0c7bc141a36de1e845de38" id="54" refid="54">
+<p>If you don&#8217;t have the <code>quiz-data</code> GCE Persistent Disk set up from the previous chapter, create it again using the <code>gcloud compute disks create quiz-data</code> command. After the disk is created, you must create a manifest file for the PersistentVolume object, as shown in the following listing. You&#8217;ll find the file in <code>Chapter08/pv.quiz-data.gcepd.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f5358a50de125b45911dc24491c21277" data-text-hash="a68647e37b224be50c01928a793cf506" id="55" refid="55">
+<h5>Listing 8.1 A persistent volume manifest referring to a GCE Persistent Disk</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: quiz-data    #A
+spec:
+  capacity:    #B
+    storage: 1Gi    #B
+  accessModes:    #C
+  - ReadWriteOnce    #C
+  - ReadOnlyMany    #C
+  gcePersistentDisk:    #D
+    pdName: quiz-data    #D
+    fsType: ext4    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgb2YgdGhpcyBwZXJzaXN0ZW50IHZvbHVtZQojQiBUaGUgc3RvcmFnZSBjYXBhY2l0eSBvZiB0aGlzIHZvbHVtZQojQyBXaGV0aGVyIGEgc2luZ2xlIG5vZGUgb3IgbWFueSBub2RlcyBjYW4gYWNjZXNzIHRoaXMgdm9sdW1lIGluIHJlYWQvd3JpdGUgb3IgcmVhZC1vbmx5IG1vZGUuCiNEIFRoaXMgcGVyc2lzdGVudCB2b2x1bWUgdXNlcyB0aGUgR0NFIFBlcnNpc3RlbnQgRGlzayBjcmVhdGVkIGluIHRoZSBwcmV2aW91cyBjaGFwdGVy"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cff9e8d886cd521095299fa081d7628e" data-text-hash="29cceb9c3ee3bac4d81f8403e9436082" id="56" refid="56">
+<p>The <code>spec</code> section in a PersistentVolume object specifies the storage capacity of the volume, the access modes it supports, and the underlying storage technology it uses, along with all the information required to use the underlying storage. In the case of GCE Persistent Disks, this includes the name of the PD resource in Google Compute Engine, the filesystem type, the name of the partition in the volume, and more.</p>
+</div>
+<div class="readable-text" data-hash="112ccd06490607261d327ea1a0210044" data-text-hash="5e4d2b8aafac50f7698a3e9182adee5c" id="57" refid="57">
+<p>Now create another GCE Persistent Disk named <code>other-data</code> and an accompanying PersistentVolume object. Create a new file from the manifest in listing 8.1 and make the necessary changes. You&#8217;ll find the resulting manifest in the file <code>pv.other-data.gcepd.yaml</code>.</p>
+</div>
+<div class="readable-text" data-hash="dd868775c6ff80d5dd4c33e9d1d1d691" data-text-hash="1bd982bea5a116f68227955119266076" id="58" refid="58">
+<h4>Creating persistent volumes backed by other storage technologies</h4>
+</div>
+<div class="readable-text" data-hash="f7cda7e789f0dce8e638616ecd1115bd" data-text-hash="ffd1b7bc526912bc603f02bda438e57e" id="59" refid="59">
+<p>If your Kubernetes cluster runs on a different cloud provider, you should be able to easily change the persistent volume manifest to use something other than a GCE Persistent Disk, as you did in the previous chapter when you directly referenced the volume within the pod manifest.</p>
+</div>
+<div class="readable-text" data-hash="721ca51af000ca1965462a7f0f5416b5" data-text-hash="a39f46d9304762cb7b8e1eec2e2fb521" id="60" refid="60">
+<p>If you used Minikube or the kind tool to provision your cluster, you can create a persistent volume that uses a local directory on the worker node instead of network storage by using the <code>hostPath</code> field in the PersistentVolume manifest. The manifest for the <code>quiz-data</code> persistent volume is shown in the next listing (<code>pv.quiz-data.hostpath.yaml</code>). The manifest for the <code>other-data</code> persistent volume is in <code>pv.other-data.hostpath.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bfc0b8f18e4d6c877c3fff9c3ca716bb" data-text-hash="7528c3864a30e26a6446fc9c433194d8" id="61" refid="61">
+<h5>Listing 8.2 A persistent volume using a local directory</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: quiz-data
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+  - ReadWriteOnce
+  - ReadOnlyMany
+  hostPath:    #A
+    path: /var/quiz-data    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgSW5zdGVhZCBvZiBhIEdDRSBQZXJzaXN0ZW50IERpc2ssIHRoaXMgcGVyc2lzdGVudCB2b2x1bWUgcmVmZXJzIHRvIGEgbG9jYWwgZGlyZWN0b3J5IG9uIHRoZSBob3N0IG5vZGU="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ab7370eb5ffce105a77dd056ade1f907" data-text-hash="608cdb05e22d454748b729fe9e772461" id="62" refid="62">
+<p>You&#8217;ll notice that the two persistent volume manifests in this and the previous listing differ only in the part that specifies which underlying storage method to use. The hostPath-backed persistent volume stores data in the <code>/var/quiz-data</code> directory in the worker node&#8217;s filesystem.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="63" refid="63">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b364b4ded900d3a7178d055fb1ace225" data-text-hash="0ee69ec6e36012f1e12327f0844e0614" id="64" refid="64">
+<p> To list all other supported technologies that you can use in a persistent volume, run <code>kubectl explain pv.spec</code>. You can then drill further down to see the individual configuration options for each technology. For example, for GCE Persistent Disks, run <code>kubectl explain pv.spec.gcePersistentDisk</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c37de8847b4746d58a81aa1997f85b82" data-text-hash="52f9861e596831c75e42c8ad71739588" id="65" refid="65">
+<p>I will not bore you with the details of how to configure the persistent volume for each available storage technology, but I do need to explain the <code>capacity</code> and <code>accessModes</code> fields that you must set in each persistent volume.</p>
+</div>
+<div class="readable-text" data-hash="c0df9a4bad6f3dcb0a495a1abd51b122" data-text-hash="0061416d76426399721b3cef5df4542f" id="66" refid="66">
+<h4>Specifying the volume capacity</h4>
+</div>
+<div class="readable-text" data-hash="bac7058cb15ecc7d1e9f59105d7d6105" data-text-hash="92d8e71c7c348b9b1d1dae58b986b3b8" id="67" refid="67">
+<p>The <code>capacity</code> of the volume indicates the size of the underlying volume. Each persistent volume must specify its capacity so that Kubernetes can determine whether a particular persistent volume can meet the requirements specified in the persistent volume claim before it can bind them.</p>
+</div>
+<div class="readable-text" data-hash="818f4cc9810c690a616cdd007a90d0cd" data-text-hash="208936ac05672f874e3b0366892ddc8a" id="68" refid="68">
+<h4>Specifying volume access modes</h4>
+</div>
+<div class="readable-text" data-hash="6e9086bdabc2345e9f8b2e2e7065765c" data-text-hash="a664869818f094b0bd9737f9ee629f3f" id="69" refid="69">
+<p>Each persistent volume must specify a list of <code>accessModes</code> it supports. Depending on the underlying technology, a persistent volume may or may not be mounted by multiple worker nodes simultaneously in read/write or read-only mode. Kubernetes inspects the persistent volume&#8217;s access modes to determine if it meets the requirements of the claim.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="70" refid="70">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="19f825a9c9935351c19a9f1bd46316a7" data-text-hash="a60566d6b635d0d72b3574f7d1cd1b1f" id="71" refid="71">
+<p> The access mode determines how many <i>nodes</i>, not pods, can attach the volume at a time. Even if a volume can only be attached to a single node, it can be mounted in many pods if they all run on that single node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="5fe080ef2921a0df5347b6e6c24a80f0" data-text-hash="4d07d65d303671d8a2f2056b84d89dc4" id="72" refid="72">
+<p>Three access modes exist. They are explained in the following table along with their abbreviated form displayed by <code>kubectl</code>.</p>
+</div>
+<div class="browsable-container" data-hash="fe01e9861f3fd15f80f6bc9d9a55cab7" data-text-hash="6e69b8062c583bdb7f4c7b95527b8999" id="73" refid="73">
+<h5>Table 8.1 Persistent volume access modes</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Access Mode</p> </td>
+<td> <p>Abbr.</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ReadWriteOnce
+</pre> </td>
+<td> <p></p><pre>RWO
+</pre> </td>
+<td> <p>The volume can be mounted by a single worker node in read/write mode. While it&#8217;s mounted to the node, other nodes can&#8217;t mount the volume.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ReadOnlyMany
+</pre> </td>
+<td> <p></p><pre>ROX
+</pre> </td>
+<td> <p>The volume can be mounted on multiple worker nodes simultaneously in read-only mode.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>ReadWriteMany
+</pre> </td>
+<td> <p></p><pre>RWX
+</pre> </td>
+<td> <p>The volume can be mounted in read/write mode on multiple worker nodes at the same time.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="74" refid="74">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="93b70151c6968721585dd256304a854c" data-text-hash="4530dab6750c897fd21c536ada619659" id="75" refid="75">
+<p> The <code>ReadOnlyOnce</code> option doesn&#8217;t exist. If you use a <code>ReadWriteOnce</code> volume in a pod that doesn&#8217;t need to write to it, you can mount the volume in read-only mode.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="51f81f8d21581e790e6f1c817907a3e3" data-text-hash="f08f5d269f32a0651b5fc37b48519943" id="76" refid="76">
+<h4>Using persistent volumes as block devices</h4>
+</div>
+<div class="readable-text" data-hash="304cf43ab77866921398ffc725583212" data-text-hash="c6a96a4af992428d2d7917e9e2a4d2e1" id="77" refid="77">
+<p>A typical application uses persistent volumes with a formatted filesystem. However, a persistent volume can also be configured so that the application can directly access the underlying block device without using a filesystem. This is configured on the PersistentVolume object using the <code>spec.volumeMode</code> field. The supported values for the field are explained in the next table.</p>
+</div>
+<div class="browsable-container" data-hash="31efb164724192f3ba4969726e4c398b" data-text-hash="439579a27dcde7776d8578b7e076fc7b" id="78" refid="78">
+<h5>Table 8.2 Configuring the volume mode for the persistent volume</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Volume Mode</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Filesystem
+</pre> </td>
+<td> <p>When the persistent volume is mounted in a container, it is mounted to a directory in the file tree of the container. If the underlying storage is an unformatted block device, Kubernetes formats the device using the filesystem specified in the volume definition (for example, in the field <code>gcePersistentDisk.fsType</code>) before it is mounted in the container. This is the default volume mode.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Block
+</pre> </td>
+<td> <p>When a pod uses a persistent volume with this mode, the volume is made available to the application in the container as a raw block device (without a filesystem). This allows the application to read and write data without any filesystem overhead. This mode is typically used by special types of applications, such as database systems.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="12cbc1de6ece1c4f8a1bb33470fe2b12" data-text-hash="6f192382c9ce8df3a56bca437b4f65d8" id="79" refid="79">
+<p>The manifests for the <code>quiz-data</code> and <code>other-data</code> persistent volumes do not specify a <code>volumeMode</code> field, which means that the default mode is used, namely <code>Filesystem</code>.</p>
+</div>
+<div class="readable-text" data-hash="81d48c01b44a6ad30d09a85b93562c93" data-text-hash="aba99fa79b1ea12ae4e30048377c382f" id="80" refid="80">
+<h4>Creating and inspecting the persistent volume</h4>
+</div>
+<div class="readable-text" data-hash="496c32ec63ac2e945c20014dcfe986b2" data-text-hash="9a5a5561d5eec4a6380784c6995109c3" id="81" refid="81">
+<p>You can now create the PersistentVolume objects by posting the manifests to the Kubernetes API using the now well-known command <code>kubectl apply</code>. Then use the <code>kubectl</code> <code>get</code> command to list the persistent volumes in your cluster:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="42a6ac6b89be922ab19fafc3bc8a62ba" data-text-hash="3768596b6cdbbe17d657463ca139bdb2" id="82" refid="82">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv
+NAME         CAPACITY    ACCESS MODES   ...   STATUS      CLAIM    ...   AGE
+other-data   10Gi        RWO,ROX        ...   Available            ...   3m 
+quiz-data    10Gi        RWO,ROX        ...   Available            ...   3m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="83" refid="83">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="ee29ac040aa46701b734282f0de3c75e" data-text-hash="be21a0bfb3dd3ad6966dd428de903a38" id="84" refid="84">
+<p> Use <code>pv</code> as the shorthand for PersistentVolume.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b7e4ec8123c0964203a8b625f1787df5" data-text-hash="e51f1a7053741b7bd01450521b08563c" id="85" refid="85">
+<p>The <code>STATUS</code> column indicates that both persistent volumes are <code>Available</code>. This is expected because they aren&#8217;t yet bound to any persistent volume claim, as indicated by the empty <code>CLAIM</code> column. Also displayed are the volume capacity and access modes, which are shown in abbreviated form, as explained in table 8.1.</p>
+</div>
+<div class="readable-text" data-hash="985bde5c95a61c0f6ba9477de660ec06" data-text-hash="40b463f2a6469f4a3041949b3571106f" id="86" refid="86">
+<p>The underlying storage technology used by the persistent volume isn&#8217;t displayed by the <code>kubectl get pv</code> command because it&#8217;s less important. What is important is that each persistent volume represents a certain amount of storage space available in the cluster that applications can access with the specified modes. The technology and the other parameters configured in each persistent volume are implementation details that typically don&#8217;t interest users who deploy applications. If someone needs to see these details, they can use <code>kubectl describe</code> or print the full definition of the PersistentVolume object as in the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f684362919c35e75223b01f5e41808a6" data-text-hash="8809bc7794061b1a245859146cff8b51" id="87" refid="87">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv quiz-data -o yaml</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d7ed2e5084e9e0d118720428a5dd86b3" data-text-hash="0d93f622b577f45ca5cdaa3dd036a91b" id="88" refid="88">
+<h3 id="sigil_toc_id_132">8.2.2&#160;Claiming a persistent volume</h3>
+</div>
+<div class="readable-text" data-hash="b7c68ad4048be8a51a761e68c9e2d5a8" data-text-hash="51a10a356d440018edb2464cefbf673f" id="89" refid="89">
+<p>Your cluster now contains two persistent volumes. Before you can use the <code>quiz-data</code> volume in the quiz pod, you need to claim it. This section explains how to do this.</p>
+</div>
+<div class="readable-text" data-hash="cc1213c36304950172e32e5495c886cf" data-text-hash="97f1a77dd9583abdd7cbfe0d1ebf83ca" id="90" refid="90">
+<h4>Creating a PersistentVolumeClaim object</h4>
+</div>
+<div class="readable-text" data-hash="1fb0d489114435bd6bcfdbb523953f69" data-text-hash="053d07910571f4a81fdad6cfe24b1502" id="91" refid="91">
+<p>To claim a persistent volume, you create a PersistentVolumeClaim object in which you specify the requirements that the persistent volume must meet. These include the minimum capacity of the volume and the required access modes, which are usually dictated by the application that will use the volume. For this reason, persistent volume claims should be created by the author of the application and not by cluster administrators, so take off your administrator hat now and put on your developer hat.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="92" refid="92">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="873303a781161ba5c54a429fd87ad9b0" data-text-hash="35007c3a9609f05559c7f1226de1553b" id="93" refid="93">
+<p> As an application developer, you should never include persistent volume definitions in your application manifests. You should include persistent volume claims because they specify the storage requirements of your application.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6d30f6959d3b8f976c5e756c54d26767" data-text-hash="c77a3ae06b1599c6735d4dba38456c97" id="94" refid="94">
+<p>To create a PersistentVolumeClaim object, create a manifest file with the contents shown in the following listing. You&#8217;ll also find the file in <code>pvc.quiz-data.static.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fb8ed1700a37db4c7728f21935d893ea" data-text-hash="df53e3056f2321b79d037f758821de4d" id="95" refid="95">
+<h5>Listing 8.3 A PersistentVolumeClaim object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data    #A
+spec:
+  resources:
+    requests:    #B
+      storage: 1Gi    #B
+  accessModes:    #C
+  - ReadWriteOnce    #C
+  storageClassName: ""    #D
+  volumeName: quiz-data    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5hbWUgb2YgdGhpcyBjbGFpbS4gVGhlIHBvZCB3aWxsIHJlZmVyIHRvIHRoaXMgY2xhaW0gdXNpbmcgYnkgdGhpcyBuYW1lLgojQiBUaGUgdm9sdW1lIG11c3QgcHJvdmlkZSBhdCBsZWFzdCAxIEdpQiBvZiBzdG9yYWdlIHNwYWNlLgojQyBUaGUgdm9sdW1lIG11c3Qgc3VwcG9ydCBtb3VudGluZyBieSBhIHNpbmdsZSBub2RlIGZvciBib3RoIHJlYWRpbmcgYW5kIHdyaXRpbmcuCiNEIFRoaXMgbXVzdCBiZSBzZXQgdG8gYW4gZW1wdHkgc3RyaW5nIHRvIGRpc2FibGUgZHluYW1pYyBwcm92aXNpb25pbmcuCiNFIFlvdSB3YW50IHRvIGNsYWltIHRoZSBxdWl6LWRhdGEgcGVyc2lzdGVudCB2b2x1bWUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="19a08f2227f7a2cd0a7ce4d345a59aaf" data-text-hash="6b60de43f1d7222df4f2ea342f9c163c" id="96" refid="96">
+<p>The persistent volume claim defined in the listing requests that the volume is at least <code>1GiB</code> in size and can be mounted on a single node in read/write mode. The field <code>storageClassName</code> is used for dynamic provisioning of persistent volumes, which you&#8217;ll learn about later in the chapter. The field must be set to an empty string if you want Kubernetes to bind a pre-provisioned persistent volume to this claim instead of provisioning a new one.</p>
+</div>
+<div class="readable-text" data-hash="03cda13651258dd256a13facea803429" data-text-hash="cd14327558c2b056955cbf17f50e77f8" id="97" refid="97">
+<p>In this exercise, you want to claim the <code>quiz-data</code> persistent volume, so you must indicate this with the <code>volumeName</code> field. In your cluster, two matching persistent volumes exist. If you don&#8217;t specify this field, Kubernetes could bind your claim to the <code>other-data</code> persistent volume.</p>
+</div>
+<div class="readable-text" data-hash="eb425034216e765be8eb38dc962ccca2" data-text-hash="3f3701c74b9ecc29351e9df580467006" id="98" refid="98">
+<p>If the cluster administrator creates a bunch of persistent volumes with non-descript names, and you don&#8217;t care which one you get, you can skip the <code>volumeName</code> field. In that case, Kubernetes will randomly choose one of the persistent volumes whose capacity and access modes match the claim.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="99" refid="99">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9029c65083012c448070aa71a38d8aed" data-text-hash="02f0a585c4d6713a826387a7a1bb1c18" id="100" refid="100">
+<p> Like persistent volumes, claims can also specify the required <code>volumeMode</code>. As you learned in section 8.2.1, this can be either <code>Filesystem</code> or <code>Block</code>. If left unspecified, it defaults to <code>Filesystem</code>. When Kubernetes checks whether a volume can satisfy the claim, the <code>volumeMode</code> of the claim and the volume is also considered.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="3ffaa48fb073f8d71e5667f4b7ea4de8" data-text-hash="bc6599ab65f33bb36e119e68fc4a781a" id="101" refid="101">
+<p>To create the PersistentVolumeClaim object, apply its manifest file with <code>kubectl apply</code>. After the object is created, Kubernetes soon binds a volume to the claim. If the claim requests a specific persistent volume by name, that&#8217;s the volume that is bound, if it also matches the other requirements. Your claim requires 1GiB of disk space and the <code>ReadWriteOnce</code> access mode. The persistent volume <code>quiz-data</code> that you created earlier meets both requirements and this allows it to be bound to the claim.</p>
+</div>
+<div class="readable-text" data-hash="118ccf3fec44cab9b6912ce8bdef43ec" data-text-hash="4227ea473bc9f1c886d5cc59e8999af5" id="102" refid="102">
+<h4>Listing persistent volume claims</h4>
+</div>
+<div class="readable-text" data-hash="d5dea7b4d3846333cb7271c63b701de0" data-text-hash="6437208af387ae5347cca122c7c7b814" id="103" refid="103">
+<p>If all goes well, your claim should now be bound to the <code>quiz-data</code> persistent volume. Use the <code>kubectl get</code> command to see if this is the case:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="08885db48cfaad1a2fbe6faa597342cd" data-text-hash="d1780e6b7ce5646930ab838641cf0c3b" id="104" refid="104">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc
+NAME        STATUS   VOLUME      CAPACITY   ACCESS MODES   STORAGECLASS   AGE 
+quiz-data   Bound    quiz-data   10Gi       RWO,ROX                       2m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNsYWltIGlzIGJvdW5kIHRvIHRoZSBxdWl6LWRhdGEgcGVyc2lzdGVudCB2b2x1bWU="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="105" refid="105">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="6329e41f9d0aff8849ca9693858237c4" data-text-hash="4e799dbdd03ad81ee801ff938f48c6dc" id="106" refid="106">
+<p> Use <code>pvc</code> as a shorthand for <code>persistentvolumeclaim</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="64a803ff6076b10be1f062e1b52710a2" data-text-hash="1d3d46cb6c03483d703d737f828e34a5" id="107" refid="107">
+<p>The output of the <code>kubectl</code> command shows that the claim is now bound to your persistent volume. It also shows the capacity and access modes of this volume. Even though the claim requested only 1GiB, it has 10GiB of storage space available, because that&#8217;s the capacity of the volume. Similarly, although the claim requested only the <code>ReadWriteOnce</code> access mode, it is bound to a volume that supports both the <code>ReadWriteOnce</code> (<code>RWO</code>) and the <code>ReadOnlyMany</code> (<code>ROX</code>) access modes.</p>
+</div>
+<div class="readable-text" data-hash="11c560213dca52019054e099bb2ce48e" data-text-hash="ddb39e160f08a37f9287c81dd477c82b" id="108" refid="108">
+<p>If you put your cluster admin hat back on for a moment and list the persistent volumes in your cluster, you&#8217;ll see that it too is now displayed as <code>Bound</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b54657814c11d4d5ce18b8d72a1e71ab" data-text-hash="7a51940644687e371aaba4ba5c132abf" id="109" refid="109">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv
+NAME        CAPACITY   ACCESS MODES   ...   STATUS   CLAIM               ...
+quiz-data   10Gi       RWO,ROX        ...   Bound    default/quiz-data   ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="021ce265b3e8729c24cc0f836bfdaa1f" data-text-hash="49cf325e5df4022075aa3f96adf468d0" id="110" refid="110">
+<p>Any cluster admin can see which claim each persistent volume is bound to. In your case, the volume is bound to the claim <code>default/quiz-data</code>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="111" refid="111">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="aea5343079a8d071f1e1af0cf62e94f8" data-text-hash="b1b800af33928d6878ba3f689c840dbe" id="112" refid="112">
+<p> You may wonder what the word <code>default</code> means in the claim name. This is the <i>namespace</i> in which the PersistentVolumeClaim object is located. Namespaces allow objects to be organized into disjoint sets. You&#8217;ll learn about them in chapter 10.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="15e976f582a36469445e6d29c86b44b8" data-text-hash="76431e127aa6469e12fddc244bc9a7b5" id="113" refid="113">
+<p>By claiming the persistent volume, you and your pods now have the exclusive right to use the volume. No one else can claim it until you release it by deleting the PersistentVolumeClaim object.</p>
+</div>
+<div class="readable-text" data-hash="d50dcd08f3f3b766b04b5bc596ffefd3" data-text-hash="66bd2c90bffcb775b6f162a77645b3e1" id="114" refid="114">
+<h3 id="sigil_toc_id_133">8.2.3&#160;Using a claim and volume in a single pod</h3>
+</div>
+<div class="readable-text" data-hash="4bff8e22bbc1973fdac8ef4c7caa2993" data-text-hash="e548c5c52ec25d47c0a2c95de7e32963" id="115" refid="115">
+<p>In this section, you&#8217;ll learn the ins and outs of using a persistent volume in a single pod at a time.</p>
+</div>
+<div class="readable-text" data-hash="6af221c8a64129f74d3a2b57f2af781c" data-text-hash="5fa6fd712af22f4e641ed5e1c6b10824" id="116" refid="116">
+<h4>Using a persistent volume in pod</h4>
+</div>
+<div class="readable-text" data-hash="afb25a2f8aeba608f100473cb755c6d5" data-text-hash="efcd81369d927ac81f6de963f3daf828" id="117" refid="117">
+<p>To use a persistent volume in a pod, you define a volume within the pod in which you refer to the PersistentVolumeClaim object. To try this, modify the quiz pod from the previous chapter and make it use the <code>quiz-data</code> claim. The changes to the pod manifest are highlighted in the next listing. You&#8217;ll find the file in <code>pod.quiz.pvc.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5eb9f97de755b646b3ae8b4ef51227a6" data-text-hash="b13036ffa227e73d3cfe9c36afcbeb2c" id="118" refid="118">
+<h5>Listing 8.4 A pod using a persistentVolumeClaim volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: quiz
+spec:
+  volumes:
+  - name: quiz-data
+    persistentVolumeClaim:    #A
+      claimName: quiz-data    #A
+  containers:
+  - name: quiz-api
+    image: luksa/quiz-api:0.1
+    ports:
+    - name: http
+      containerPort: 8080
+  - name: mongo
+    image: mongo
+    volumeMounts:    #B
+    - name: quiz-data    #B
+      mountPath: /data/db    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHZvbHVtZSByZWZlcnMgdG8gYSBwZXJzaXN0ZW50IHZvbHVtZSBjbGFpbSB3aXRoIHRoZSBuYW1lIHF1aXotZGF0YS4KI0IgVGhlIHZvbHVtZSBpcyBtb3VudGVkIHRoZSBzYW1lIHdheSB0aGF0IG90aGVyIHZvbHVtZXMgdHlwZXMgYXJlIG1vdW50ZWQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="619ea417f73378a879ac8b5b3808635f" data-text-hash="bf4b0e3864575bbf482b58083974d36a" id="119" refid="119">
+<p>As you can see in the listing, you don&#8217;t define the volume as a <code>gcePersistentDisk</code>, <code>awsElasticBlockStore</code>, <code>nfs</code> or <code>hostPath</code> volume, but as a <code>persistentVolumeClaim</code> volume. The pod will use whatever persistent volume is bound to the <code>quiz-data</code> claim. In your case, that should be the <code>quiz-data</code> persistent volume.</p>
+</div>
+<div class="readable-text" data-hash="d78bf0f7dc36a3ff228513f2002b6a2a" data-text-hash="cbcb8a8bca4947618201d147e7a9f25b" id="120" refid="120">
+<p>Create and test this pod now. Before the pod starts, the GCE PD volume is attached to the node and mounted into the pod&#8217;s container(s). If you use GKE and have configured the persistent volume to use the GCE Persistent Disk from the previous chapter, which already contains data, you should be able to retrieve the quiz questions you stored earlier by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="320068824b1b125cd86016e6eee24cf0" data-text-hash="5d0fb9aae7098632ed8342ff8b59bddc" id="121" refid="121">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.find()"
+{ "_id" : ObjectId("5fc3a4890bc9170520b22452"), "id" : 1, "text" : "What does k8s mean?", 
+"answers" : [ "Kates", "Kubernetes", "Kooba Dooba Doo!" ], "correctAnswerIndex" : 1 }</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="75f13e87cec8909d55c0d27c9f9a04a8" data-text-hash="a456fbb80bb7861b8226588feb936875" id="122" refid="122">
+<p>If your GCE PD has no data, add it now by running the shell script Chapter08/insert-question.sh.</p>
+</div>
+<div class="readable-text" data-hash="25106f22213803308174c7ef31d5cbd3" data-text-hash="dde7a61e4cecd757b85777f030925220" id="123" refid="123">
+<h4>Re-using the claim in a new pod instance</h4>
+</div>
+<div class="readable-text" data-hash="458fa873f0a51ad63d75e8401e573f5a" data-text-hash="f2518d3c7113b4c648b7b2b14c02b8a1" id="124" refid="124">
+<p>When you delete a pod that uses a persistent volume via a persistent volume claim, the underlying storage volume is detached from the worker node (assuming that it was the only pod that was using it on that node). The persistent volume object remains bound to the claim. If you create another pod that refers to this claim, this new pod gets access to the volume and its files.</p>
+</div>
+<div class="readable-text" data-hash="2629235e7546e180046012464cd2fcd5" data-text-hash="a07d6d70acca6b241fc1eba6db578cbb" id="125" refid="125">
+<p>Try deleting the quiz pod and recreating it. If you run the <code>db.questions.find()</code> query in this new pod instance, you&#8217;ll see that it returns the same data as the previous one. If the persistent volume uses network-attached storage such as GCE Persistent Disks, the pod sees the same data regardless of what node it&#8217;s scheduled to. If you use a kind-provisioned cluster and had to resort to using a hostPath-based persistent volume, this isn&#8217;t the case. To access the same data, you must ensure that the new pod instance is scheduled to the node to which the original instance was scheduled, as the data is stored in that node&#8217;s filesystem.</p>
+</div>
+<div class="readable-text" data-hash="c21187dd588be03e429d89e8add49258" data-text-hash="761ce52f793ef374044dd47973f834d9" id="126" refid="126">
+<h4>Releasing a persistent volume</h4>
+</div>
+<div class="readable-text" data-hash="12ba0c3e0335dc063995f2033db98819" data-text-hash="5d3b0e0bb14184dfcad464e9566dde60" id="127" refid="127">
+<p>When you no longer plan to deploy pods that will use this claim, you can delete it. This releases the persistent volume. You might wonder if you can then recreate the claim and access the same volume and data. Let&#8217;s find out. Delete the pod and the claim as follows to see what happens:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b9642462659b4bf4c3d3bb91bdaa3ac" data-text-hash="351936752ddd266422f7f084e7152ec3" id="128" refid="128">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pod quiz
+pod "quiz" deleted
+ 
+$ kubectl delete pvc quiz-data
+persistentvolumeclaim "quiz-data" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="190ce0db2d648ea4017c462a7eb7091b" data-text-hash="f601ac69af62597db175d20e3784308b" id="129" refid="129">
+<p>Now check the status of the persistent volume:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f3fae61ac5a51ccb76344aa30bd367a7" data-text-hash="bcb5f5b938c0eb86d8f20744d5a884a1" id="130" refid="130">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv quiz-data
+NAME        ...   RECLAIM POLICY   STATUS     CLAIM               ...
+quiz-data   ...   Retain           Released   default/quiz-data   ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c8a3c16bc6347145c78c03108a955591" data-text-hash="e236541256f861e91cbee2a88020fd4e" id="131" refid="131">
+<p>The <code>STATUS</code> column shows the volume as <code>Released</code> rather than <code>Available</code>, as was the case initially. The <code>CLAIM</code> column still shows the <code>quiz-data</code> claim to which it was previously bound, even if the claim no longer exists. You&#8217;ll understand why in a minute.</p>
+</div>
+<div class="readable-text" data-hash="d20bdd86424e5207e5c4ff706fd81505" data-text-hash="0fd0d39d7de3633df5a9b36a4fe8d302" id="132" refid="132">
+<h4>Binding to a released persistent volume</h4>
+</div>
+<div class="readable-text" data-hash="2e379150325898becc52bbee0c6c2087" data-text-hash="5b40fcacba16b9949a7007332407f223" id="133" refid="133">
+<p>What happens if you create the claim again? Is the persistent volume bound to the claim so that it can be reused in a pod? Run the following commands to see if this is the case.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d3b9ec36eccd4fdd56bf0cbe875a8eab" data-text-hash="e9106a7f47d6f1a87f735a904ca26014" id="134" refid="134">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f pvc.quiz-data.static.yaml
+persistentvolumeclaim/quiz-data created
+ 
+$ kubectl get pvc
+NAME        STATUS   VOLUME   CAPACITY   ACCESSMODES   STORAGECLASS   AGE
+quiz-data   Pending                                                   13s    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNsYWlt4oCZcyBzdGF0dXMgaXMgUGVuZGluZy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="89521fa53162ab074f00d091370d8302" data-text-hash="f514ecdf8c59354eb7a425626c1f1958" id="135" refid="135">
+<p>The claim isn&#8217;t bound to the volume and its status is <code>Pending</code>. When you created the claim earlier, it was immediately bound to the persistent volume, so why not now?</p>
+</div>
+<div class="readable-text" data-hash="54cf23b0c9a203fc5ab7e040d98a7bc4" data-text-hash="5a3001d1a61172c77a5471037d55ada4" id="136" refid="136">
+<p>The reason behind this is that the volume has already been used and might contain data that should be erased before another user claims the volume. This is also the reason why the status of the volume is <code>Released</code> instead of <code>Available</code> and why the claim name is still shown on the persistent volume, as this helps the cluster administrator to know if the data can be safely deleted.</p>
+</div>
+<div class="readable-text" data-hash="52ab947b1a937835c318e4d8007d654f" data-text-hash="20af20fd6b362208e43652eb36627c24" id="137" refid="137">
+<h4>Making a released persistent volume available for re-use</h4>
+</div>
+<div class="readable-text" data-hash="707fd5807845e77f54cb707499cc2d1c" data-text-hash="b4054beb594a20c8d8f279d62991c9d7" id="138" refid="138">
+<p>To make the volume available again, you must delete and recreate the PersistentVolume object. But will this cause the data stored in the volume to be lost?</p>
+</div>
+<div class="readable-text" data-hash="684b813f8fbbfe7d5c25d91a943c6c09" data-text-hash="cc6171059ceacb1624999e5ed598bee0" id="139" refid="139">
+<p>Imagine if you had accidentally deleted the pod and the claim and caused a loss of service to the Kiada application. You need to restore the service as soon as possible, with all data intact. If you think that deleting the PersistentVolume object would delete the data, that sounds like the last thing you should do but is actually completely safe.</p>
+</div>
+<div class="readable-text" data-hash="a2a801f9ade126b5940bad605618e1f8" data-text-hash="18587c0b3ea2a97cfeadbcd43d6a62f9" id="140" refid="140">
+<p>With a pre-provisioned persistent volume like the one at hand, deleting the object is equivalent to deleting a data pointer. The PersistentVolume object merely <i>points</i> to a GCE Persistent Disk. It doesn&#8217;t store the data. If you delete and recreate the object, you end up with a new pointer to the same GCE PD and thus the same data. You&#8217;ll confirm this is the case in the next exercise.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0bac2606cd9f3f98ef1f23fc0ac4a3e8" data-text-hash="cd1b6f84a825e403eaa00436546b4337" id="141" refid="141">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pv quiz-data
+persistentvolume "quiz-data" deleted
+ 
+$ kubectl apply -f pv.quiz-data.gcepd.yaml
+persistentvolume/quiz-data created 
+ 
+$ kubectl get pv quiz-data
+NAME        ...   RECLAIM POLICY   STATUS      CLAIM   ...
+quiz-data   ...   Retain           Available           ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="142" refid="142">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="5953439583d81a426c501fcb134d738e" data-text-hash="0a93b284158c3ee2a353aa58d56441c3" id="143" refid="143">
+<p> An alternative way of making a persistent volume available again is to edit the PersistentVolume object and remove the <code>claimRef</code> from the <code>spec</code> section.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="d077a6733f83b34a83b15124f9322dc5" data-text-hash="ac9f44daec5362acbb51c58f1266c8e3" id="144" refid="144">
+<p>The persistent volume is displayed as <code>Available</code> again. Let me remind you that you created a claim for the volume earlier. Kubernetes has been waiting for a volume to bind to the claim. As you might expect, the volume you&#8217;ve just created will be bound to this claim in a few seconds. List the volumes again to confirm:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="df29be58c23fe41877bee9d63096cc03" data-text-hash="e8241e059c35c81ff40c7e8d92bbd131" id="145" refid="145">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv quiz-data
+NAME        ...   RECLAIM POLICY   STATUS      CLAIM               ...
+quiz-data   ...   Retain           Bound       default/quiz-data   ...    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBlcnNpc3RlbnQgdm9sdW1lIGlzIGFnYWluIGJvdW5kIHRvIHRoZSBjbGFpbS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a2538b005024ce839e72d135a2e6720b" data-text-hash="004f43316d7c7103a9fe9a7c5660750a" id="146" refid="146">
+<p>The output shows that the persistent volume is again bound to the claim. If you now deploy the quiz pod and query the database again with the following command, you&#8217;ll see that the data in underlying GCE Persistent Disk has not been lost:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="320068824b1b125cd86016e6eee24cf0" data-text-hash="5d0fb9aae7098632ed8342ff8b59bddc" id="147" refid="147">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec -it quiz -c mongo -- mongo kiada --quiet --eval "db.questions.find()"
+{ "_id" : ObjectId("5fc3a4890bc9170520b22452"), "id" : 1, "text" : "What does k8s mean?", 
+"answers" : [ "Kates", "Kubernetes", "Kooba Dooba Doo!" ], "correctAnswerIndex" : 1 }</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="950d049c011871aef7129d640216d916" data-text-hash="5b42b2232b3e7dacc61e15cfd2e3ed49" id="148" refid="148">
+<h4>Configuring the reclaim policy on persistent volumes</h4>
+</div>
+<div class="readable-text" data-hash="aa24c29bdef604fca74671510ee060b8" data-text-hash="d694abb25641999f0ce620a90986d3ad" id="149" refid="149">
+<p>What happens to a persistent volume when it is released is determined by the volume&#8217;s reclaim policy. When you used the <code>kubectl get pv</code> command to list persistent volumes, you may have noticed that the <code>quiz-data</code> volume&#8217;s policy is <code>Retain</code>. This policy is configured using the field <code>.spec.persistentVolumeReclaimPolicy</code> in the PersistentVolume object.</p>
+</div>
+<div class="readable-text" data-hash="b9914716b73886c4a830ef8f06f25ef9" data-text-hash="4061dcb4c74d5ae521a789bc7b437c05" id="150" refid="150">
+<p>The field can have one of the three values explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="44a54dd4f4fd33e661775abbd5f226a3" data-text-hash="86cb09861e36e68377604452f7cf4fc5" id="151" refid="151">
+<h5>Table 8.3 Persistent volume reclaim policies</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Reclaim policy</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Retain
+</pre> </td>
+<td> <p>When the persistent volume is released (this happens when you delete the claim that&#8217;s bound to it), Kubernetes <i>retains</i> the volume. The cluster administrator must manually reclaim the volume. This is the default policy for manually created persistent volumes.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Delete
+</pre> </td>
+<td> <p>The PersistentVolume object and the underlying storage are automatically deleted upon release. This is the default policy for dynamically provisioned persistent volumes, which are discussed in the next section.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Recycle
+</pre> </td>
+<td> <p>This option is deprecated and shouldn&#8217;t be used as it may not be supported by the underlying volume plugin. This policy typically causes all files on the volume to be deleted and makes the persistent volume available again without the need to delete and recreate it.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="152" refid="152">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="57a7afd2efbd9ee74eda19c15620b3f9" data-text-hash="4a04621c4a12df182e09bba275f3881b" id="153" refid="153">
+<p> You can change the reclaim policy of an existing PersistentVolume at any time. If it&#8217;s initially set to <code>Delete</code>, but you don&#8217;t want to lose your data when deleting the claim, change the volume&#8217;s policy to <code>Retain</code> before doing so.</p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="154" refid="154">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="4a9e33a8788d4e1e3ad5095a1b407fc1" data-text-hash="30e906df9640f3952279d115b68671cd" id="155" refid="155">
+<p> If a persistent volume is <code>Released</code> and you subsequently change its reclaim policy from <code>Retain</code> to <code>Delete</code>, the PersistentVolume object and the underlying storage will be deleted immediately. However, if you instead delete the object manually, the underlying storage remains intact.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="fe72b9b606c478c02eed790886c85d82" data-text-hash="fd6c2eed939ecf554002924b3e5b8be9" id="156" refid="156">
+<h4>Deleting a persistent volume while it&#8217;s bound</h4>
+</div>
+<div class="readable-text" data-hash="4a7510a9b2890cb006a95139a4dcf8fa" data-text-hash="93e209222c962e0b17817ea066dc9faf" id="157" refid="157">
+<p>You&#8217;re done playing with the <code>quiz</code> pod, the <code>quiz-data</code> persistent volume claim, and the <code>quiz-data</code> persistent volume, so you&#8217;ll now delete them. You&#8217;ll learn one more thing in the process.</p>
+</div>
+<div class="readable-text" data-hash="40cb51df85313518849b35c885adb3cd" data-text-hash="282704659db35d4e338487db72b56736" id="158" refid="158">
+<p>Have you wondered what happens if a cluster administrator deletes a persistent volume while it&#8217;s in use (while it&#8217;s bound to a claim)? Let&#8217;s find out. Delete the persistent volume like so:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a49cbe32096982814d3e6de5c42339a1" data-text-hash="3bd682ff3f84688c879f89d893ad44b0" id="159" refid="159">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pv quiz-data
+persistentvolume "quiz-data" deleted    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbW1hbmQgYmxvY2tzIGFmdGVyIHByaW50aW5nIHRoaXMgbWVzc2FnZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="deda8ace7db726a297bc4fae99658263" data-text-hash="8362440ec2134cb9cb729b2e46f3e081" id="160" refid="160">
+<p>This command tells the Kubernetes API to delete the PersistentVolume object and then waits for Kubernetes controllers to complete the process. But this can&#8217;t happen until you release the persistent volume from the claim by deleting the PersistentVolumeClaim object.</p>
+</div>
+<div class="readable-text" data-hash="48203e973c938e3d66e1199888d5bda0" data-text-hash="1f0091a6129936e80d9072f48194122e" id="161" refid="161">
+<p>You can cancel the wait by pressing Control-C. However, this doesn&#8217;t cancel the deletion, as its already underway. You can confirm this as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="749fd369d184088b57a2013972fdcb17" data-text-hash="7e5a74b79915a61ed4e18ab2e3fa81d1" id="162" refid="162">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv quiz-data
+NAME        CAPACITY   ACCESS MODES   STATUS        CLAIM               ...
+quiz-data   10Gi       RWO,ROX        Terminating   default/quiz-data   ...    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBlcnNpc3RlbnQgdm9sdW1lIGlzIHRlcm1pbmF0aW5n"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4d4f213dcc3236f29e9c317e0d9acc89" data-text-hash="96d1e85d25e81f2cce4feccc614f519b" id="163" refid="163">
+<p>As you can see, the persistent volume&#8217;s status shows that it&#8217;s being terminated. But it&#8217;s still bound to the persistent volume claim. You need to delete the claim for the volume deletion to complete.</p>
+</div>
+<div class="readable-text" data-hash="83e34e419b4a84fd8730e86d499d4192" data-text-hash="53c407b68d381a2a9e290d0a4441a8fe" id="164" refid="164">
+<h4>Deleting a persistent volume claim while a pod is using it</h4>
+</div>
+<div class="readable-text" data-hash="b6796953b055bdd0421ecdb5cb636534" data-text-hash="468306c8b477b5ebf9d2ff0fca119e96" id="165" refid="165">
+<p>The claim is still being used by the quiz pod, but let&#8217;s try deleting it anyway:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1f4af76fe24df9bc457a7a43e5283c73" data-text-hash="43c38a7a03c8d06474000c4a71f173c1" id="166" refid="166">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pvc quiz-data
+persistentvolumeclaim "quiz-data" deleted    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbW1hbmQgYmxvY2tzIGFmdGVyIHByaW50aW5nIHRoaXMgbWVzc2FnZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7e8f95c34d70fd85bc6951ce048046c3" data-text-hash="2296072d12ba4ec6faab43b950fcc84d" id="167" refid="167">
+<p>Like the <code>kubectl delete pv</code> command, this command also doesn&#8217;t complete immediately. As before, the command waits for the claim deletion to complete. You can interrupt the execution of the command, but this won&#8217;t cancel the deletion, as you can see with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9b8adf637da696d32ee56898e30b5559" data-text-hash="36f734615d3964b307456818a5b7f87c" id="168" refid="168">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data
+NAME        STATUS        VOLUME      CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+quiz-data   Terminating   quiz-data   10Gi       RWO,ROX                       15m    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBlcnNpc3RlbnQgdm9sdW1lIGNsYWltIGlzIGJlaW5nIHRlcm1pbmF0ZWQ="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="42584c3f4198dc961c9582e04d0baf72" data-text-hash="4035ef14932881594d9b6cc916f0604e" id="169" refid="169">
+<p>The deletion of the claim is blocked by the pod. Unsurprisingly, deleting a persistent volume or a persistent volume claim has no immediate effect on the pod that&#8217;s using it. The application running in the pod continues to run unaffected. Kubernetes never kills pods just because the cluster administrator wants their disk space back.</p>
+</div>
+<div class="readable-text" data-hash="d269348922a9f99059044bdece6edbe4" data-text-hash="feb00fdeb7a12ed2a96485ac5f89d8f9" id="170" refid="170">
+<p>To allow the termination of the persistent volume claim and the persistent volume to complete, delete the quiz pod with <code>kubectl delete po quiz</code>.</p>
+</div>
+<div class="readable-text" data-hash="8f830b085c7fdf9b8ef6aa32fe757a85" data-text-hash="32d64b4521673b40eca4003c2ea2d264" id="171" refid="171">
+<h4>Deleting the underlying storage</h4>
+</div>
+<div class="readable-text" data-hash="fa70f15c1edd90c1aae32e05fff51114" data-text-hash="5bfa6bc59830b63cd6f1f6d36566cb6b" id="172" refid="172">
+<p>As you learned in the previous section, deleting the persistent volume does not delete the underlying storage, such as the <code>quiz-data</code> GCE Persistent Disk if you use Google Kubernetes Engine to perform these exercises, or the <code>/var/quiz-data</code> directory on the worker node if you use Minikube or kind.</p>
+</div>
+<div class="readable-text" data-hash="0cdeb6256e8a7613014686f888b4927f" data-text-hash="29f0ec5267c9eb8ba708c962213deda3" id="173" refid="173">
+<p>You no longer need the data files and can safely delete them. If you use Minikube or kind, you don&#8217;t need to delete the data directory, as it doesn&#8217;t cost you anything. However, a GCE Persistent Disk does. You can delete it with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="89f3e3e59fe2b31f2ad527c15776f64f" data-text-hash="6307e767efcd038e660172ddbc57cb9a" id="174" refid="174">
+<div class="code-area-container">
+<pre class="code-area">$ gcloud compute disks delete quiz-data</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="00e928c931894ff92b1513981a4016a7" data-text-hash="319b5f5cfa43bb8a0b7ade91367dc26b" id="175" refid="175">
+<p>You might remember that you also created another GCE Persistent Disk called <code>other-data</code>. Don&#8217;t delete that one just yet. You&#8217;ll use it in the next section&#8217;s exercise.</p>
+</div>
+<div class="readable-text" data-hash="5e4a3c1b49b9a246f0874ca0d24593f4" data-text-hash="1eaf9fb75758b060919f6b27c0d39d32" id="176" refid="176">
+<h3 id="sigil_toc_id_134">8.2.4&#160;Using a claim and volume in multiple pods</h3>
+</div>
+<div class="readable-text" data-hash="b586844252670da5d1f25b003f3d8f21" data-text-hash="9d53a56bcf508cdfc6510cea992eecda" id="177" refid="177">
+<p>So far, you used a persistent volume in only one pod instance at a time. You used the persistent volume in the so-called ReadWriteOnce <code>(RWO)</code> access mode because it was attached to a single node and allowed both read and write operations. You may remember that two other modes exist, namely ReadWriteMany (<code>RWX</code>) and ReadOnlyMany (<code>ROX</code>). The volume&#8217;s access modes indicate whether it can concurrently be attached to one or many cluster nodes and whether it can only be read from or also written to.</p>
+</div>
+<div class="readable-text" data-hash="41ced2ccf0329d2a03dc0909735031af" data-text-hash="53581ad124306376576feb361677cb7d" id="178" refid="178">
+<p>The ReadWriteOnce mode doesn&#8217;t mean that only a single pod can use it, but that a single <i>node</i> can attach the volume. As this is something that confuses a lot of users, it warrants a closer look.</p>
+</div>
+<div class="readable-text" data-hash="dad088de771e0855e94dda347a542505" data-text-hash="7cd20c5905ca3b415e0153f272a94b9e" id="179" refid="179">
+<h4>Binding a claim to a randomly selected persistent volume</h4>
+</div>
+<div class="readable-text" data-hash="815a4f8938aa450974bcd854335e9e31" data-text-hash="a86974ac4f462a278005d48e6619d5cc" id="180" refid="180">
+<p>This exercise requires the use of a GKE cluster. Make sure it has at least two nodes. First, create a persistent volume claim for the <code>other-data</code> persistent volume that you created earlier. You&#8217;ll find the manifest in the file <code>pvc.other-data.yaml</code>. It&#8217;s shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="17721f9bff5f394262ef1937bc1fa583" data-text-hash="27b72ce70eac6e08cfc941855e984bed" id="181" refid="181">
+<h5>Listing 8.5 A persistent volume claim requesting both ReadWriteOnce and ReadOnlyMany access</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: other-data
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  accessModes:    #A
+  - ReadWriteOnce    #A
+  - ReadOnlyMany    #A
+  storageClassName: ""    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjbGFpbSByZXF1aXJlcyB0aGUgdm9sdW1lIHRvIHN1cHBvcnQgYm90aCBhY2Nlc3MgbW9kZXMKI0IgVGhlIHN0b3JhZ2UgY2xhc3MgbmFtZSBpcyBlbXB0eSB0byBmb3JjZSB0aGUgY2xhaW0gdG8gYmUgYm91bmQgdG8gYW4gZXhpc3RpbmcgcGVyc2lzdGVudCB2b2x1bWU="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f499341efeb25e7731717318fecbf9ca" data-text-hash="28ace9617f3dfb72401e2bebc2588c57" id="182" refid="182">
+<p>You&#8217;ll notice that unlike in the previous section, this persistent volume claim does not specify the <code>volumeName</code>. This means that the persistent volume for this claim will be selected at random among all the volumes that can provide at least 1Gi of space and support both the <code>ReadWriteOnce</code> and the <code>ReadOnlyMany</code> access modes.</p>
+</div>
+<div class="readable-text" data-hash="7cd26383b589d21d58e3cf718ee49d45" data-text-hash="d7041d80999a481e8fb820863804dd1e" id="183" refid="183">
+<p>Your cluster should currently contain only the <code>other-data</code> persistent volume. Because it matches the requirements in the claim, this is the volume that will be bound to it.</p>
+</div>
+<div class="readable-text" data-hash="2386f52b39e73c1444496afa2f5387cc" data-text-hash="7edfa4e1fae0c7064f37dbe43cc75460" id="184" refid="184">
+<h4>Using a ReadWriteOnce volume in multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="9e749d730a0bc0c52119e14e97115b3b" data-text-hash="86ac9c6da99e22c50f6f6d0ff039a28f" id="185" refid="185">
+<p>The persistent volume bound to the claim supports both <code>ReadWriteOnce</code> and <code>ReadOnlyMany</code> access modes. First, you&#8217;ll use it in <code>ReadWriteOnce</code> mode, as you&#8217;ll deploy pods that write to it.</p>
+</div>
+<div class="readable-text" data-hash="0d6d8fd9e679b0c9556d8b91192bc2bf" data-text-hash="4a1aa0e4cb603ab5e53d9c87b3d4b7b3" id="186" refid="186">
+<p>You&#8217;ll create several replicas of a data-writer pod from a single pod manifest. The manifest is shown in the following listing. You&#8217;ll find it in <code>pod.data-writer.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c82e7a85ee83b9bfc479aacf2a76f1ab" data-text-hash="fe0d04f740f74e939042f8f9f845f66e" id="187" refid="187">
+<h5>Listing 8.6 A pod that writes a file to a shared persistent volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  generateName: data-writer-    #A
+spec:
+  volumes:
+  - name: other-data
+    persistentVolumeClaim:    #B
+      claimName: other-data    #B
+  containers:
+  - name: writer
+    image: busybox
+    command:
+    - sh
+    - -c
+    - |
+      echo "A writer pod wrote this." &gt; /other-data/${HOSTNAME} &amp;&amp;    #C
+      echo "I can write to /other-data/${HOSTNAME}." ;    #C
+      sleep 9999    #C
+    volumeMounts:
+    - name: other-data
+      mountPath: /other-data
+    resources:    #D
+      requests:    #D
+        cpu: 1m    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2QgbWFuaWZlc3QgZG9lc27igJl0IHNldCBhIG5hbWUgZm9yIHRoZSBwb2QuIFRoZSBnZW5lcmF0ZU5hbWUgZmllbGQgYWxsb3dzIGEgcmFuZG9tIG5hbWUgd2l0aCB0aGlzIHByZWZpeCB0byBiZSBnZW5lcmF0ZWQgZm9yIGVhY2ggcG9kIHlvdSBjcmVhdGUgZnJvbSB0aGlzIG1hbmlmZXN0LgojQiBBbGwgcG9kcyBjcmVhdGVkIGZyb20gdGhpcyBtYW5pZmVzdCB3aWxsIHVzZSB0aGUgb3RoZXItZGF0YSBwZXJzaXN0ZW50IHZvbHVtZSBjbGFpbS4KI0MgVGhlIHBvZCB3cml0ZXMgYSBzaG9ydCBtZXNzYWdlIHRvIGEgZmlsZSBpbiB0aGUgcGVyc2lzdGVudCB2b2x1bWUuIFRoZSBmaWxlbmFtZSBpcyB0aGUgcG9k4oCZcyBob3N0bmFtZS4gSWYgdGhlIGZpbGUgY3JlYXRpb24gc3VjY2VlZHMsIGEgbWVzc2FnZSBpcyBwcmludGVkIHRvIHRoZSBzdGFuZGFyZCBvdXRwdXQgb2YgdGhlIGNvbnRhaW5lci4gVGhlIGNvbnRhaW5lciB0aGVuIHdhaXRzIGZvciA5OTk5IHNlY29uZHMuCiNEIElnbm9yZSB0aGVzZSBsaW5lcy4gWW914oCZbGwgbGVhcm4gYWJvdXQgdGhlbSBpbiBjaGFwdGVyIDIwLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="37e7e09df2c0317649f62a9e741d6cac" data-text-hash="700e0c31703050b478cbe88d89af075e" id="188" refid="188">
+<p>Use the following command to create the pod from this manifest:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="767721e756388e53285f8e6cd0fb89be" data-text-hash="cec454b1c8fc096566783d1fc3d8964a" id="189" refid="189">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl create -f pod.data-writer.yaml    #A
+pod/data-writer-6mbjg created    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNvbW1hbmQga3ViZWN0bCBjcmVhdGUgaXMgdXNlZCBpbnN0ZWFkIG9mIGt1YmVjdGwgYXBwbHkKI0IgVGhlIHBvZCBnZXRzIGEgcmFuZG9tbHkgZ2VuZXJhdGVkIG5hbWU="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e9a209ef5e182dad5c63b73a45582f00" data-text-hash="8a2a95980e9c3dabec42bf6db4977f5c" id="190" refid="190">
+<p>Notice that you aren&#8217;t using the <code>kubectl apply</code> this time. Because the pod manifest uses the <code>generateName</code> field instead of specifying the pod name, <code>kubectl apply</code> won&#8217;t work. You must use <code>kubectl create</code>, which is similar, but is only used to create and not update objects.</p>
+</div>
+<div class="readable-text" data-hash="c28395f6f8e6c90dce115babcb8486d4" data-text-hash="034bab81d23c2c9d2a937e93ddbeeadf" id="191" refid="191">
+<p>Repeat the command several times so that you create two to three times as many writer pods as there are cluster nodes to ensure that at least two pods are scheduled to each node. Confirm that this is the case by listing the pods with the <code>-o wide</code> option and inspecting the <code>NODE</code> column:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1c8768ccc99d1a0e6119a2df7d07a868" data-text-hash="ee3cd814704e86d21452e5854d99039c" id="192" refid="192">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -o wide
+NAME                READY   STATUS              RESTARTS   AGE   IP           NODE 
+data-writer-6mbjg   1/1     Running             0          5m    10.0.10.21   gkdp-r6j4    #A
+data-writer-97t9j   0/1     ContainerCreating   0          5m    &lt;none&gt;       gkdp-mcbg    #B
+data-writer-d9f2f   1/1     Running             0          5m    10.0.10.23   gkdp-r6j4    #A
+data-writer-dfd8h   0/1     ContainerCreating   0          5m    &lt;none&gt;       gkdp-mcbg    #B
+data-writer-f867j   1/1     Running             0          5m    10.0.10.17   gkdp-r6j4    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgcG9kcyBydW4gb24gdGhlIGZpcnN0IG5vZGUuCiNCIFRoZXNlIHBvZHMgYXJlIHNjaGVkdWxlZCB0byB0aGUgc2Vjb25kIG5vZGUsIGJ1dCBkb27igJl0IHJ1bi4="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="193" refid="193">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9d1ddf1046a78db10c091dd0137ca82a" data-text-hash="b44f1dfe94fc20fd9416e587b9c7af4a" id="194" refid="194">
+<p> I&#8217;ve shortened the node names for clarity.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f8a423718067a933233d2db90ac83387" data-text-hash="6db34b3d779692423a9c2c12100f12cf" id="195" refid="195">
+<p>If all your pods are located on the same node, create a few more. Then look at the <code>STATUS</code> of these pods. You&#8217;ll notice that all the pods scheduled to the first node run fine, whereas the pods on the other node are all stuck in the status <code>ContainerCreating</code>. Even waiting for several minutes doesn&#8217;t change anything. Those pods will never run.</p>
+</div>
+<div class="readable-text" data-hash="974a8a75bd91951b3bc0de3f5b7e4ca1" data-text-hash="a4a8e3e2ab72604e638469344e0a2153" id="196" refid="196">
+<p>If you use <code>kubectl describe</code> to display the events related to one of these pods, you&#8217;ll see that it doesn&#8217;t run because the persistent volume can&#8217;t be attached to the node that the pod is on:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9d1c7b8062f97c911e1986d3b9ec66f0" data-text-hash="05d8edceaee3f70fa80d07cdc6ebce4b" id="197" refid="197">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po data-writer-97t9j
+...
+  Warning  FailedAttachVolume   ...   attachdetach-controller  AttachVolume.Attach failed 
+for volume "other-data" : googleapi: Error 400: RESOURCE_IN_USE_BY_ANOTHER_RESOURCE -    #A
+The disk resource 'projects/.../disks/other-data' is already being used by    #A
+'projects/.../instances/gkdp-r6j4'    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRpc2sgaXMgYmVpbmcgdXNlZCBieSBub2RlIGdrZHAtcjZqNA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c80971991de92959cd5a67b63d46f061" data-text-hash="b6fe2f127da90554688987a2ddca3706" id="198" refid="198">
+<p>The reason the volume can&#8217;t be attached is because it&#8217;s already attached to the first node in read-write mode. The volume supports ReadWriteOnce and ReadOnlyMany but doesn&#8217;t support ReadWriteMany. This means that only a single node can attach the volume in read-write mode. When the second node tries to do the same, the operation fails.</p>
+</div>
+<div class="readable-text" data-hash="b91d6b2f4fb1ef482a3f3292ffdb0620" data-text-hash="ee8f192af543dbc039578d78a450ef44" id="199" refid="199">
+<p>All the pods on the first node run fine. Check their logs to confirm that they were all able to write a file to the volume. Here&#8217;s the log of one of them:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="de84fc4fedaceb4dc558a2deb9dda00d" data-text-hash="425c1216d6ca4b38c35ad5595a1b7cbf" id="200" refid="200">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs other-data-writer-6mbjg
+I can write to /other-data/other-data-writer-6mbjg.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="05d60772ac9deb8643c6d1d3f7e97de8" data-text-hash="fc13d1ac446643221a50099a56a23688" id="201" refid="201">
+<p>You&#8217;ll find that all the pods on the first node successfully wrote their files to the volume. You don&#8217;t need ReadWriteMany for multiple pods to write to the volume if they are on the same node. As explained before, the word &#8220;Once<code>&#8221;</code> in ReadWriteOnce refers to nodes, not pods.</p>
+</div>
+<div class="readable-text" data-hash="73bafccae034d022f86aa53c8ab83664" data-text-hash="73566c740bbb796e8d2270142472e217" id="202" refid="202">
+<h4>Using a combination of read-write and read-only pods with a ReadWriteOnce and ReadOnlyMany volume</h4>
+</div>
+<div class="readable-text" data-hash="c60123306b16a02d9326b2e8785d9cca" data-text-hash="da88fcd5fc099867c7437657114da67b" id="203" refid="203">
+<p>You&#8217;ll now deploy a group of reader pods alongside the data-writer pods. They will use the persistent volume in read-only mode. The following listing shows the pod manifest for these data-reader pods. You&#8217;ll find it in <code>pod.data-reader.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="46e19c5bb50ba7ea09761959bb8fb57e" data-text-hash="fe301628f8e636269ed549c29075f6ea" id="204" refid="204">
+<h5>Listing 8.7 A pod that mounts a shared persistent volume in read-only mode</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  generateName: data-reader-
+spec:
+  volumes:
+  - name: other-data
+    persistentVolumeClaim:
+      claimName: other-data    #A
+      readOnly: true    #B
+  containers:
+  - name: reader
+    image: busybox
+    imagePullPolicy: Always
+    command:
+    - sh
+    - -c
+    - |
+      echo "The files in the persistent volume and their contents:" ;    #C
+      grep ^ /other-data/* ;    #C
+      sleep 9999    #C
+    volumeMounts:
+    - name: other-data
+      mountPath: /other-data
+    ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwb2QgYWxzbyB1c2VzIHRoZSBvdGhlci1kYXRhIHBlcnNpc3RlbnQgdm9sdW1lIGNsYWltLgojQiBVbmxpa2UgdGhlIHdyaXRlciBwb2QsIHRoaXMgcG9kIHVzZXMgdGhlIHBlcnNpc3RlbnQgdm9sdW1lIGluIHJlYWQtb25seSBtb2RlLgojQyBXaGVuIGl0IHJ1bnMsIGl0IHByaW50cyB0aGUgbmFtZSBhbmQgY29udGVudHMgb2YgZWFjaCBmaWxlIHN0b3JlZCBpbiB0aGUgcGVyc2lzdGVudCB2b2x1bWUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b226e797a3e635ac06b77695341161eb" data-text-hash="ae11d09858adff0f21d60e7de315b794" id="205" refid="205">
+<p>Use the <code>kubectl create</code> command to create as many of these reader pods as necessary to ensure that each node runs at least two instances. Use the <code>kubectl get po -o wide</code> command to see how many pods are on each node.</p>
+</div>
+<div class="readable-text" data-hash="0fa4fc2b6fd3e12b3c98ff6b06d3a747" data-text-hash="b1f99e4839f8783d687aab54319a3063" id="206" refid="206">
+<p>As before, you&#8217;ll notice that only those reader pods that are scheduled to the first node are running. The pods on the second node are stuck in <code>ContainerCreating</code>, just like the writer pods. Here&#8217;s a list of just the reader pods (the writer pods are still there, but aren&#8217;t shown):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0fbf9251a8097424891119c1c8d7efe9" data-text-hash="b0597074c845638da476744cfd0fb10c" id="207" refid="207">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -o wide | grep reader
+NAME                READY   STATUS              RESTARTS   AGE   IP           NODE 
+data-reader-6594s   1/1     Running             0          2m    10.0.10.25   gkdp-r6j4    #A
+data-reader-lqwkv   1/1     Running             0          2m    10.0.10.24   gkdp-r6j4    #A
+data-reader-mr5mk   0/1     ContainerCreating   0          2m    &lt;none&gt;       gkdp-mcbg    #B
+data-reader-npk24   1/1     Running             0          2m    10.0.10.27   gkdp-r6j4    #A
+data-reader-qbpt5   0/1     ContainerCreating   0          2m    &lt;none&gt;       gkdp-mcbg    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlc2UgcnVuIG9uIHRoZSBmaXJzdCBub2RlCiNCIFRoZXNlIGFyZSBzY2hlZHVsZWQgdG8gdGhlIHNlY29uZCBub2RlLCBidXQgZG9u4oCZdCBydW4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="87408f85c35471d41844372da756c402" data-text-hash="525b7410145923b3cc9553d8e171564c" id="208" refid="208">
+<p>These pods use the volume in read-only mode. The claim&#8217;s (and volume&#8217;s) access modes are both ReadWriteOnce (<code>RWO</code>) and ReadOnlyMany (<code>ROX</code>), as you can see by running <code>kubectl get pvc</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9291497fe92c775759a2c4b456f9614c" data-text-hash="026b3e2f290ca32139258b2d149fc4be" id="209" refid="209">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc other-data
+NAME         STATUS   VOLUME       CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+other-data   Bound    other-data   10Gi       RWO,ROX                       23h</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="be836dea86514f5099393457e779b66b" data-text-hash="590465449e6adf972ef441962140aac0" id="210" refid="210">
+<p>If the claim supports access mode ReadOnlyMany, why can&#8217;t both nodes attach the volume and run the reader pods? This is caused by the writer pods. The first node attached the persistent volume in read-write mode. This prevents other nodes from attaching the volume, even in read-only mode.</p>
+</div>
+<div class="readable-text" data-hash="336f0dc62678edaec43a0e1e6f46b9d5" data-text-hash="d98fbe1acaf48231b43a96c7fd5bcbc1" id="211" refid="211">
+<p>Wonder what happens if you delete all the writer pods? Does that allow the second node to attach the volume in read-only mode and run its pods? Delete the writer pods one by one or use the following command to delete them all if you use a shell that supports the following syntax:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="3bf58b36315f4d4b097e0fc1551d5497" data-text-hash="992bceb2aa0416d076cf2ccff1be3f58" id="212" refid="212">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete $(kubectl get po -o name | grep writer)</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="02cfdee307c218d9b04a14ea14a8ed3a" data-text-hash="33d7680df619d4e8abd6ef6832596dcd" id="213" refid="213">
+<p>Now list the pods again. The status of the reader pods that are on the second node is still ContainerCreating. Even if you give it enough time, the pods on that node never run. Can you figure out why that is so?</p>
+</div>
+<div class="readable-text" data-hash="fb16193ba55fbb3956af8741f84292ab" data-text-hash="43ca2244288a6daf511f51555aff2d54" id="214" refid="214">
+<p>It&#8217;s because the volume is still being used by the reader pods on the first node. The volume is attached in read-write mode because that was the mode requested by the writer pods, which you deployed first. Kubernetes can&#8217;t detach the volume or change the mode in which it is attached while it&#8217;s being used by pods.</p>
+</div>
+<div class="readable-text" data-hash="b0889bcaf99db3c6ff586b315d909758" data-text-hash="9632f40ee6ca9f754fd740ff6c4e94cd" id="215" refid="215">
+<p>In the next section, you&#8217;ll see what happens if you deploy reader pods without first deploying the writers. Before moving on, delete all the pods as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="65de204f2d2ffd6ee4bf5c0aa58fe22b" data-text-hash="fd6c8e4cbe7d699ff0e1875e941009bf" id="216" refid="216">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete po --all</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2836a263cdc339119d9bbd50d3464c96" data-text-hash="28128c555c06654229b8ed0a44746aa8" id="217" refid="217">
+<p>Give Kubernetes some time to detach the volume from the node. Then go to the next exercise.</p>
+</div>
+<div class="readable-text" data-hash="c270d9d7a8f3aa17591391917c897a5c" data-text-hash="3a38baed2e592009806e2efc70c1cf38" id="218" refid="218">
+<h4>Using a ReadOnlyMany volume in multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="026b663f52f30b67de446ecd903529a6" data-text-hash="24507e159b4e4b8ff15f69d7d5376a4a" id="219" refid="219">
+<p>Create several reader pods again by repeating the <code>kubectl create -f pod.data-reader.yaml</code> command several times. This time, all the pods run, even if they are on different nodes:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c8f806bd66e4c1fecda0170cdc9ab642" data-text-hash="d9025d553b39989bd249518964ed5aa1" id="220" refid="220">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -o wide
+NAME                READY   STATUS    RESTARTS   AGE   IP           NODE
+data-reader-9xs5q   1/1     Running   0          27s   10.0.10.34   gkdp-r6j4
+data-reader-b9b25   1/1     Running   0          29s   10.0.10.32   gkdp-r6j4
+data-reader-cbnp2   1/1     Running   0          16s   10.0.9.12    gkdp-mcbg
+data-reader-fjx6t   1/1     Running   0          21s   10.0.9.11    gkdp-mcbg</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cd081bbf42ff336cb744e2dc917a57c0" data-text-hash="2214d8e681019182b52faa00c2ea96eb" id="221" refid="221">
+<p>All these pods specify the <code>readOnly: true</code> field in the <code>persistentVolumeClaim</code> volume definition. This causes the node that runs the first pod to attach the persistent volume in read-only mode. The same thing happens on the second node. They can both attach the volume because they both attach it in read-only mode and the persistent volume supports ReadOnlyMany.</p>
+</div>
+<div class="readable-text" data-hash="4c6f09434407fa9e59aa8f7db06ae66e" data-text-hash="57cabff54c0c775b358b72b6e70cb57a" id="222" refid="222">
+<p>The ReadOnlyMany access mode doesn&#8217;t need further explanation. If no pod mounts the volume in read-write mode, any number of pods can use the volume, even on many different nodes.</p>
+</div>
+<div class="readable-text" data-hash="75a1d5d7b8434b8a251e8ea01fce1599" data-text-hash="61c274ea720f97ff38fc1054c46676bb" id="223" refid="223">
+<p>Can you guess what happens if you deploy a writer pod now? Can it write to the volume? Create the pod and check its status. This is what you&#8217;ll see:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5ea81843ce625c36e3f713ffb05b38d9" data-text-hash="7e369f25d2b6c01121c75b0e92f5e7a9" id="224" refid="224">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -o wide
+NAME                READY   STATUS    RESTARTS   AGE     IP           NODE 
+...
+data-writer-dj6w5   1/1     Running   0          3m33s   10.0.10.38   gkdp-r6j4</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0bf2247a773e5859876128a87e74cee6" data-text-hash="24c39ab9bbbfe868e18b3b4ff97adfd8" id="225" refid="225">
+<p>This pod is shown as <code>Running</code>. Does that surprise you? It did surprise me. I thought it would be stuck in <code>ContainerCreating</code> because the node couldn&#8217;t mount the volume in read-write mode because it&#8217;s already mounted in read-only mode. Does that mean that the node was able to upgrade the mount point from read-only to read-write without detaching the volume?</p>
+</div>
+<div class="readable-text" data-hash="307c776de58f6725b5fc7b82f5dc1ad5" data-text-hash="6cb588db57422ae23d06562a4c4e3520" id="226" refid="226">
+<p>Let&#8217;s check the pod&#8217;s log to confirm that it could write to the volume:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="42b123761d13e08d0f856bdf27f14715" data-text-hash="0026fc9fa4407979e0fe7bcf748d8e72" id="227" refid="227">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs data-writer-dj6w5
+sh: can't create /other-data/data-writer-dj6w5: Read-only file system</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="0b4f02a5a26c925080eed9572c33c27d" data-text-hash="28a050285151e1c28241e0bece25c3eb" id="228" refid="228">
+<p>Ahh, there&#8217;s your answer. The pod is unable to write to the volume because it&#8217;s read-only. The pod was started even though the volume isn&#8217;t mounted in read-write mode as the pod requests. This might be a bug. If you try this yourself and the pod doesn&#8217;t run, you&#8217;ll know that the bug was fixed after the book was published.</p>
+</div>
+<div class="readable-text" data-hash="cb88f886ba9db9d0ab96a7d4558a107f" data-text-hash="9d60f3986c741381c51baebde95054b2" id="229" refid="229">
+<p>You can now delete all the pods, the persistent volume claim and the underlying GCE Persistent Disk, as you&#8217;re done using them.</p>
+</div>
+<div class="readable-text" data-hash="fac8a113fe58e86afb4a8d9be979aab6" data-text-hash="66c2c4cd0ad27b7055253f601c94bfd4" id="230" refid="230">
+<h4>Using a ReadWriteMany volume in multiple pods</h4>
+</div>
+<div class="readable-text" data-hash="eeb22589f8aad99ce12bbb4e6259e573" data-text-hash="c19797aa805540ccfd9ff47c6da1f57c" id="231" refid="231">
+<p>GCE Persistent Disks don&#8217;t support the ReadWriteMany access mode. However, network-attached volumes available in other cloud environments do support it. As the name of the ReadWriteMany access mode indicates, volumes that support this mode can be attached to many cluster nodes concurrently, yet still allow both read and write operations to be performed on the volume.</p>
+</div>
+<div class="readable-text" data-hash="419c9d8bf5b4a65d6ee274e412292f6c" data-text-hash="ec4229fe68771a78a1e5c871d2c0caf0" id="232" refid="232">
+<p>As this mode has no restrictions on the number of nodes or pods that can use the persistent volume in either read-write or read-only mode, it doesn&#8217;t need any further explanation. If you&#8217;d like to play with them anyhow, I suggest you deploy the writer and the reader pods as in the previous exercise, but this time use the ReadWriteMany access mode in both the persistent volume and the persistent volume claim definitions.</p>
+</div>
+<div class="readable-text" data-hash="bb7fee621ef5434a78962f9b3222c913" data-text-hash="d4093ab72aad6bba732392551cf04648" id="233" refid="233">
+<h3 id="sigil_toc_id_135">8.2.5&#160;Understanding the lifecycle of manually provisioned persistent volumes</h3>
+</div>
+<div class="readable-text" data-hash="3b8aad3be2233524e06d1b0e7675e2a7" data-text-hash="26bc9381ade0d7a9be1879d34513187a" id="234" refid="234">
+<p>You used the same GCE Persistent Disk throughout several exercises in this chapter, but you created multiple volumes, claims, and pods that used the same GCE PD. To understand the lifecycles of these four objects, take a look at the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="677d18dbf11cc16259f5315847649949" data-text-hash="e657610cbc3647aa1cf5524e3b8711df" id="235" refid="235">
+<h5>Figure 8.6 The lifecycle of statically provisioned persistent volumes, claims and the pods that use them</h5>
+<img alt="" data-processed="true" height="489" id="Picture_6" loading="lazy" src="EPUB/images/08image007.png" width="873">
+</div>
+<div class="readable-text" data-hash="34830229e8b4cb74198c52661befecae" data-text-hash="97b18408e7a13994c36f0152cb27d3c7" id="236" refid="236">
+<p>When using manually provisioned persistent volumes, the lifecycle of the underlying storage volume is not coupled to the lifecycle of the PersistentVolume object. Each time you create the object, its initial status is <code>Available</code>. When a PersistentVolumeClaim object appears, the persistent volume is bound to it, if it meets the requirements set forth in the claim. Until the claim is bound to the volume, it has the status <code>Pending</code>; then both the volume and the claim are displayed as <code>Bound</code>.</p>
+</div>
+<div class="readable-text" data-hash="782b1eeb5d561c1e3e77b0833a051de7" data-text-hash="1ccb4e1d18e7f97dd4f458cac0d7f64d" id="237" refid="237">
+<p>At this point, one or many pods may use the volume by referring to the claim. When each pod runs, the underlying volume is mounted in the pod&#8217;s containers. After all the pods are finished with the claim, the PersistentVolumeClaim object can be deleted.</p>
+</div>
+<div class="readable-text" data-hash="dbd6a54c9f865592c46f740af4e8d203" data-text-hash="d7a2496f913d9e0295cabf46ea378cd8" id="238" refid="238">
+<p>When the claim is deleted, the volume&#8217;s reclaim policy determines what happens to the PersistentVolume object and the underlying volume. If the policy is <code>Delete</code>, both the object and the underlying volume are deleted. If it&#8217;s <code>Retain</code>, the PersistentVolume object and the underlying volume are preserved. The object&#8217;s status changes to <code>Released</code> and the object can&#8217;t be bound until additional steps are taken to make it <code>Available</code> again.</p>
+</div>
+<div class="readable-text" data-hash="a26d726ea1c109fbda1f2b067c0bd601" data-text-hash="02948b07971a0f225a97af71efb0ed10" id="239" refid="239">
+<p>If you delete the PersistentVolume object manually, the underlying volume and its files remain intact. They can be accessed again by creating a new PersistentVolume object that references the same underlying volume.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="240" refid="240">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="f450e126480a0215f8689615902285f2" data-text-hash="3897ad571d744c5a433d7232a0105657" id="241" refid="241">
+<p> The sequence of events described in this section applies to the use of statically provisioned volumes that exist before the claims are created. When persistent volumes are dynamically provisioned, as described in the next section, the situation is different. Look for a similar diagram at the end of the next section.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="327d863d145795c0bac51a2069947cc5" data-text-hash="032c806a7eac44fa8f775dff6c953317" id="242" refid="242">
+<h2 id="sigil_toc_id_136">8.3&#160;Dynamic provisioning of persistent volumes</h2>
+</div>
+<div class="readable-text" data-hash="800ae2db71d01a4994d98984d4325a85" data-text-hash="c1788b8539d193f38494ca659c204f50" id="243" refid="243">
+<p>So far in this chapter you&#8217;ve seen how developers can claim pre-provisioned persistent volumes as a place for their pods to store data persistently without having to deal with the details of the underlying storage technology. However, a cluster administrator must pre-provision the physical volumes and create a PersistentVolume object for each of these volumes. Then each time the volume is bound and released, the administrator must manually delete the data on the volume and recreate the object.</p>
+</div>
+<div class="readable-text" data-hash="b022f5bca0c9ab87033239989d76352b" data-text-hash="fcf0f74f0fd6ced4d682637ff6fec4fc" id="244" refid="244">
+<p>To keep the cluster running smoothly, the administrator may need to pre-provision dozens, if not hundreds, of persistent volumes, and constantly keep track of the number of available volumes to ensure the cluster never runs out. All this manual work contradicts the basic idea of Kubernetes, which is to automate the management of large clusters. As one might expect, a better way to manage volumes exists. It&#8217;s called <i>dynamic provisioning of persistent volumes</i>.</p>
+</div>
+<div class="readable-text" data-hash="08b128af46a27e600b5a9d45a5444098" data-text-hash="f2b27c7b81599375b69de1b9f1c0578f" id="245" refid="245">
+<p>With dynamic provisioning, instead of provisioning persistent volumes in advance (and manually), the cluster admin deploys a persistent volume provisioner to automate the just-in-time provisioning process, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="ecdfb6fece008cb664ef38ee99eddc0e" data-text-hash="0c67788e64814a208c11aea86e0553f8" id="246" refid="246">
+<h5>Figure 8.7 Dynamic provisioning of persistent volumes</h5>
+<img alt="" data-processed="true" height="397" id="Picture_7" loading="lazy" src="EPUB/images/08image008.png" width="836">
+</div>
+<div class="readable-text" data-hash="d254eb059488c9a70fa5029b46418f83" data-text-hash="e163dfa9175c800d6839bb78e0cd871e" id="247" refid="247">
+<p>In contrast to static provisioning, the order in which the claim and the volume arise is reversed. When a user creates a persistent volume claim, the dynamic provisioner provisions the underlying storage and creates the PersistentVolume object for that particular claim. The two objects are then bound.</p>
+</div>
+<div class="readable-text" data-hash="5ba2b59e73b8a7fa7db6698c249b06d0" data-text-hash="8f3055c73e7eda68f93461ca6be588ca" id="248" refid="248">
+<p>If your Kubernetes cluster is managed by a cloud provider, it probably already has a persistent volume provisioner configured. If you are running Kubernetes on-premises, you&#8217;ll need to deploy a custom provisioner, but this is outside the scope of this chapter. Clusters that are provisioned with Minikube or kind usually also come with a provisioner out of the box.</p>
+</div>
+<div class="readable-text" data-hash="6db754c708c8bcb873d7b9bde3b81a8d" data-text-hash="ae499a89519042461d7cc8cbd55cc53e" id="249" refid="249">
+<h3 id="sigil_toc_id_137">8.3.1&#160;Introducing the StorageClass object</h3>
+</div>
+<div class="readable-text" data-hash="b294b991cfd1e72d7ca5dc9ddbf5c2aa" data-text-hash="473dcab856e733660ee0d85cea505c34" id="250" refid="250">
+<p>The persistent volume claim definition you created in the previous section specifies the minimum size and the required access modes of the volume, but it also contains a field named <code>storageClassName</code>, which wasn&#8217;t discussed yet.</p>
+</div>
+<div class="readable-text" data-hash="4db882153309fa445ade1f3659afba49" data-text-hash="a4bd0929f826d5c2502782d38313c424" id="251" refid="251">
+<p>A Kubernetes cluster can run multiple persistent volume provisioners, and a single provisioner may support several different types of storage volumes. When creating a claim, you use the <code>storageClassName</code> field to specify which storage class you want.</p>
+</div>
+<div class="readable-text" data-hash="18741222a960d7d290eda1f2e798fe8e" data-text-hash="b60d2bec50a879808e118c631451672d" id="252" refid="252">
+<h4>Listing storage classes</h4>
+</div>
+<div class="readable-text" data-hash="a94c6c389cf5800f305046125359cc64" data-text-hash="b89ce00ee2fb9fdc447809e0915b9c13" id="253" refid="253">
+<p>The storage classes available in the cluster are represented by <i>StorageClass</i> API objects. You can list them with the <code>kubectl get sc</code> command. In a GKE cluster, this is the result:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="84cfdf9d32c841a975ee72e65b5b5c92" data-text-hash="166e5b7cb53c2a9d1bea1cd51b98a864" id="254" refid="254">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc
+NAME                 PROVISIONER            AGE
+standard (default)   kubernetes.io/gce-pd   1d    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHN0YW5kYXJkIHN0b3JhZ2UgY2xhc3MgaW4gYSBHS0UgY2x1c3Rlcg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="255" refid="255">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="4ab83c78156c41db7a6acc3d9acc0fa4" data-text-hash="9bb8cc3a1d25b6e3fbc09f047d2ee439" id="256" refid="256">
+<p> The shorthand for <code>storageclass</code> is <code>sc</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b909f693fa1eba97506202ad6a203eb6" data-text-hash="bc83907f00e8475efdb78d2fd929a486" id="257" refid="257">
+<p>In a kind-provisioned cluster, the result is similar:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="88e1e653b0666aeb34319a8515d88f41" data-text-hash="481be59a4f6d11e416bbda3ad64c6168" id="258" refid="258">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc
+NAME                 PROVISIONER             RECLAIMPOLICY   ...
+standard (default)   rancher.io/local-path   Delete          ...    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHN0YW5kYXJkIHN0b3JhZ2UgY2xhc3MgaW4gYSBjbHVzdGVyIGNyZWF0ZWQgd2l0aCB0aGUga2luZCB0b29s"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="cc5f6a0f5652c9237b96e478a9acaee0" data-text-hash="9c61bc99fbd78b6de128bd6d76426083" id="259" refid="259">
+<p>Clusters created with Minikube also provide a storage class with the same name:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9224c1598408519045bc511fa26cc133" data-text-hash="294c74cbc290b78b37fae14df4b6b5f1" id="260" refid="260">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc
+NAME                 PROVISIONER                RECLAIMPOLICY   VOLUMEBINDINGMODE   ...   
+standard (default)   k8s.io/minikube-hostpath   Delete          Immediate           ...   </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHN0YW5kYXJkIHN0b3JhZ2UgY2xhc3MgaW4gYSBjbHVzdGVyIGNyZWF0ZWQgd2l0aCB0aGUga2luZCB0b29s"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="04b412b2ef6ce62eb879c9481a8ebb40" data-text-hash="5e5c34773825d3a9c15fdce43cde9bed" id="261" refid="261">
+<p>In many clusters, as in these three examples, only one storage class called <code>standard</code> is configured. It&#8217;s also marked as the default, which means that this is the class that is used to provision the persistent volume when the persistent volume claim doesn&#8217;t specify the storage class.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="262" refid="262">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e5aebfcc645b83422a067d220f418efb" data-text-hash="c703fd1e5e86f9d8266050381e7b8459" id="263" refid="263">
+<p> Remember that omitting the <code>storageClassName</code> field causes the default storage class to be used, whereas explicitly setting the field to <code>""</code> disables dynamic provisioning and causes an existing persistent volume to be selected and bound to the claim.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0292b90a5b8d7be299a5d347785415e1" data-text-hash="09f0f192f60940913a4024275767af74" id="264" refid="264">
+<h4>Inspecting the default storage class</h4>
+</div>
+<div class="readable-text" data-hash="71176ce6b9548449f8f008f251ae9263" data-text-hash="9a0e14b582c58516dbb783531f74ed4b" id="265" refid="265">
+<p>Let&#8217;s get to know the StorageClass object kind by inspecting the YAML definition of the <code>standard</code> storage class with the <code>kubectl</code> <code>get</code> command. In GKE, you&#8217;ll find the following definition:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="afae197ce6113b879d917a609f142be8" data-text-hash="6c7ed7115652ecb6841c7784f225bf0a" id="266" refid="266">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc standard -o yaml    #A
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"    #B
+  name: standard
+  ...
+parameters:    #C
+  type: pd-standard    #C
+provisioner: kubernetes.io/gce-pd    #D
+reclaimPolicy: Delete    #E
+volumeBindingMode: Immediate    #F</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb21tYW5kIHdhcyBydW4gYWdhaW5zdCBhIEdLRSBjbHVzdGVyLgojQiBUaGlzIG1hcmtzIHRoZSBzdG9yYWdlIGNsYXNzIGFzIGRlZmF1bHQuCiNDIFRoZSBwYXJhbWV0ZXJzIGZvciB0aGUgcHJvdmlzaW9uZXIKI0QgVGhlIG5hbWUgb2YgdGhlIHByb3Zpc2lvbmVyIHRoYXQgZ2V0cyBjYWxsZWQgdG8gcHJvdmlzaW9uIHBlcnNpc3RlbnQgdm9sdW1lcyBvZiB0aGlzIGNsYXNzCiNFIFRoZSByZWNsYWltIHBvbGljeSBmb3IgcGVyc2lzdGVudCB2b2x1bWVzIG9mIHRoaXMgY2xhc3MKI0YgV2hlbiBwZXJzaXN0ZW50IHZvbHVtZXMgb2YgdGhpcyBjbGFzcyBhcmUgcHJvdmlzaW9uZWQgYW5kIGJvdW5k"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="eaecaad9ae182b4b106710edd0798c6a" data-text-hash="7a2635bc3ac40d90a01fa4698ac18ddc" id="267" refid="267">
+<p>The storage class definition in a kind-provisioned cluster is not much different. The main differences are highlighted in bold:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="2deeac364e3f95e127499c3ba67fc781" data-text-hash="06562e97ad2ad6e70cd1e2235759044a" id="268" refid="268">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc standard -o yaml    #A
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"    #B
+  name: standard
+  ...
+provisioner: rancher.io/local-path                         #C
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer                    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb21tYW5kIHdhcyBydW4gYWdhaW5zdCBhIGtpbmQtcHJvdmlzaW9uZWQgY2x1c3Rlci4KI0IgQWdhaW4sIHRoaXMgaXMgc3RvcmFnZSBjbGFzcyBpcyB0aGUgZGVmYXVsdC4KI0MgS2luZCB1c2VzIGEgZGlmZmVyZW50IHByb3Zpc2lvbmVyIHRoYW4gR0tFLiBUaGVyZSBhcmUgbm8gcGFyYW1ldGVycyBkZWZpbmVkIGZvciB0aGUgcHJvdmlzaW9uZXIuCiNEIEtpbmQgdXNlcyBhIGRpZmZlcmVudCB2b2x1bWUgYmluZGluZyBtb2RlIHRoYW4gR0tFLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7f465dd8b711b4ab86c1e1e5abefc13" data-text-hash="90bb452e6c22fdb8d60f543496c325a8" id="269" refid="269">
+<p>In clusters created with Minikube, the standard storage class looks as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="fc02bfe3069b9909f8ca699a8516ce0b" data-text-hash="41e5a17df16106fa114421421cace16d" id="270" refid="270">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get sc standard -o yaml    #A
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"    #B
+  name: standard    #A
+  ...
+provisioner: k8s.io/minikube-hostpath    #C
+reclaimPolicy: Delete    #D
+volumeBindingMode: Immediate    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb21tYW5kIHdhcyBydW4gYWdhaW5zdCBhIE1pbmlrdWJlIGNsdXN0ZXIuCiNCIFRoaXMgc3RvcmFnZSBjbGFzcyBpcyB0aGUgZGVmYXVsdC4KI0MgTWluaWt1YmUgdXNlcyBpdHMgb3duIHByb3Zpc2lvbmVyLgojRCBUaGUgdm9sdW1lIGJpbmRpbmcgbW9kZSBpcyB0aGUgc2FtZSBhcyBpbiBHS0Uu"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="271" refid="271">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="8e6ab369f786f9280af1d465a184fcd6" data-text-hash="bec754270bac88899049b83198e72837" id="272" refid="272">
+<p> You&#8217;ll notice that StorageClass objects have no <code>spec</code> or <code>status</code> sections. This is because the object only contains static information. Since the object&#8217;s fields aren&#8217;t organized in the two sections, the YAML manifest may be more difficult to read. This is also compounded by the fact that fields in YAML are typically sorted in alphabetical order, which means that some fields may appear above the <code>apiVersion</code>, <code>kind</code> or <code>metadata</code> fields. Be careful not to overlook these.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="00d295079cc259fc88376ac018499563" data-text-hash="6493f7ed18e56aa3cd54216a115712c3" id="273" refid="273">
+<p>If you look closely at the top of the storage class definitions, you&#8217;ll see that they all include an annotation that marks the storage class as default.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="274" refid="274">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c38c71c3157e9b7cf45d782f2e39e431" data-text-hash="4ca8264a162fc9792e3b02872b6a1f85" id="275" refid="275">
+<p> You&#8217;ll learn what an object annotation is in chapter 10.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="06718695c88778f201439bc035e235dd" data-text-hash="35b48447934d2abb5c1fb66471c4ee6e" id="276" refid="276">
+<p>As specified in GKE&#8217;s storage class definition, when you create a persistent volume claim that references the <code>standard</code> class in GKE, the provisioner <code>kubernetes.io/gce-pd</code> is called to provision the persistent volume. In kind-provisioned clusters, the provisioner is <code>rancher.io/local-path</code>, whereas in Minikube it&#8217;s <code>k8s.io/minikube-hostpath</code>. GKE&#8217;s default storage class also specifies a parameter that is provided to the provisioner.</p>
+</div>
+<div class="readable-text" data-hash="2b1d2d412a79f24bdde3dddf237c49d3" data-text-hash="0d7bc2840b3b0fabd7965ed037158047" id="277" refid="277">
+<p>Regardless of what provisioner is used, the volume&#8217;s reclaim policy is set to whatever is specified in the storage class, which in all of the previous examples is <code>Delete</code>. As you have already learned, this means that the volume is deleted when you release it by deleting the claim.</p>
+</div>
+<div class="readable-text" data-hash="05e9b12556a8d9b75b7e7ef119a0f18c" data-text-hash="3668259ffb4347dc889584f2d76c2d1c" id="278" refid="278">
+<p>The last field in the storage class definition is <code>volumeBindingMode</code>. Both GKE and Minikube use the volume binding mode <code>Immediate</code>, whereas kind uses <code>WaitForFirstConsumer</code>. You&#8217;ll learn what the difference is later in this chapter.</p>
+</div>
+<div class="readable-text" data-hash="75c22fea06dcc456e8183f5b0a8da1ca" data-text-hash="7cd52c83ea969d49608e5c30476b2278" id="279" refid="279">
+<p>StorageClass objects also support several other fields that are not shown in the above listing. You can use <code>kubectl explain</code> to see what they are. You&#8217;ll learn about some of them in the following sections.</p>
+</div>
+<div class="readable-text" data-hash="982089161413d4d5b1b5e9a6ef199a23" data-text-hash="67b27164c61278b3fcdb5bfe4c5cb17e" id="280" refid="280">
+<p>In summary, a StorageClass object represents a class of storage that can be dynamically provisioned. As shown in the following figure, each storage class specifies what provisioner to use and the parameters that should be passed to it when provisioning the volume. The user decides which storage class to use for each of their persistent volume claims.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b09a74a85c71ddda9f2cdde3e62e4d84" data-text-hash="7ea09dd9d188c3b9f08c1f7d4f4aa2de" id="281" refid="281">
+<h5>Figure 8.8 The relationship between storage classes, persistent volume claims and dynamic volume provisioners</h5>
+<img alt="" data-processed="true" height="381" id="Picture_8" loading="lazy" src="EPUB/images/08image009.png" width="871">
+</div>
+<div class="readable-text" data-hash="cc2b365974bf711419249b58c56d0706" data-text-hash="be6472a0311f889954ec8bc4f7bf90b1" id="282" refid="282">
+<h3 id="sigil_toc_id_138">8.3.2&#160;Dynamic provisioning using the default storage class</h3>
+</div>
+<div class="readable-text" data-hash="3b63d05c1504d11f382a57dc965a264a" data-text-hash="a7f89d6be5a56789ff97ff39cca12998" id="283" refid="283">
+<p>You&#8217;ve previously used a statically provisioned persistent volume for the quiz pod. Now you&#8217;ll use dynamic provisioning to achieve the same result, but with much less manual work. And most importantly, you can use the same pod manifest, regardless of whether you use GKE, Minikube, kind, or any other tool to run your cluster, assuming that a default storage class exists in the cluster.</p>
+</div>
+<div class="readable-text" data-hash="813011363b3cdf734db50ceea6236de6" data-text-hash="73fe41e786ade59fc927c59d97e136b7" id="284" refid="284">
+<h4>Creating a claim with dynamic provisioning</h4>
+</div>
+<div class="readable-text" data-hash="b4e6a18319602c698396fd43d992fa5d" data-text-hash="fee8713d1a955aeb249a709ac7e4cd73" id="285" refid="285">
+<p>To dynamically provision a persistent volume using the storage class from the previous section, you can create a PersistentVolumeClaim object with the <code>storageClassName</code> field set to <code>standard</code> or with the field omitted altogether.</p>
+</div>
+<div class="readable-text" data-hash="f5a11480f76dc760944c8c795dc10261" data-text-hash="66324e7589c362fa7c2778fb66a048df" id="286" refid="286">
+<p>Let&#8217;s use the latter approach, as this makes the manifest as minimal as possible. You can find the manifest in the <code>pvc.quiz-data-default.yaml</code> file. Its contents are shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="21425feac3adc12bced7c62087631764" data-text-hash="2470ebd12e7dbf7ddca14fcc69911bbf" id="287" refid="287">
+<h5>Listing 8.8 A minimal PVC definition that uses the default storage class</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data-default
+spec:    #A
+  resources:    #B    
+    requests:    #B
+      storage: 1Gi    #B
+  accessModes:    #C
+  - ReadWriteOnce    #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGRlZmF1bHQgc3RvcmFnZSBjbGFzcyBpcyB1c2VkIGZvciB0aGlzIGNsYWltIGJlY2F1c2UgdGhlIHN0b3JhZ2VDbGFzc05hbWUgZmllbGQgaXNu4oCZdCBzZXQuCiNCIFRoZSBtaW5pbXVtIHNpemUgb2YgdGhlIHZvbHVtZQojQyBUaGUgZGVzaXJlZCBhY2Nlc3MgbW9kZQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="239a3d2b2c3b816cfcd393672f6a33e0" data-text-hash="8771dbe92839384770557ab76fddb0bd" id="288" refid="288">
+<p>This PersistentVolumeClaim manifest contains only the storage size request and the desired access mode, but no <code>storageClassName</code> field, so the default storage class is used.</p>
+</div>
+<div class="readable-text" data-hash="99393ee2fd7d7a0c9d7d64c8fbf1aa69" data-text-hash="120d6925205bac6be0d8f21e555a9fa4" id="289" refid="289">
+<p>After you create the claim with <code>kubectl</code> <code>apply</code>, you can see which storage class it&#8217;s using by inspecting the claim with <code>kubectl get</code>. This is what you&#8217;ll see if you use GKE:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b6beeb6d7d8e01334a0ceaa32e6139ec" data-text-hash="9910bd1b592ba489d1d7af3536964ae3" id="290" refid="290">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data-default
+NAME                STATUS   VOLUME             CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+quiz-data-default   Bound    pvc-ab623265-...   1Gi        RWO            standard       3m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5dd75e65b1b1c281818647a91f21b3f9" data-text-hash="559612bcde3e6d5f45312ea572406e61" id="291" refid="291">
+<p>As expected, and as indicated in the <code>STORAGECLASS</code> column, the claim you just created uses the <code>standard</code> storage class.</p>
+</div>
+<div class="readable-text" data-hash="c8610232b76087cbe7ece7ee939ed8a1" data-text-hash="f4db6b58a0f5945dccca7cd82d39a5c7" id="292" refid="292">
+<p>In GKE and Minikube, the persistent volume is created immediately and bound to the claim. However, if you create the same claim in a kind-provisioned cluster, that&#8217;s not the case:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="af675e72aa3d7f184216ffc28d109565" data-text-hash="f1b346725002b5e5042cc7fe485973f8" id="293" refid="293">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data-default
+NAME                STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+quiz-data-default   Pending                                      standard       3m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7e46116aeabead0ad3054fddeee82e0" data-text-hash="60968808a5bcee1455ece2252d3c1443" id="294" refid="294">
+<p>In a kind-provisioned cluster, and possibly other clusters, too, the persistent volume claim you just created is not bound immediately and its status is <code>Pending</code>.</p>
+</div>
+<div class="readable-text" data-hash="10603947a3072acde747735feca80f0a" data-text-hash="09cbdc3fad30fdce9b293ec626d07c4a" id="295" refid="295">
+<p>In one of the previous sections, you learned that this happens when no persistent volume matches the claim, either because it doesn&#8217;t exist or because it&#8217;s not available for binding. However, you are now using dynamic provisioning, where the volume should be created after you create the claim, and specifically for this claim. Is your claim pending because the cluster needs more time to provision the volume?</p>
+</div>
+<div class="readable-text" data-hash="f97cca948abf8797fb7177b314394eda" data-text-hash="566c1519dc6f2bab3f74f5b962377f48" id="296" refid="296">
+<p>No, the reason for the pending status lies elsewhere. Your claim will remain in the <code>Pending</code> state until you create a pod that uses this claim. I&#8217;ll explain why later. For now, let&#8217;s just create the pod.</p>
+</div>
+<div class="readable-text" data-hash="2b5041e74f7160853153c61af488dcfb" data-text-hash="9b7efb59fa41f46e250f5a33728c6fe0" id="297" refid="297">
+<h4>Using the persistent volume claim in a pod</h4>
+</div>
+<div class="readable-text" data-hash="65e7828a46ba42338161dca20fd50934" data-text-hash="77a03ce63826af4cf83fe0c381965233" id="298" refid="298">
+<p>Create a new pod manifest file from the <code>pod.quiz.pvc.yaml</code> file that you created earlier. Change the name of the pod to <code>quiz-default</code> and the value of the <code>claimName</code> field to <code>quiz-data-default</code>. You can find the resulting manifest in the file <code>pod.quiz-default.yaml</code>. Use it to create the pod.</p>
+</div>
+<div class="readable-text" data-hash="0665a419654308375c04e632622661e7" data-text-hash="7cd8eb0fd7d5f3c6bda5f4b557abdaeb" id="299" refid="299">
+<p>If you use a kind-provisioned cluster, the status of the persistent volume claim should change to <code>Bound</code> within moments of creating the pod:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="83e1e5b40ac2912f7269104cf0c178a1" data-text-hash="eb1470b956c0b37c2f72197df66f2a7f" id="300" refid="300">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data-default
+NAME                STATUS   VOLUME             CAPACITY   ACCESS   ...
+quiz-data-default   Bound    pvc-c71fb2c2-...   1Gi        RWO      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9b93c39ab3ea586215abc46676f262c9" data-text-hash="dfa05904a941b652d74b9d2c5f94d1b8" id="301" refid="301">
+<p>This implies that the persistent volume has been created. List persistent volumes to confirm (the following output has been reformatted to make it easier to read):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f76712ecba27f0cfa997752beaa4e27d" data-text-hash="fe830c779f70239399a26e37f81b962a" id="302" refid="302">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pv
+NAME              CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   ...
+pvc-c71fb2c2...   1Gi        RWO            Delete           Bound    ...
+ 
+...   STATUS   CLAIM                       STORAGECLASS   REASON   AGE
+...   Bound    default/quiz-data-default   standard                3s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e4dcf1d5b4417fb55e4eca38b41e0ec1" data-text-hash="43f1173393fa5d8c793334b187f5373b" id="303" refid="303">
+<p>As you can see, because the volume was created on demand, its properties perfectly match the requirements specified in the claim and the storage class it references. The volume capacity is <code>1Gi</code> and the access mode is <code>RWO</code>.</p>
+</div>
+<div class="readable-text" data-hash="9b3d9818957197f6052d1570d1d10c9a" data-text-hash="4e3069dd46ebd254c0386665367c930b" id="304" refid="304">
+<h4>Understanding when a dynamically provisioned volume is actually provisioned</h4>
+</div>
+<div class="readable-text" data-hash="29363d5a9f10bd59083505e6516963b1" data-text-hash="0422d950a69149b2e8004faebfbc1504" id="305" refid="305">
+<p>Why is the volume in a kind-provisioned cluster created and bound to the claim only after you deploy the pod? In an earlier example that used a manually pre-provisioned persistent volume, the volume was bound to the claim as soon as you created the claim. Is this a difference between static and dynamic provisioning? Because in both GKE and Minikube, the volume was dynamically provisioned and bound to the claim immediately, it&#8217;s clear that dynamic provisioning alone is not responsible for this behavior.</p>
+</div>
+<div class="readable-text" data-hash="a25a0742b57d334b4d3faa81618e0799" data-text-hash="4226a35be18bc89fb752384601febc43" id="306" refid="306">
+<p>The system behaves this way because of how the storage class in a kind-provisioned cluster is configured. You may remember that this storage class was the only one that has <code>volumeBindingMode</code> set to <code>WaitForFirstConsumer</code>. This causes the system to wait until the first pod, or the <i>consumer</i> of the claim, exists before the claim is bound. The persistent volume is also not provisioned before that.</p>
+</div>
+<div class="readable-text" data-hash="16ab2d8d41e070dbedb4bf2fe192bf03" data-text-hash="a1ab0d30ad949b98289738d20a7a7a73" id="307" refid="307">
+<p>Some types of volumes require this type of behavior, because the system needs to know <i>where</i> the pod is scheduled <i>before</i> it can provision the volume. This is the case with provisioners that create node-local volumes, such as the one you find in clusters created with the kind tool. You may remember that the provisioner referenced in the storage class had the word &#8220;local&#8221; in its name (<code>rancher.io/local-path</code>). Minikube also provisions a local volume (the provisioner it uses is called <code>k8s.io/minikube-hostpath</code>), but because there&#8217;s only one node in the cluster, there&#8217;s no need to wait for the pod to be created in order to know which node the persistent volume needs to be created on.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="308" refid="308">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="571a7d9607a87f6873a1e35c5de7286e" data-text-hash="af32b0093f513e3f8a05865be5e895ca" id="309" refid="309">
+<p> Refer to the documentation of your chosen provisioner to determine whether it requires the volume binding mode to be set to <code>WaitForFirstConsumer</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="844be70b958b1e7f37f8f2238c03057b" data-text-hash="9cd2f3fb81ed23e7d4a187fb2115d7f4" id="310" refid="310">
+<p>The alternative to <code>WaitForFirstConsumer</code> is the <code>Immediate</code> volume binding mode. The two modes are explained in the following table.</p>
+</div>
+<div class="browsable-container" data-hash="bfa624bb8473a2c7de850574194642f6" data-text-hash="1cadad3a6a76ea38976c49970aa48739" id="311" refid="311">
+<h5>Table 8.4 Supported volume binding modes</h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p>Volume binding mode</p> </td>
+<td> <p>Description</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>Immediate
+</pre> </td>
+<td> <p>The provision and binding of the persistent volume takes place immediately after the claim is created. Because the consumer of the claim is unknown at this point, this mode is only applicable to volumes that are can be accessed from any cluster node.</p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>WaitForFirstConsumer
+</pre> </td>
+<td> <p>The volume is provisioned and bound to the claim when the first pod that uses this claim is created. This mode is used for topology-constrained volume types.</p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="52bc0f70b2745c22f90730a78d5b92ea" data-text-hash="b06b7653fa389ae978ba16674d6de5aa" id="312" refid="312">
+<h3 id="sigil_toc_id_139">8.3.3&#160;Creating a storage class and provisioning volumes of that class</h3>
+</div>
+<div class="readable-text" data-hash="0fcbf4c535c92eec6351e26af87016a0" data-text-hash="2531320208ab8fc0e8fd86a613ebff01" id="313" refid="313">
+<p>As you saw in the previous sections, most Kubernetes clusters contain a single storage class named <code>standard</code>, but use different provisioners. A full-blown cluster such as the one you find in GKE can surely provide more than just a single type of persistent volume. So how does one create other types of volumes?</p>
+</div>
+<div class="readable-text" data-hash="b8f93ee24c3eb34d3fccc54847198dde" data-text-hash="bb34e156fd0546bddef7f9aab2083b25" id="314" refid="314">
+<h4>Inspecting the default storage class in GKE</h4>
+</div>
+<div class="readable-text" data-hash="2c3c2b3eefc6706a7935b19bbf8435e2" data-text-hash="6deb5e747b64982eb6d5768cd994c3e1" id="315" refid="315">
+<p>Let&#8217;s look at the default storage class in GKE more closely. I&#8217;ve rearranged the fields since the original alphabetical ordering makes the YAML definition more difficult to understand. The storage class definition follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="69d51c74877a992a1ae5c3f559d71ba1" data-text-hash="7b6b4fccca7ab5c036ddd47b81e0ccce" id="316" refid="316">
+<div class="code-area-container">
+<pre class="code-area">apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+    ...
+provisioner: kubernetes.io/gce-pd    #A
+parameters:    #B
+  type: pd-standard    #B
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+reclaimPolicy: Delete</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHByb3Zpc2lvbmVyIHVzZWQgdG8gcHJvdmlzaW9uIHZvbHVtZXMgb2YgdGhpcyBzdG9yYWdlIGNsYXNzCiNCIFRoaXMgdHlwZSBwYXJhbWV0ZXIgaXMgcGFzc2VkIHRvIHRoZSBwcm92aXNpb25lcg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="4c4528a6c0603cfe5518fd72e2f96985" data-text-hash="1fac3ec8b6e3a25081ada84c08fb4c0a" id="317" refid="317">
+<p>If you create a persistent volume claim that references this storage class, the provisioner <code>kubernetes.io/gce-pd</code> is called to create the volume. In this call, the provisioner receives the parameters defined in the storage class. In the case of the default storage class in GKE, the parameter <code>type: pd-standard</code> is passed to the provisioner. This tells the provisioner what type of GCE Persistent Disk to create.</p>
+</div>
+<div class="readable-text" data-hash="a29ea5a107c17b052ddc0adb6ff406c7" data-text-hash="ce915490e3a334fc83409bdbdb5a89c8" id="318" refid="318">
+<p>You can create additional storage class objects and specify a different value for the <code>type</code> parameter. You&#8217;ll do this next.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="319" refid="319">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="7301ea9d985d4fa2f206d917f299533a" data-text-hash="7982ae35510e863cf2f278d9a22f4eab" id="320" refid="320">
+<p> The availability of GCE Persistent Disk types depends on the zone in which your cluster is deployed. To view the list of types for each availability zone, run <code>gcloud compute disk-types list</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0e78430ed71b5c0a0a70154f9326c5b0" data-text-hash="ea472fccafd33a4510dfb5819c4f5d6b" id="321" refid="321">
+<h4>Creating a new storage class to enable the use of SSD persistent disks in GKE</h4>
+</div>
+<div class="readable-text" data-hash="060e68229b7e2e599a7a76e8f97841bc" data-text-hash="e4661cdb132f0e1b598344395329deb1" id="322" refid="322">
+<p>One of the disk types supported in most GCE zones is the <code>pd-ssd</code> type, which provisions a network-attached SSD. Let&#8217;s create a storage class called <code>fast</code> and configure it so that the provisioner creates a disk of type <code>pd-ssd</code> when you request this storage class in your claim. The storage class manifest is shown in the next listing (file <code>sc.fast.gcepd.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f5dfbda594c1b021ddb33f58975f0418" data-text-hash="2179fd01b206b0704768d3da947b3eaa" id="323" refid="323">
+<h5>Listing 8.9 A custom storage class definition</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: storage.k8s.io/v1           #A
+kind: StorageClass                      #A
+metadata:
+  name: fast                            #B
+provisioner: kubernetes.io/gce-pd       #C
+parameters:
+  type: pd-ssd                          #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBtYW5pZmVzdCBkZWZpbmVzIGEgU3RvcmFnZUNsYXNzIG9iamVjdAojQiBUaGUgbmFtZSBvZiB0aGlzIHN0b3JhZ2UgY2xhc3MKI0MgVGhlIHByb3Zpc2lvbmVyIHRvIHVzZQojRCBUZWxscyB0aGUgcHJvdmlzaW9uZXIgdG8gcHJvdmlzaW9uIGFuIFNTRCBkaXNr"></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="324" refid="324">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="7939fb9c2e50a9dbfcfcb925be6ba458" data-text-hash="b6b8e9d8d5c73a74966fbcd32b5604dd" id="325" refid="325">
+<p> If you&#8217;re using another cloud provider, check their documentation to find the name of the provisioner and the parameters you need to pass in. If you&#8217;re using Minikube or kind, and you&#8217;d like to run this example, set the provisioner and parameters to the same values as in the default storage class. For this exercise, it doesn&#8217;t matter if the provisioned volume doesn&#8217;t actually use an SSD.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6a1a326d257659bde0a021e0672ef699" data-text-hash="ab661056c2b2cb940ca585659d7c1d45" id="326" refid="326">
+<p>Create the StorageClass object by applying this manifest to your cluster and list the available storage classes to confirm that more than one is now available. You can now use this storage class in your claims. Let&#8217;s conclude this section on dynamic provisioning by creating a persistent volume claim that will allow your Quiz pod to use an SSD disk.</p>
+</div>
+<div class="readable-text" data-hash="898e9977ca16e77a5c1ee4758a4174a1" data-text-hash="62461e62f965f5daa440d1bfbf05ca5c" id="327" refid="327">
+<h4>Claiming a volume of a specific storage class</h4>
+</div>
+<div class="readable-text" data-hash="a7fe5ae92e7077731f6e1968d900dcbd" data-text-hash="8319c05522bf1cdcc21e42eca825a82f" id="328" refid="328">
+<p>The following listing shows the updated YAML definition of the <code>quiz-data</code> claim, which requests the storage class <code>fast</code> that you&#8217;ve just created instead of using the default class. You&#8217;ll find the manifest in the file <code>pvc.quiz-data-fast.yaml</code>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b210e17261922a685308273af8a1b789" data-text-hash="97f338f2806875c556d4f68ba8f99c46" id="329" refid="329">
+<h5>Listing 8.10 A persistent volume claim requesting a specific storage class</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data-fast
+spec:
+  storageClassName: fast     #A
+  resources:
+    requests:
+      storage: 1Gi
+  accessModes:
+    - ReadWriteOnce</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjbGFpbSByZXF1ZXN0cyB0aGF0IHRoaXMgc3BlY2lmaWMgc3RvcmFnZSBjbGFzcyBiZSB1c2VkIHRvIHByb3Zpc2lvbiB0aGUgdm9sdW1lLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="577b488f9b83be9e0fdabde8ba5b9e3a" data-text-hash="474895b4ca442ed8c4d4f5f3f4f34ffd" id="330" refid="330">
+<p>Rather than just specify the size and access modes and let the system use the default storage class to provision the persistent volume, this claim specifies that the storage class <code>fast</code> be used for the volume. When you create the claim, the persistent volume is created by the provisioner referenced in this storage class, using the specified parameters.</p>
+</div>
+<div class="readable-text" data-hash="4eb2ba19621b861d6a70894147003c36" data-text-hash="696cacbf4addd1c1d53771cac783ba8b" id="331" refid="331">
+<p>You can now use this claim in a new instance of the Quiz pod. Apply the file <code>pod.quiz-fast.yaml</code>. If you run this example on GKE, the pod will use an SSD volume.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="332" refid="332">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="6137a4c1f3ceccdc6f433374e13eec29" data-text-hash="4bab273d8352d38d22a5f04f5b578fda" id="333" refid="333">
+<p> If a persistent volume claim refers to a non-existent storage class, the claim remains <code>Pending</code> until the storage class is created. Kubernetes attempts to bind the claim at regular intervals, generating a <code>ProvisioningFailed</code> event each time. You can see the event if you execute the <code>kubectl</code> <code>describe</code> command on the claim.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="613f79b56a2feda12314db3650a65f3d" data-text-hash="c195c9e5e42c791c7fa2e3f19aca5d48" id="334" refid="334">
+<h3 id="sigil_toc_id_140">8.3.4&#160;Resizing persistent volumes</h3>
+</div>
+<div class="readable-text" data-hash="88fe70acfe2a709a16b703b33ab00723" data-text-hash="8707763489754023157d8670b83039c2" id="335" refid="335">
+<p>If the cluster supports dynamic provisioning, a cluster user can self-provision a storage volume with the properties and size specified in the claim and referenced storage class. If the user later needs a different storage class for their volume, they must, as you might expect, create a new persistent volume claim that references the other storage class. Kubernetes does not support changing the storage class name in an existing claim. If you try to do so, you receive the following error message:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9e5db14cd42d53f58fd37eade50db097" data-text-hash="8c88be835278ae76c0c012c3425ad430" id="336" refid="336">
+<div class="code-area-container">
+<pre class="code-area">* spec: Forbidden: is immutable after creation except resources.requests for bound claims</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="51dfb3114bd3ac63382ab2813a708c40" data-text-hash="71e140ec903b72ae86e314e972160fb6" id="337" refid="337">
+<p>The error indicates that the majority of the claim&#8217;s specification is immutable. The part that is mutable is <code>spec.resources.requests</code>, which is where you indicate the desired size of the volume.</p>
+</div>
+<div class="readable-text" data-hash="dc057a3745e7c001865dbaf574dcf62b" data-text-hash="33480f6878b6563c10a85c8d98a6176a" id="338" refid="338">
+<p>In the previous MongoDB examples you requested 1GiB of storage space. Now imagine that the database grows near this size. Can the volume be resized without restarting the pod and application? Let&#8217;s find out.</p>
+</div>
+<div class="readable-text" data-hash="21f46764877e9e08dd8306b205ea764b" data-text-hash="b013e7f6e2b90ca0cf6196e4adeb4239" id="339" refid="339">
+<h4>Requesting a larger volume in an existing persistent volume claim</h4>
+</div>
+<div class="readable-text" data-hash="22282c939d04ce06a42ec4a8818683d4" data-text-hash="26c009a91e5174222c34a61dd74be688" id="340" refid="340">
+<p>If you use dynamic provisioning, you can generally change the size of a persistent volume simply by requesting a larger capacity in the associated claim. For the next exercise, you&#8217;ll increase the size of the volume by modifying the <code>quiz-data-default</code> claim, which should still exist in your cluster.</p>
+</div>
+<div class="readable-text" data-hash="fec2a5a4dc8106e2f3aad28bcee2d9c8" data-text-hash="8df37a661ad7c67cbe068104f6b07540" id="341" refid="341">
+<p>To modify the claim, either edit the manifest file or create a copy and then edit it. Set the <code>spec.resources.requests.storage</code> field to <code>10Gi</code> as shown in the following listing. You can find this manifest in the book&#8217;s GitHub repository (file <code>pvc.quiz-data-default. 10gib.pvc.yaml</code>).</p>
+</div>
+<div class="browsable-container listing-container" data-hash="029a45b71c486af80d43dbd510dfaff9" data-text-hash="5c046759af67ec43b01866e8c532d42b" id="342" refid="342">
+<h5>Listing 8.11 Requesting a larger volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data-default     #A 
+spec:                        
+  resources:                  #B
+    requests:                 #B
+      storage: 10Gi           #B
+  accessModes:               
+    - ReadWriteOnce          </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRW5zdXJlIHRoYXQgdGhlIG5hbWUgbWF0Y2hlcyB0aGUgbmFtZSBvZiB0aGUgZXhpc3RpbmcgY2xhaW0uCiNCIFJlcXVlc3QgYSBsYXJnZXIgYW1vdW50IG9mIHN0b3JhZ2Uu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9a915ccb1862fd36a09f3b80746af48d" data-text-hash="6807413e448fce8d19e62a28837478ec" id="343" refid="343">
+<p>When you apply this file with the <code>kubectl apply</code> command, the existing PersistentVolumeClaim object is updated. Use the <code>kubectl get pvc</code> command to see if the volume&#8217;s capacity has increased:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="34ef0aa770ef19298bd783a07856bfe2" data-text-hash="067cea39944e8d8a373fe66d5232f6b2" id="344" refid="344">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data-default
+NAME                STATUS   VOLUME         CAPACITY   ACCESS MODES   ...
+quiz-data-default   Bound    pvc-ed36b...   1Gi        RWO            ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5eeb1d1ae23efc088cf240f8d5277a80" data-text-hash="3f173775b742016e0a63dda5aed8a8a9" id="345" refid="345">
+<p>You may recall that when claims are listed, the <code>CAPACITY</code> column displays the size of the bound volume and not the size requirement specified in the claim. According to the output, this means that the size of the volume hasn&#8217;t changed. Let&#8217;s find out why.</p>
+</div>
+<div class="readable-text" data-hash="cfbd07a787503e33fa7408623ae85007" data-text-hash="81c93adf194d3a58684fa1ec4b018d7d" id="346" refid="346">
+<h4>Determining why the volume hasn&#8217;t been resized</h4>
+</div>
+<div class="readable-text" data-hash="83253c7b0284e6ad340d3c656238918f" data-text-hash="ed9f732d640c69b21e75b46fc84f342b" id="347" refid="347">
+<p>To find out why the size of the volume has remained the same regardless of the change you made to the claim, the first thing you might do is inspect the claim using <code>kubectl</code> <code>describe</code>. If this is the case, you&#8217;ve already got the hang of debugging objects in Kubernetes. You&#8217;ll find that one of the claim&#8217;s conditions clearly explains why the volume was not resized:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0ae2b4a4e57be0d51e8c131f50d4303c" data-text-hash="e2e8cfc855554a5eb7712183442f2e0d" id="348" refid="348">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe pvc quiz-data-default
+...
+Conditions:
+  Type                      Status  ... Message
+  ----                      ------  ... -------
+  FileSystemResizePending   True        Waiting for user to (re-)start a 
+                                        pod to finish file system resize of 
+                                        volume on node.</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f88e317c726a59dff41462e9c0d82a45" data-text-hash="231346b5e413e0a62950c046d09bf7d2" id="349" refid="349">
+<p>To resize the persistent volume, you may need to delete and recreate the pod that uses the claim. After you do this, the claim and the volume will display the new size:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9ce06e0212f9448ae31e9f9b939e5bc2" data-text-hash="ed9ab37a314f78577379af0694c8d58e" id="350" refid="350">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pvc quiz-data-default
+NAME                  STATUS   VOLUME         CAPACITY   ACCESS MODES   ...
+quiz-data-default   Bound    pvc-ed36b...   10Gi        RWO           ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fcc5154194e9e391217a7a4bef9256f6" data-text-hash="f2abad0df2bad25a9b05b2e398856374" id="351" refid="351">
+<h4>Allowing and disallowing volume expansion in the storage class</h4>
+</div>
+<div class="readable-text" data-hash="f25dabd99a89129b45cbb4ae7d825be1" data-text-hash="678ccc80b3e8db9d4e2bd88b31e12d56" id="352" refid="352">
+<p>The previous example shows that cluster users can increase the size of the bound persistent volume by changing the storage requirement in the persistent volume claim. However, this is only possible if it&#8217;s supported by the provisioner and the storage class.</p>
+</div>
+<div class="readable-text" data-hash="96110cccbf7326ce4a19261f51087d2f" data-text-hash="700356ad8fe3e2a9a95a585efbec56f5" id="353" refid="353">
+<p>When the cluster administrator creates a storage class, they can use the <code>spec.allowVolumeExpansion</code> field to indicate whether volumes of this class can be resized. If you attempt to expand a volume that you&#8217;re not supposed to expand, the API server immediately rejects the update operation on the claim.</p>
+</div>
+<div class="readable-text" data-hash="39168690aec36af6577a37fddeb98eb4" data-text-hash="f04f95c6ec04b58a3d8e584b8619e383" id="354" refid="354">
+<h3 id="sigil_toc_id_141">8.3.5&#160;Understanding the benefits of dynamic provisioning</h3>
+</div>
+<div class="readable-text" data-hash="555dd96d812e482fde02f1cbe5a96d2b" data-text-hash="62132c33d42d8e0cc45f9f6ab8a8860a" id="355" refid="355">
+<p>This section on dynamic provisioning should convince you that automating the provisioning of persistent volumes benefits both the cluster administrator and anyone who uses the cluster to deploy applications. By setting up the dynamic volume provisioner and configuring several storage classes with different performance or other features, the administrator gives cluster users the ability to provision as many persistent volumes of any type as they want. Each developer decides which storage class is best suited for each claim they create.</p>
+</div>
+<div class="readable-text" data-hash="f385f4e45acf5680852c5d33bce7ad99" data-text-hash="052587b6920cec01316088d160f682d5" id="356" refid="356">
+<h4>Understanding how storage classes allow claims to be portable</h4>
+</div>
+<div class="readable-text" data-hash="61b0f963ef7920b461e3bd0011277e2d" data-text-hash="73847c1ab0f5d92a4b2bc89bb401d742" id="357" refid="357">
+<p>Another great thing about storage classes is that claims refer to them by name. If the storage classes are named appropriately, such as <code>standard</code>, <code>fast</code>, and so on, the persistent volume claim manifests are portable across different clusters.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="358" refid="358">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="32d90574632c6325df7bea77fe71476a" data-text-hash="07f2e2cd7f73d7d8d4a375f5f06b12c5" id="359" refid="359">
+<p> Remember that persistent volume claims are usually part of the application manifest and are written by application developers.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="f6559602a1b6fc45c841878f862ce58a" data-text-hash="0aab8594b16e4297a974c16a2fd687d0" id="360" refid="360">
+<p>If you used GKE to run the previous examples, you can now try to deploy the same claim and pod manifests in a non-GKE cluster, such as a cluster created with Minikube or kind. In this way, you can see this portability for yourself. The only thing you need to ensure is that all your clusters use the storage class names.</p>
+</div>
+<div class="readable-text" data-hash="df5e757d3fd48546e7c160281ab1b8af" data-text-hash="a4196112969df65f2f3190195c48dd4c" id="361" refid="361">
+<h3 id="sigil_toc_id_142">8.3.6&#160;Understanding the lifecycle of dynamically provisioned persistent volumes</h3>
+</div>
+<div class="readable-text" data-hash="96f6a49e0e02248db23d4229e5d6671f" data-text-hash="2e5c71df530be26f260ecb562523e195" id="362" refid="362">
+<p>To conclude this section on dynamic provisions, let&#8217;s take one final look at the lifecycles of the underlying storage volume, the PersistentVolume object, the associated PersistentVolumeClaim object, and the pods that use them, like we did in the previous section on statically provisioned volumes.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="6bf81cce7e9317df361bc025b5a98522" data-text-hash="977cfb9d1eb6ff6574f4444643f5039d" id="363" refid="363">
+<h5>Figure 8.9 The lifecycle of dynamically provisioned persistent volumes, claims and the pods using them</h5>
+<img alt="" data-processed="true" height="485" id="Picture_9" loading="lazy" src="EPUB/images/08image010.png" width="823">
+</div>
+<div class="readable-text" data-hash="b363ed6187c25fc95d8c7fdfb4ee3031" data-text-hash="61ed8645d197912ff0eab76fa1c7e4f5" id="364" refid="364">
+<p>Unlike statically provisioned persistent volumes, the sequence of events when using dynamic provisioning begins with the creation of the PersistentVolumeClaim object. As soon as one such object appears, Kubernetes instructs the dynamic provisioner configured in the storage class referenced in this claim to provision a volume for it. The provisioner creates both the underlying storage, typically through the cloud provider&#8217;s API, and the PersistentVolume object that references the underlying volume.</p>
+</div>
+<div class="readable-text" data-hash="f3a2e36b6579aac2af9b806d3c80a6e1" data-text-hash="2471c377e362522da3ab497c67de3cb5" id="365" refid="365">
+<p>The underlying volume is typically provisioned asynchronously. When the process completes, the status of the PersistentVolume object changes to Available; at this point, the volume is bound to the claim.</p>
+</div>
+<div class="readable-text" data-hash="02e21d6166a4a8c349e50f74b8503e1f" data-text-hash="b9ccb6633e7a617bea0262e08cf53df3" id="366" refid="366">
+<p>Users can then deploy pods that refer to the claim to gain access to the underlying storage volume. When the volume is no longer needed, the user deletes the claim. This typically triggers the deletion of both the PersistentVolume object and the underlying storage volume.</p>
+</div>
+<div class="readable-text" data-hash="255ec4058e3ad201c420be6ce43c9365" data-text-hash="2e77870e07e74cda532ff341f3d39ca3" id="367" refid="367">
+<p>This entire process is repeated for each new claim that the user creates. A new PersistentVolume object is created for each claim, which means that the cluster can never run out of them. Obviously, the datacentre itself can run out of available disk space, but at least there is no need for the administrator to keep recycling old PersistentVolume objects.</p>
+</div>
+<div class="readable-text" data-hash="5b662324a96641a0e781b3318235f9fe" data-text-hash="94c2102c0249e1b05957a34188a12ee2" id="368" refid="368">
+<h2 id="sigil_toc_id_143">8.4&#160;Node-local persistent volumes</h2>
+</div>
+<div class="readable-text" data-hash="60e09e3347a9daaab51e736ab5e870c9" data-text-hash="7faf6b423bb87ddd9955908b19c212a8" id="369" refid="369">
+<p>In the previous sections of this chapter, you&#8217;ve used persistent volumes and claims to provide network-attached storage volumes to your pods, but this type of storage is too slow for some applications. To run a production-grade database, you should probably use an SSD connected directly to the node where the database is running.</p>
+</div>
+<div class="readable-text" data-hash="6c443fd3e3693234fd43a2f008914c97" data-text-hash="9bc84e0ff98e261304a0a9ae275db13e" id="370" refid="370">
+<p>In the previous chapter, you learned that you can use a <code>hostPath</code> volume in a pod if you want the pod to access part of the host&#8217;s filesystem. Now you&#8217;ll learn how to do the same with persistent volumes. You might wonder why I need to teach you another way to do the same thing, but it&#8217;s really not the same.</p>
+</div>
+<div class="readable-text" data-hash="0b8f054f9954f3722fa44ea76bb03362" data-text-hash="53e6f270a5539e0fa5fbd967e3e6f9ee" id="371" refid="371">
+<p>You might remember that when you add a <code>hostPath</code> volume to a pod, the data that the pod sees depends on which node the pod is scheduled to. In other words, if the pod is deleted and recreated, it might end up on another node and no longer have access to the same data.</p>
+</div>
+<div class="readable-text" data-hash="6be9eaeb04dfbb31a8f43f6fefaf8852" data-text-hash="01a14f580c2ae07c2e288e0a3a56d6a1" id="372" refid="372">
+<p>If you use a local persistent volume instead, this problem is resolved. The Kubernetes scheduler ensures that the pod is always scheduled on the node to which the local volume is attached.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="373" refid="373">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9c64cb2d2e818f14db0bf5cbf53134ce" data-text-hash="f8c236f1607c11021cdb3c6884058858" id="374" refid="374">
+<p> Local persistent volumes are also better than <code>hostPath</code> volumes because they offer much better security. As explained in the previous chapter, you don&#8217;t want to allow regular users to use <code>hostPath</code> volumes at all. Because persistent volumes are managed by the cluster administrator, regular users can&#8217;t use them to access arbitrary paths on the host node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="c2e08e3d85b043569a58ab1684881149" data-text-hash="36de721fa72c65b0b61235c3f3ac51c5" id="375" refid="375">
+<h3 id="sigil_toc_id_144">8.4.1&#160;Creating local persistent volumes</h3>
+</div>
+<div class="readable-text" data-hash="0dad978b381766b724ef5624b286cd58" data-text-hash="5bc2e48010ae3a881f72c33bb9a5f518" id="376" refid="376">
+<p>Imagine you are a cluster administrator and you have just connected a fast SSD directly to one of the worker nodes. Because this is a new class of storage in the cluster, it makes sense to create a new StorageClass object that represents it.</p>
+</div>
+<div class="readable-text" data-hash="404b0508f97acc823dc2b9e65d968436" data-text-hash="d55ececd56f15a62ea152d676215c400" id="377" refid="377">
+<h4>Creating a storage class to represent local storage</h4>
+</div>
+<div class="readable-text" data-hash="6cd1a7cd8357aa9419fda7dba7e84654" data-text-hash="5bdc476a2f3535fb850f7d0373a87547" id="378" refid="378">
+<p>Create a new storage class manifest as shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7443cdd47c580b2da62917ba9f9756ab" data-text-hash="256e6145dc7c020033685cba0d98ae05" id="379" refid="379">
+<h5>Listing 8.12 Defining the local storage class</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local                                   #A
+provisioner: kubernetes.io/no-provisioner       #B
+volumeBindingMode: WaitForFirstConsumer         #C</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTGV04oCZcyBjYWxsIHRoaXMgc3RvcmFnZSBjbGFzcyBsb2NhbAojQiBQZXJzaXN0ZW50IHZvbHVtZXMgb2YgdGhpcyBjbGFzcyBhcmUgcHJvdmlzaW9uZWQgbWFudWFsbHkKI0MgVGhlIHBlcnNpc3RlbnQgdm9sdW1lIGNsYWltIHNob3VsZCBiZSBib3VuZCBvbmx5IHdoZW4gdGhlIGZpcnN0IHBvZCB0aGF0IHVzZXMgdGhlIGNsYWltIGlzIGRlcGxveWVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="54963a6986c10243d1058d3a73fa32a4" data-text-hash="aebfd9043dbe073949a7bdbc6f88ddea" id="380" refid="380">
+<p>As I write this, locally attached persistent volumes need to be provisioned manually, so you need to set the provisioner as shown in the listing. Because this storage class represents locally attached volumes that can only be accessed within the nodes to which they are physically connected, the <code>volumeBindingMode</code> is set to <code>WaitForFirstConsumer</code>, so the binding of the claim is delayed until the pod is scheduled.</p>
+</div>
+<div class="readable-text" data-hash="e36d87c07b46f568cf3286bc8947d62c" data-text-hash="a2be836b1e288fa7f99cfc673d2a7cd3" id="381" refid="381">
+<h4>Attaching a disk to a cluster node</h4>
+</div>
+<div class="readable-text" data-hash="3a14dd3b329b1013765c512cd486939c" data-text-hash="4fa1e39a7b6e835e93e0258671b8b1a5" id="382" refid="382">
+<p>I assume that you&#8217;re using a Kubernetes cluster created with the kind tool to run this exercise. Let&#8217;s emulate the installation of the SSD in the node called <code>kind-worker</code>. Run the following command to create an empty directory at the location <code>/mnt/ssd1</code> in the node&#8217;s filesystem:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="550bbdfbbba23fa1c238b357c7fea349" data-text-hash="3a1ac5e721576ebf14ec4f43b1548eb3" id="383" refid="383">
+<div class="code-area-container">
+<pre class="code-area">$ docker exec kind-worker mkdir /mnt/ssd1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="19933b20684cf7e9bc1d31df4e698404" data-text-hash="5db624fd86cd6da7d8e1259b4ba06bbf" id="384" refid="384">
+<h4>Creating a PersistentVolume object for the new disk</h4>
+</div>
+<div class="readable-text" data-hash="07a51583b50ed999c7c9f059f461ce63" data-text-hash="ae9394e9d6ae9cc0126fb91427c4b3cf" id="385" refid="385">
+<p>After attaching the disk to one of the nodes, you must tell Kubernetes that this node now provides a local persistent volume by creating a PersistentVolume object. The manifest for the persistent volume is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="77f26d922b2b844395802642cce2b527" data-text-hash="4c1e5dd9d0102e220d82dbc2c20fa0be" id="386" refid="386">
+<h5>Listing 8.13 Defining a local persistent volume</h5>
+<div class="code-area-container">
+<pre class="code-area">kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: local-ssd-on-kind-worker       #A
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: local              #B
+  capacity:
+    storage: 10Gi
+  local:                               #C
+    path: /mnt/ssd1                    #C
+  nodeAffinity:                        #D
+    required:                          #D
+      nodeSelectorTerms:               #D
+      - matchExpressions:              #D
+        - key: kubernetes.io/hostname  #D
+          operator: In                 #D
+          values:                      #D
+          - kind-worker                #D </pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBwZXJzaXN0ZW50IHZvbHVtZSByZXByZXNlbnRzIHRoZSBsb2NhbCBTU0QgaW5zdGFsbGVkIGluIHRoZSBraW5kLXdvcmtlciBub2RlLCBoZW5jZSB0aGUgbmFtZS4KI0IgVGhpcyB2b2x1bWUgYmVsb25ncyB0byB0aGUgbG9jYWwgc3RvcmFnZSBjbGFzcy4KI0MgVGhpcyB2b2x1bWUgaXMgbW91bnRlZCBpbiB0aGUgbm9kZeKAmXMgZmlsZXN5c3RlbSBhdCB0aGUgc3BlY2lmaWVkIHBhdGguCiNEIFRoaXMgc2VjdGlvbiB0ZWxscyBLdWJlcm5ldGVzIHdoaWNoIG5vZGVzIGNhbiBhY2Nlc3MgdGhpcyB2b2x1bWUuIFNpbmNlIHRoZSBTU0QgaXMgYXR0YWNoZWQgb25seSB0byB0aGUgbm9kZSBraW5kLXdvcmtlciwgaXQgaXMgb25seSBhY2Nlc3NpYmxlIG9uIHRoaXMgbm9kZS4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a8323d224f4983bb9b395227ea830257" data-text-hash="199d4078a30832f48b19718361b09b28" id="387" refid="387">
+<p>Because this persistent volume represents a local disk attached to the <code>kind-worker</code> node, you give it a name that conveys this information. It refers to the <code>local</code> storage class that you created previously. Unlike previous persistent volumes, this volume represents storage space that is directly attached to the node. You therefore specify that it is a <code>local</code> volume. Within the <code>local</code> volume configuration, you also specify the path where the SSD is mounted (<code>/mnt/ssd1</code>).</p>
+</div>
+<div class="readable-text" data-hash="d380c62e242603a39ae6eb9eb793f6c6" data-text-hash="7f54f970668edffda07d8938204cbe00" id="388" refid="388">
+<p>At the bottom of the manifest, you&#8217;ll find several lines that indicate the volume&#8217;s node affinity. A volume&#8217;s node affinity defines which nodes can access this volume.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="389" refid="389">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="04a7d137ef9beccc328545eb6b59534c" data-text-hash="b14c94b4aca3c63bed1be206e6c34893" id="390" refid="390">
+<p> You&#8217;ll learn more about node affinity and selectors in later chapters. Although it looks complicated, the node affinity definition in the listing simply defines that the volume is accessible from nodes whose <code>hostname</code> is <code>kind-worker</code>. This is obviously exactly one node.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="804f6f03f95431de3f3e1b726be21c5d" data-text-hash="4521a6538e360e13857a05b8eb08c278" id="391" refid="391">
+<p>Okay, as a cluster administrator, you&#8217;ve now done everything you needed to do to enable cluster users to deploy applications that use locally attached persistent volumes. Now it&#8217;s time to put your application developer hat back on again.</p>
+</div>
+<div class="readable-text" data-hash="a414916de3161f1606719bff705cca42" data-text-hash="c8318e118c3df4fc6b86cea236487435" id="392" refid="392">
+<h3 id="sigil_toc_id_145">8.4.2&#160;Claiming and using local persistent volumes</h3>
+</div>
+<div class="readable-text" data-hash="c273a0a6c9b911d33eadefaa66dd9d6a" data-text-hash="052b3471d9a59fd6b4ac2deb6be41ed1" id="393" refid="393">
+<p>As an application developer, you can now deploy your pod and its associated persistent volume claim.</p>
+</div>
+<div class="readable-text" data-hash="494fc9ee9031cabc7465ebb2c52528ad" data-text-hash="fb35305bc76ab1cd12da5fa8a64a6ecf" id="394" refid="394">
+<h4>Creating the pod</h4>
+</div>
+<div class="readable-text" data-hash="4fc4a6c175129b90ac25c7f940926010" data-text-hash="1aa21bebd197d7cc6ae94a31fb3c25c7" id="395" refid="395">
+<p>The pod definition is shown in the following listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a0e17b814362f1db2de2bd9ddba4bd59" data-text-hash="b873f3d11df6b40b50d571ee2595f381" id="396" refid="396">
+<h5>Listing 8.14 Pod using a locally attached persistent volume</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: Pod
+metadata:
+  name: mongodb-local
+spec:
+  volumes:
+  - name: mongodb-data
+    persistentVolumeClaim:
+      claimName: quiz-data-local      #A
+  containers:
+  - image: mongo
+    name: mongodb
+    volumeMounts:
+    - name: mongodb-data
+      mountPath: /data/db</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHBvZCB1c2VzIHRoZSBxdWl6LWRhdGEtbG9jYWwgY2xhaW0="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="64c69e54b82b7059c1d3700a4bd95916" data-text-hash="c1fd270be0078629a80c0c5d8ce3a981" id="397" refid="397">
+<p>There should be no surprises in the pod manifest. You already know all this.</p>
+</div>
+<div class="readable-text" data-hash="f6404356a862208c186a1e1a565f9734" data-text-hash="3c7116d6ae31295272a835ceafe21824" id="398" refid="398">
+<h4>Creating the persistent volume claim for a local volume</h4>
+</div>
+<div class="readable-text" data-hash="ad71a1cd0222afaf62aadd70f62387a7" data-text-hash="7d5db7b924cffef2b6f7598fe89a2608" id="399" refid="399">
+<p>As with the pod, creating the claim for a local persistent volume is no different than creating any other persistent volume claim. The manifest is shown in the next listing.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a98d06359309e9bdc8e9bbfe455ae538" data-text-hash="400a930226d8c94042f47a50af241d28" id="400" refid="400">
+<h5>Listing 8.15 Persistent volume claim using the local storage class</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quiz-data-local
+spec:
+  storageClassName: local               #A
+  resources:
+    requests:
+      storage: 1Gi
+  accessModes:
+    - ReadWriteOnce</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGNsYWltIHJlcXVlc3RzIGEgcGVyc2lzdGVudCB2b2x1bWUgZnJvbSB0aGUgbG9jYWwgc3RvcmFnZSBjbGFzcw=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="04690a8863ea771d7f57501dde641dfb" data-text-hash="aaaf698208be790903d5e0db29e1a6ea" id="401" refid="401">
+<p>No surprises here either. Now on to creating these two objects.</p>
+</div>
+<div class="readable-text" data-hash="a0f41eac5cb47c08f4b8f4df48a8148c" data-text-hash="948e9def725352cf5d24a1e90d501edf" id="402" refid="402">
+<h4>Creating the pod and the claim</h4>
+</div>
+<div class="readable-text" data-hash="54602496d61314435d553c5f9d8027e1" data-text-hash="e3b35f6e63f381d5e75540fd1d4cf953" id="403" refid="403">
+<p>After you write the pod and claim manifests, you can create the two objects by applying the manifests in any order you want. If you create the pod first, since the pod requires the claim to exist, it simply remains in the <code>Pending</code> state until you create the claim.</p>
+</div>
+<div class="readable-text" data-hash="2ecffe1388a47186578b1ce9177d2cc4" data-text-hash="828ad9ef6dfe65f648e8460a4c07ed77" id="404" refid="404">
+<p>After both the pod and the claim are created, the following events take place:</p>
+</div>
+<ol>
+<li class="readable-text" data-hash="852ec420d49d68b3f7dfd59946bf2108" data-text-hash="852ec420d49d68b3f7dfd59946bf2108" id="405" refid="405">The claim is bound to the persistent volume.</li>
+<li class="readable-text" data-hash="15ba1ec62f876280017a84af4cf08060" data-text-hash="15ba1ec62f876280017a84af4cf08060" id="406" refid="406">The scheduler determines that the volume bound to the claim that is used in the pod can only be accessed from the kind-worker node, so it schedules the pod to this node.</li>
+<li class="readable-text" data-hash="71210eb631ca56acfab6b86e4c25f29c" data-text-hash="71210eb631ca56acfab6b86e4c25f29c" id="407" refid="407">The pod&#8217;s container is started on this node, and the volume is mounted in it.</li>
+</ol>
+<div class="readable-text" data-hash="9c02ae61d311fa1161a3b799c715ef79" data-text-hash="faf6e99fc7878554071130672bc10b63" id="408" refid="408">
+<p>You can now use the MongoDB shell again to add documents to it. Then check the <code>/mnt/ssd1</code> directory on the kind-worker node to see if the files are stored there.</p>
+</div>
+<div class="readable-text" data-hash="3cc01b03656887d063f29c0805bf742b" data-text-hash="7bb0bfb1200803ea342ed505ac1e64d4" id="409" refid="409">
+<h4>Recreating the pod</h4>
+</div>
+<div class="readable-text" data-hash="d14e19cea94c89f54ef5d6bdfbc0e48e" data-text-hash="55fb33b9c31a7258a3755a574151d02f" id="410" refid="410">
+<p>If you delete and recreate the pod, you&#8217;ll see that it&#8217;s always scheduled on the kind-worker node. The same happens if multiple nodes can provide a local persistent volume when you deploy the pod for the first time. At this point, the scheduler selects one of them to run your MongoDB pod. When the pod runs, the claim is bound to the persistent volume on that particular node. If you then delete and recreate the pod, it is always scheduled on the same node, since that is where the volume that is bound to the claim referenced in the pod is located.</p>
+</div>
+<div class="readable-text" data-hash="d54a6f95251b94896e6c0b1f79607b37" data-text-hash="f05f50be77e649c0ac3c004b86c799e5" id="411" refid="411">
+<h2 id="sigil_toc_id_146">8.5&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="f015bd0ab093ee8e986f8618639d2544" data-text-hash="a4b7316a444f8cdc867102965a9f509f" id="412" refid="412">
+<p>This chapter explained the details of adding persistent storage for your applications. You&#8217;ve learned that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="7a291c4e2cb254afaa2f6d0b8cca7baf" data-text-hash="7a291c4e2cb254afaa2f6d0b8cca7baf" id="413" refid="413">Infrastructure-specific information about storage volumes doesn&#8217;t belong in pod manifests. Instead, it should be specified in the PersistentVolume object.</li>
+<li class="readable-text" data-hash="af76829d2323dd4301da2d415eba1f06" data-text-hash="af76829d2323dd4301da2d415eba1f06" id="414" refid="414">A PersistentVolume object represents a portion of the disk space that is available to applications within the cluster.</li>
+<li class="readable-text" data-hash="844b9f62936ff762d94d61a4419ccd04" data-text-hash="844b9f62936ff762d94d61a4419ccd04" id="415" refid="415">Before an application can use a PersistentVolume, the user who deploys the application must claim the PersistentVolume by creating a PersistentVolumeClaim object.</li>
+<li class="readable-text" data-hash="08afdddd59829061ce642715fb29c042" data-text-hash="08afdddd59829061ce642715fb29c042" id="416" refid="416">A PersistentVolumeClaim object specifies the minimum size and other requirements that the PersistentVolume must meet.</li>
+<li class="readable-text" data-hash="c51953d1afca09cf9e41e279a9f65bf9" data-text-hash="c51953d1afca09cf9e41e279a9f65bf9" id="417" refid="417">When using statically provisioned volumes, Kubernetes finds an existing persistent volume that meets the requirements set forth in the claim and binds it to the claim.</li>
+<li class="readable-text" data-hash="dcaeea8e7056a343dad098bbc41d58cd" data-text-hash="dcaeea8e7056a343dad098bbc41d58cd" id="418" refid="418">When the cluster provides dynamic provisioning, a new persistent volume is created for each claim. The volume is created based on the requirements specified in the claim.</li>
+<li class="readable-text" data-hash="fbf3cb34f32e77f50a5bb7e4906713d0" data-text-hash="fbf3cb34f32e77f50a5bb7e4906713d0" id="419" refid="419">A cluster administrator creates StorageClass objects to specify the storage classes that users can request in their claims.</li>
+<li class="readable-text" data-hash="3746c782682adcb7f4ceeae8505fd9c6" data-text-hash="3746c782682adcb7f4ceeae8505fd9c6" id="420" refid="420">A user can change the size of the persistent volume used by their application by modifying the minimum volume size requested in the claim.</li>
+<li class="readable-text" data-hash="75665ba3d797ff1b31389c66fac9ec57" data-text-hash="75665ba3d797ff1b31389c66fac9ec57" id="421" refid="421">Local persistent volumes are used when applications need to access disks that are directly attached to nodes. This affects the scheduling of the pods, since the pod must be scheduled to one of the nodes that can provide a local persistent volume. If the pod is subsequently deleted and recreated, it will always be scheduled to the same node.</li>
+</ul>
+<div class="readable-text" data-hash="33e46283f2cec83148450d206f6abc37" data-text-hash="1a12dfff7466d86306d2cf8b08d8354e" id="422" refid="422">
+<p>In the next chapter, you&#8217;ll learn how to pass configuration data to your applications using command-line arguments, environment variables, and files. You&#8217;ll learn how to specify this data directly in the pod manifest and other Kubernetes API objects.</p>
+</div></div>
+
+        </body>
+        
+        

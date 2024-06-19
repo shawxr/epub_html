@@ -1,0 +1,1227 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="f3fd16f43b40b5c23b2ac4650075e221" data-text-hash="dc77cb4aa99773e72a18dcb98173dd72" id="1" refid="1">
+<h1>2 Understanding containers</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="97f0fd5ba1d72b452a5d6ac90a737b17" data-text-hash="97f0fd5ba1d72b452a5d6ac90a737b17" id="2" refid="2">Understanding what a container is</li>
+<li class="readable-text" data-hash="7d4678abeee64f688156dcc109458ddd" data-text-hash="7d4678abeee64f688156dcc109458ddd" id="3" refid="3">Differences between containers and virtual machines</li>
+<li class="readable-text" data-hash="ce80929e6be2b8e4e1df036f6f579cca" data-text-hash="ce80929e6be2b8e4e1df036f6f579cca" id="4" refid="4">Creating, running, and sharing a container image with Docker</li>
+<li class="readable-text" data-hash="b9e54303fd7e73898882bb056dbf924f" data-text-hash="b9e54303fd7e73898882bb056dbf924f" id="5" refid="5">Linux kernel features that make containers possible</li>
+</ul>
+</div>
+<div class="readable-text" data-hash="98f4bee2714d8d3f5e5d596cc4496749" data-text-hash="a95ff578b342c7e87cfc8d267c814244" id="6" refid="6">
+<p>Kubernetes primarily manages applications that run in containers - so before you start exploring Kubernetes, you need to have a good understanding of what a container is. This chapter explains the basics of Linux containers that a typical Kubernetes user needs to know.</p>
+</div>
+<div class="readable-text" data-hash="8b934af3492096214e7c39ff192dd8a6" data-text-hash="9ca2071c2f68dcd6d1e0d9b7542f5662" id="7" refid="7">
+<h2 id="sigil_toc_id_17">2.1&#160;Introducing containers</h2>
+</div>
+<div class="readable-text" data-hash="7128b90b300d0fc4bffa678a56c69b3b" data-text-hash="56db37441708ed613f81f58aa55fa9f6" id="8" refid="8">
+<p>In Chapter 1 you learned how different microservices running in the same operating system may require different, potentially conflicting versions of dynamically linked libraries or have different environment requirements.</p>
+</div>
+<div class="readable-text" data-hash="4490e82cae22ac40428f7ae85315cfb2" data-text-hash="e27cfd0b494849903aed8b4ab23b220a" id="9" refid="9">
+<p>When a system consists of a small number of applications, it&#8217;s okay to assign a dedicated virtual machine to each application and run each in its own operating system. But as the microservices become smaller and their numbers start to grow, you may not be able to afford to give each one its own VM if you want to keep your hardware costs low and not waste resources.</p>
+</div>
+<div class="readable-text" data-hash="06e99263ec815da0bf346330e2dcc1af" data-text-hash="3fc7eb8a1c2da8dea90f80fc0e1d468d" id="10" refid="10">
+<p>It&#8217;s not just a matter of wasting hardware resources - each VM typically needs to be individually configured and managed, which means that running higher numbers of VMs also results in higher staffing requirements and the need for a better, often more complicated automation system. Due to the shift to microservice architectures, where systems consist of hundreds of deployed application instances, an alternative to VMs was needed. Containers are that alternative.</p>
+</div>
+<div class="readable-text" data-hash="897fe5e75b31b60dc1dc601be9f8197d" data-text-hash="ca9f519fd6b26b1a8ccd1e0e241d92cd" id="11" refid="11">
+<h3 id="sigil_toc_id_18">2.1.1&#160;Comparing containers to virtual machines</h3>
+</div>
+<div class="readable-text" data-hash="20abf7a543501fed09780210732da968" data-text-hash="dbaaa58425cd23dfc87542fd5641d78e" id="12" refid="12">
+<p>Instead of using virtual machines to isolate the environments of individual microservices (or software processes in general), most development and operations teams now prefer to use containers. They allow you to run multiple services on the same host computer, while keeping them isolated from each other. Like VMs, but with much less overhead.</p>
+</div>
+<div class="readable-text" data-hash="c954cfc8f8d083ceadb3d370cb4c1971" data-text-hash="349bbd987e9cb842ff9cd61753ef1bbe" id="13" refid="13">
+<p>Unlike VMs, which each run a separate operating system with several system processes, a process running in a container runs within the existing host operating system. Because there is only one operating system, no duplicate system processes exist. Although all the application processes run in the same operating system, their environments are isolated, though not as well as when you run them in separate VMs. To the process in the container, this isolation makes it look like no other processes exist on the computer. You&#8217;ll learn how this is possible in the next few sections, but first let&#8217;s dive deeper into the differences between containers and virtual machines.</p>
+</div>
+<div class="readable-text" data-hash="99fdea96abf7b80b83537472f3fc339a" data-text-hash="d1850026a3824fa74c9f0a1f209a24ce" id="14" refid="14">
+<h4>Comparing the overhead of containers and virtual machines</h4>
+</div>
+<div class="readable-text" data-hash="f09a36578d18c468255a43509f116b5f" data-text-hash="74f974e8d88c922b690a738e2f1dba8e" id="15" refid="15">
+<p>Compared to VMs, containers are much lighter, because they don&#8217;t require a separate resource pool or any additional OS-level processes. While each VM usually runs its own set of system processes, which requires additional computing resources in addition to those consumed by the user application&#8217;s own process, a container is nothing more than an isolated process running in the existing host OS that consumes only the resources the app consumes. They have virtually no overhead.</p>
+</div>
+<div class="readable-text" data-hash="2576db9e711cba9e853903a668b1692c" data-text-hash="8cffb898208bf17cec8e81731ec94359" id="16" refid="16">
+<p>Figure 2.1 shows two bare metal computers, one running two virtual machines, and the other running containers instead. The latter has space for additional containers, as it runs only one operating system, while the first runs three &#8211; one host and two guest OSes.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="7b2e0eee4c45b7f7aaa592e5837e2c3f" data-text-hash="be0c6ef412e73293aa96d973a7d9ddd0" id="17" refid="17">
+<h5>Figure 2.1 Using VMs to isolate groups of applications vs. isolating individual apps with containers</h5>
+<img alt="" data-processed="true" height="342" id="Picture_123" loading="lazy" src="EPUB/images/02image002.png" width="769">
+</div>
+<div class="readable-text" data-hash="afb7c56c9ecb0d20853297b23ebf7d17" data-text-hash="bca8dee3a92eb369fd5e2bee83040f3e" id="18" refid="18">
+<p>Because of the resource overhead of VMs, you often group multiple applications into each VM. You may not be able to afford dedicating a whole VM to each app. But containers introduce no overhead, which means you can afford to create a separate container for each application. In fact, you should never run multiple applications in the same container, as this makes managing the processes in the container much more difficult. Moreover, all existing software dealing with containers, including Kubernetes itself, is designed under the premise that there&#8217;s only one application in a container. But as you&#8217;ll learn in the next chapter, Kubernetes provides a way to run related applications together, yet still keep them in separate containers.</p>
+</div>
+<div class="readable-text" data-hash="ae9a0d5685794ed9c8b9adbe57b702a2" data-text-hash="801051cbd139cec7a3b527ddda250c0f" id="19" refid="19">
+<h4>Comparing the start-up time of containers and virtual machines</h4>
+</div>
+<div class="readable-text" data-hash="70d002c8b799df905e88a4a78aa130d9" data-text-hash="bc65064a663b03f681f953f05953211f" id="20" refid="20">
+<p>In addition to the lower runtime overhead, containers also start the application faster, because only the application process itself needs to be started. No additional system processes need to be started first, as is the case when booting up a new virtual machine.</p>
+</div>
+<div class="readable-text" data-hash="82d53f4ece6bc15fc5312740aa207733" data-text-hash="2db863d88f596f08e2ffd79f321ae61d" id="21" refid="21">
+<h4>Comparing the isolation of containers and virtual machines</h4>
+</div>
+<div class="readable-text" data-hash="65d7ea8b0f1a6515766947daae88d85a" data-text-hash="377be64c26fcfa479eb4d209f66e9bf9" id="22" refid="22">
+<p>You&#8217;ll agree that containers are clearly better when it comes to the use of resources, but there&#8217;s also a disadvantage. When you run applications in virtual machines, each VM runs its own operating system and kernel. Underneath those VMs is the hypervisor (and possibly an additional operating system), which splits the physical hardware resources into smaller sets of virtual resources that the operating system in each VM can use. As figure 2.2 shows, applications running in these VMs make system calls (<i>sys-calls</i>) to the guest OS kernel in the VM, and the machine instructions that the kernel then executes on the virtual CPUs are then forwarded to the host&#8217;s physical CPU via the hypervisor.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="f19ab3a9f7d2616c1c56d542799fc655" data-text-hash="48e8702d1f381785b3d5ce21465c82c1" id="23" refid="23">
+<h5>Figure 2.2 How apps use the hardware when running in a VM vs. in a container</h5>
+<img alt="" data-processed="true" height="548" id="Picture_127" loading="lazy" src="EPUB/images/02image003.png" width="627">
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="24" refid="24">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="b22380597b1053d1cf6c8c924c300c1d" data-text-hash="447ab8553b05cb461a81bdc5bb39075f" id="25" refid="25">
+<p> Two types of hypervisors exist. Type 1 hypervisors don&#8217;t require running a host OS, while type 2 hypervisors do.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b23b305213d3991c1fadfbeef2e97d75" data-text-hash="0ce1c4bbbe7cbf0e4868cece11287681" id="26" refid="26">
+<p>Containers, on the other hand, all make system calls on the single kernel running in the host OS. This single kernel is the only one that executes instructions on the host&#8217;s CPU. The CPU doesn&#8217;t need to handle any kind of virtualization the way it does with VMs.</p>
+</div>
+<div class="readable-text" data-hash="6e6ea632793935a659657b53e3073c09" data-text-hash="dc859bcd1674c17691f99e693555c177" id="27" refid="27">
+<p>Examine the following figure to see the difference between running three applications on bare metal, running them in two separate virtual machines, or running them in three containers.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="404a129ffa8a032eb0e470b43503ba46" data-text-hash="0152837ab2f04dd12efcb377e97b7fec" id="28" refid="28">
+<h5>Figure 2.3 The difference between running applications on bare metal, in virtual machines, and in containers</h5>
+<img alt="" data-processed="true" height="433" id="Picture_128" loading="lazy" src="EPUB/images/02image004.png" width="809">
+</div>
+<div class="readable-text" data-hash="cf67d4345eb378611faf04fbee55adcc" data-text-hash="2960764b03695bb458d6a50f72cc6144" id="29" refid="29">
+<p>In the first case, all three applications use the same kernel and aren&#8217;t isolated at all. In the second case, applications A and B run in the same VM and thus share the kernel, while application C is completely isolated from the other two, since it uses its own kernel. It only shares the hardware with the first two.</p>
+</div>
+<div class="readable-text" data-hash="ea7b3158128c55c924b2efdcb74e241c" data-text-hash="d7eb3350a882470c41335c2857024916" id="30" refid="30">
+<p>The third case shows the same three applications running in containers. Although they all use the same kernel, they are isolated from each other and completely unaware of the others&#8217; existence. The isolation is provided by the kernel itself. Each application sees only a part of the physical hardware and sees itself as the only process running in the OS, although they all run in the same OS.</p>
+</div>
+<div class="readable-text" data-hash="eee2b8b72aa024b57c8bb2b3f76d741e" data-text-hash="5ed2c59d5abd6151348c56f6e4616fd6" id="31" refid="31">
+<h4>Understanding the security-implications of container isolation</h4>
+</div>
+<div class="readable-text" data-hash="9ba869b6128e9a2649b9f45c3972708d" data-text-hash="11b4c2b8dcde0eee4bd14707317b9dd2" id="32" refid="32">
+<p>The main advantage of using virtual machines over containers is the complete isolation they provide, since each VM has its own Linux kernel, while containers all use the same kernel. This can clearly pose a security risk. If there&#8217;s a bug in the kernel, an application in one container might use it to read the memory of applications in other containers. If the apps run in different VMs and therefore share only the hardware, the probability of such attacks is much lower. Of course, complete isolation is only achieved by running applications on separate physical machines.</p>
+</div>
+<div class="readable-text" data-hash="149b71e42d29a767ede6d2133d4a3b58" data-text-hash="14e1345959d67c845f19b4d097aa6885" id="33" refid="33">
+<p>Additionally, containers share memory space, whereas each VM uses its own chunk of memory. Therefore, if you don&#8217;t limit the amount of memory that a container can use, this could cause other containers to run out of memory or cause their data to be swapped out to disk.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="34" refid="34">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c5ee62b621b3fab5911702e826a0ee99" data-text-hash="4b38eb2340cd61a7a658d0aee2e983f9" id="35" refid="35">
+<p> This can&#8217;t happen in Kubernetes, because it requires that swap is disabled on all the nodes.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="6c36e2e474ba2349c43a6a6831b0b994" data-text-hash="f8d1c5954b138bae3fc6fa29b6b88c82" id="36" refid="36">
+<h4>Understanding what enables containers and what enables virtual machines</h4>
+</div>
+<div class="readable-text" data-hash="6867e0607353772d73c7e6f84fc29df4" data-text-hash="2af506647fd64808b1e8dc23165f865f" id="37" refid="37">
+<p>While virtual machines are enabled through virtualization support in the CPU and by virtualization software on the host, containers are enabled by the Linux kernel itself. You&#8217;ll learn about container technologies later when you can try them out for yourself. You&#8217;ll need to have Docker installed for that, so let&#8217;s learn how it fits into the container story.</p>
+</div>
+<div class="readable-text" data-hash="778a612a5acd20cc0d9b269a176f5ef1" data-text-hash="1e0c3a445b811f758a2c1a4dd584391a" id="38" refid="38">
+<h3 id="sigil_toc_id_19">2.1.2&#160;Introducing the Docker container platform</h3>
+</div>
+<div class="readable-text" data-hash="7d281e23f184bf49c3733586fedabe1b" data-text-hash="fe74ee485e6f77424918220d462ae4be" id="39" refid="39">
+<p>While container technologies have existed for a long time, they only became widely known with the rise of Docker. Docker was the first container system that made them easily portable across different computers. It simplified the process of packaging up the application and all its libraries and other dependencies - even the entire OS file system - into a simple, portable package that can be used to deploy the application on any computer running Docker.</p>
+</div>
+<div class="readable-text" data-hash="1b1fe47d72cce85c20b206f19c9b5263" data-text-hash="95c8a48f5e4ef3b30c48faad21ff27e0" id="40" refid="40">
+<h4>Introducing containers, images and registries</h4>
+</div>
+<div class="readable-text" data-hash="fcd8fd9a84b4bc8e0e32125e6245f3e9" data-text-hash="1db2c0caf8fa72b38a93dbeb4e04ce43" id="41" refid="41">
+<p>Docker is a platform for packaging, distributing and running applications. As mentioned earlier, it allows you to package your application along with its entire environment. This can be just a few dynamically linked libraries required by the app, or all the files that are usually shipped with an operating system. Docker allows you to distribute this package via a public repository to any other Docker-enabled computer.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="480c195e088f5c807513bf18f4a8f4c4" data-text-hash="92773b1f3b4f988efc6fbe1fb3b9d370" id="42" refid="42">
+<h5>Figure 2.4 The three main Docker concepts are images, registries and containers</h5>
+<img alt="" data-processed="true" height="221" id="Picture_129" loading="lazy" src="EPUB/images/02image005.png" width="779">
+</div>
+<div class="readable-text" data-hash="fe50bede4108e2cf561e20c6e0b184f4" data-text-hash="99727f31acf681d9da0f1da68fa70574" id="43" refid="43">
+<p>Figure 2.4 shows three main Docker concepts that appear in the process I&#8217;ve just described. Here&#8217;s what each of them is:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="b320c3627b2e16b9d15b9145acb7cfc5" data-text-hash="b99ccf72e78a938643c48480eb16e664" id="44" refid="44"><i>Images</i>&#8212;A container image is something you package your application and its environment into. Like a zip file or a tarball. It contains the whole filesystem that the application will use and additional metadata, such as the path to the executable file to run when the image is executed, the ports the application listens on, and other information about the image.</li>
+<li class="readable-text" data-hash="0e2e02268b6dae4a0f48e5182752d37c" data-text-hash="da1bb2cd19db79f64093cab97596c898" id="45" refid="45"><i>Registries</i>&#8212;A registry is a repository of container images that enables the exchange of images between different people and computers. After you build your image, you can either run it on the same computer, or <i>push</i> (upload) the image to a registry and then <i>pull</i> (download) it to another computer. Certain registries are public, allowing anyone to pull images from it, while others are private and only accessible to individuals, organizations or computers that have the required authentication credentials.</li>
+<li class="readable-text" data-hash="6f31bc4403a3351c897a72f0a70ee9c4" data-text-hash="e8e400fd1e1033c6982f223d79bc0fd9" id="46" refid="46"><i>Containers</i>&#8212;A container is instantiated from a container image. A running container is a normal process running in the host operating system, but its environment is isolated from that of the host and the environments of other processes. The file system of the container originates from the container image, but additional file systems can also be mounted into the container. A container is usually resource-restricted, meaning it can only access and use the amount of resources such as CPU and memory that have been allocated to it.</li>
+</ul>
+<div class="readable-text" data-hash="e9987a472815ca230b023adf4c309046" data-text-hash="d1ad023ea0adf706cc2f8e6cb58bc455" id="47" refid="47">
+<h4>Building, distributing, and running a container image</h4>
+</div>
+<div class="readable-text" data-hash="159dc26338525e74c6856b5be3fe8c13" data-text-hash="bdecdd84308ad550e6634a27b705f74a" id="48" refid="48">
+<p>To understand how containers, images and registries relate to each other, let&#8217;s look at how to build a container image, distribute it through a registry and create a running container from the image. These three processes are shown in figures 2.5 to 2.7.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e2d7de402fbb719d937854890077d0a7" data-text-hash="a4b1bd7a858c15504d49264636ababfd" id="49" refid="49">
+<h5>Figure 2.5 Building a container image</h5>
+<img alt="" data-processed="true" height="264" id="Picture_130" loading="lazy" src="EPUB/images/02image006.png" width="784">
+</div>
+<div class="readable-text" data-hash="106345c5cf9a282af84ec45d54d1e6ab" data-text-hash="c053c8fb2531e1e2737c107a18ccf98b" id="50" refid="50">
+<p>As shown in figure 2.5, the developer first builds an image, and then pushes it to a registry, as shown in figure 2.6. The image is now available to anyone who can access the registry.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="967e7c680f2fc99ff4d9232d98069dd2" data-text-hash="91118c566deb3cc8a5f22f95506d6605" id="51" refid="51">
+<h5>Figure 2.6 Uploading a container image to a registry</h5>
+<img alt="" data-processed="true" height="200" id="Picture_131" loading="lazy" src="EPUB/images/02image007.png" width="785">
+</div>
+<div class="readable-text" data-hash="bb330cd848ae247ccfef9154b1d2aed8" data-text-hash="077ede1ee2e1e427da0b74dc15d714c2" id="52" refid="52">
+<p>As the next figure shows, another person can now pull the image to any other computer running Docker and run it. Docker creates an isolated container based on the image and invokes the executable file specified in the image.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="a10bf8ccf36b8874ee3c51a694cdd817" data-text-hash="f0d564f64f3902451ca25257641fba0b" id="53" refid="53">
+<h5>Figure 2.7 Running a container on a different computer</h5>
+<img alt="" data-processed="true" height="243" id="Picture_132" loading="lazy" src="EPUB/images/02image008.png" width="813">
+</div>
+<div class="readable-text" data-hash="59c205fbe9a2feed2bd4eafa44cc2c07" data-text-hash="27741825174eab1f4c8dbd2b298dbf6a" id="54" refid="54">
+<p>Running the application on any computer is made possible by the fact that the environment of the application is decoupled from the environment of the host.</p>
+</div>
+<div class="readable-text" data-hash="d6b089c034ba08b49d178d75d58e2c71" data-text-hash="2394c89cf910cee3da773bff567997c1" id="55" refid="55">
+<h4>Understanding the environment that the application sees</h4>
+</div>
+<div class="readable-text" data-hash="b1aa48f66c60cd9e7cde607e17270fc1" data-text-hash="9eb7020d2bd07e0e5382ee219eb1f80b" id="56" refid="56">
+<p>When you run an application in a container, it sees exactly the file system content you bundled into the container image, as well as any additional file systems you mount into the container. The application sees the same files whether it&#8217;s running on your laptop or a full-fledged production server, even if the production server uses a completely different Linux distribution. The application typically has no access to the files in the host&#8217;s operating system, so it doesn&#8217;t matter if the server has a completely different set of installed libraries than your development computer.</p>
+</div>
+<div class="readable-text" data-hash="84b5733edd62e5b07dd40409118a5a01" data-text-hash="c519883024470bb19652b1888c810c9a" id="57" refid="57">
+<p>For example, if you package your application with the files of the entire Red Hat Enterprise Linux (RHEL) operating system and then run it, the application will think it&#8217;s running inside RHEL, whether you run it on your Fedora-based or a Debian-based computer. The Linux distribution installed on the host is irrelevant. The only thing that might be important is the kernel version and the kernel modules it loads. Later, I&#8217;ll explain why.</p>
+</div>
+<div class="readable-text" data-hash="d151a4c110cb0c887d78c6eb3ca00f23" data-text-hash="9b0cf9c9a1ce3687ed94262305f67c4f" id="58" refid="58">
+<p>This is similar to creating a VM image by creating a new VM, installing an operating system and your app in it, and then distributing the whole VM image so that other people can run it on different hosts. Docker achieves the same effect, but instead of using VMs for app isolation, it uses Linux container technologies to achieve (almost) the same level of isolation.</p>
+</div>
+<div class="readable-text" data-hash="820174bcbce02cc33047ba22b09d12c0" data-text-hash="a5f1dcd3dd676d0181a81dcc27507225" id="59" refid="59">
+<h4>Understanding image layers</h4>
+</div>
+<div class="readable-text" data-hash="9d35fa1a0d2c8be9491d07412143a3a0" data-text-hash="e313ef412879be40d125b01de2bc3fdd" id="60" refid="60">
+<p>Unlike virtual machine images, which are big blobs of the entire filesystem required by the operating system installed in the VM, container images consist of layers that are usually much smaller. These layers can be shared and reused across multiple images. This means that only certain layers of an image need to be downloaded if the rest were already downloaded to the host as part of another image containing the same layers.</p>
+</div>
+<div class="readable-text" data-hash="9229aeb0a6fee97ba072deb78e9808f7" data-text-hash="0955f21764f1884f3b62281b66fc7b07" id="61" refid="61">
+<p>Layers make image distribution very efficient but also help to reduce the storage footprint of images. Docker stores each layer only once. As you can see in the following figure, two containers created from two images that contain the same layers use the same files.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="c741b05876f9882470e1eafabf6a08f3" data-text-hash="0a86282f4892950a642c899979cac37a" id="62" refid="62">
+<h5>Figure 2.8 Containers can share image layers</h5>
+<img alt="" data-processed="true" height="405" id="Picture_133" loading="lazy" src="EPUB/images/02image009.png" width="750">
+</div>
+<div class="readable-text" data-hash="5f8aa47152d9f473ec136a70c9d5e968" data-text-hash="b9e1e0ca66f82d65d09c96e4469ead28" id="63" refid="63">
+<p>The figure shows that containers A and B share an image layer, which means that applications A and B read some of the same files. In addition, they also share the underlying layer with container C. But if all three containers have access to the same files, how can they be completely isolated from each other? Are changes that application A makes to a file stored in the shared layer not visible to application B? They aren&#8217;t. Here&#8217;s why.</p>
+</div>
+<div class="readable-text" data-hash="5b63440ae9284f0d98c918660df3a5a4" data-text-hash="20963416b87596a3d6abd7a0ce756100" id="64" refid="64">
+<p>The filesystems are isolated by the Copy-on-Write (CoW) mechanism. The filesystem of a container consists of read-only layers from the container image and an additional read/write layer stacked on top. When an application running in container A changes a file in one of the read-only layers, the entire file is copied into the container&#8217;s read/write layer and the file contents are changed there. Since each container has its own writable layer, changes to shared files are not visible in any other container.</p>
+</div>
+<div class="readable-text" data-hash="b99dd48787727c9ebe9f33aab5ac7cba" data-text-hash="70f5de09f8f10798df0c301c2e953d16" id="65" refid="65">
+<p>When you delete a file, it is only marked as deleted in the read/write layer, but it&#8217;s still present in one or more of the layers below. What follows is that deleting files never reduces the size of the image.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="b2e77ee5eab91ed125078b965697a292" data-text-hash="059e9861e0400dfbe05c98a841f3f96b" id="66" refid="66">
+<h5>WARNING</h5>
+</div>
+<div class="readable-text" data-hash="ee272ef6a7eb12f3f00a5a5c27a4a400" data-text-hash="49981c598a5c06a044a8f77d9d85c4f1" id="67" refid="67">
+<p> Even seemingly harmless operations such as changing permissions or ownership of a file result in a new copy of the entire file being created in the read/write layer. If you perform this type of operation on a large file or many files, the image size may swell significantly.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="123cd20d9227a9185921214c84d2ff07" data-text-hash="1493814fac21574eaaad7e554b5397d9" id="68" refid="68">
+<h4>Understanding the portability limitations of container images</h4>
+</div>
+<div class="readable-text" data-hash="11caf142b17179aeba837ca13fda949f" data-text-hash="3773bf689c789d31fdbbf863e1b32b49" id="69" refid="69">
+<p>In theory, a Docker-based container image can be run on any Linux computer running Docker, but one small caveat exists, because containers don&#8217;t have their own kernel. If a containerized application requires a particular kernel version, it may not work on every computer. If a computer is running a different version of the Linux kernel or doesn&#8217;t load the required kernel modules, the app can&#8217;t run on it. This scenario is illustrated in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="d69149faa29ef6959b647bf0bea10add" data-text-hash="223ec51cc1b8737b784d6241789993fa" id="70" refid="70">
+<h5>Figure 2.9 If a container requires specific kernel features or modules, it may not work everywhere</h5>
+<img alt="" data-processed="true" height="278" id="Picture_134" loading="lazy" src="EPUB/images/02image010.png" width="789">
+</div>
+<div class="readable-text" data-hash="0bc6f8f90ffd8f6fe88c39f5511a9ca8" data-text-hash="0c3e7cb7f7eeca7912daca482e077afa" id="71" refid="71">
+<p>Container B requires a specific kernel module to run properly. This module is loaded in the kernel in the first computer, but not in the second. You can run the container image on the second computer, but it will break when it tries to use the missing module.</p>
+</div>
+<div class="readable-text" data-hash="6bf9ccf18268468f4557253caf91770c" data-text-hash="39fa977cd1041a7385d76da586591b19" id="72" refid="72">
+<p>And it&#8217;s not just about the kernel and its modules. It should also be clear that a containerized app built for a specific hardware architecture can only run on computers with the same architecture. You can&#8217;t put an application compiled for the x86 CPU architecture into a container and expect to run it on an ARM-based computer just because Docker is available there. For this you would need a VM to emulate the x86 architecture.</p>
+</div>
+<div class="readable-text" data-hash="5d95c38fb317a4040ddd183ae377943e" data-text-hash="6e2b9e204de9f5546ba297d659fea5a6" id="73" refid="73">
+<h3 id="sigil_toc_id_20">2.1.3&#160;Installing Docker and running a Hello World container</h3>
+</div>
+<div class="readable-text" data-hash="98a01842ebe32d39ee00375770f04f10" data-text-hash="63655f17c8e0e5247edf87856d21a410" id="74" refid="74">
+<p>You should now have a basic understanding of what a container is, so let&#8217;s use Docker to run one. You&#8217;ll install Docker and run a Hello World container.</p>
+</div>
+<div class="readable-text" data-hash="2630b90302c7ff22269f3a4360379404" data-text-hash="102e2348e3a85877555c12649df3228c" id="75" refid="75">
+<h4>Installing Docker</h4>
+</div>
+<div class="readable-text" data-hash="7ddab5cd236d88b653237fd29420dd34" data-text-hash="a2ab3e07986f298bf907857fe5322669" id="76" refid="76">
+<p>Ideally, you&#8217;ll install Docker directly on a Linux computer, so you won&#8217;t have to deal with the additional complexity of running containers inside a VM running within your host OS. But, if you&#8217;re using macOS or Windows and don&#8217;t know how to set up a Linux VM, the Docker Desktop application will set it up for you. The Docker command-line (CLI) tool that you&#8217;ll use to run containers will be installed in your host OS, but the Docker daemon will run inside the VM, as will all the containers it creates.</p>
+</div>
+<div class="readable-text" data-hash="e762b0da977fcdfc4008f3fad11a7c21" data-text-hash="e5e8674cf2124eea4d6274a1eaf0faa5" id="77" refid="77">
+<p>The Docker Platform consists of many components, but you only need to install Docker Engine to run containers. If you use macOS or Windows, install Docker Desktop. For details, follow the instructions at <a href="docs.docker.com.html">http://docs.docker.com/install</a>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="78" refid="78">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="132680c3585b223c570ad916b584f987" data-text-hash="79db58eebd460c270f4785ba4d953247" id="79" refid="79">
+<p> Docker Desktop for Windows can run either Windows or Linux containers. Make sure that you configure it to use Linux containers, as all the examples in this book assume that&#8217;s the case.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="3ca40398ced6e3c5ba9ae9a4b776cc9f" data-text-hash="415483e82ffbdb8762d41cad52c02315" id="80" refid="80">
+<h4>Running a Hello World container</h4>
+</div>
+<div class="readable-text" data-hash="55bf2f3c920db12f0518e967177cbb3c" data-text-hash="f86b0fc2f23d50e074e8f38cc1ff75f4" id="81" refid="81">
+<p>After the installation is complete, you use the <code>docker</code> CLI tool to run Docker commands. Let&#8217;s try pulling and running an existing image from Docker Hub, the public image registry that contains ready-to-use container images for many well-known software packages. One of them is the <code>busybox</code> image, which you&#8217;ll use to run a simple <code>echo</code> <code>"Hello</code> <code>world"</code> command in your first container.</p>
+</div>
+<div class="readable-text" data-hash="18e97766250033a7de53b1c6ea41d6f8" data-text-hash="b2daa3237873a1e0e4d373b66f4a3d90" id="82" refid="82">
+<p>If you&#8217;re unfamiliar with <code>busybox</code>, it&#8217;s a single executable file that combines many of the standard UNIX command-line tools, such as <code>echo</code>, <code>ls</code>, <code>gzip</code>, and so on. Instead of the <code>busybox</code> image, you could also use any other full-fledged OS container image like Fedora, Ubuntu, or any other image that contains the <code>echo</code> executable file.</p>
+</div>
+<div class="readable-text" data-hash="da4f272c6116b8d890312d89ee182521" data-text-hash="c62564549e5da407b1b86c7baa8ce818" id="83" refid="83">
+<p>Once you&#8217;ve got Docker installed, you don&#8217;t need to download or install anything else to run the <code>busybox</code> image. You can do everything with a single <code>docker</code> <code>run</code> command, by specifying the image to download and the command to run in it. To run the Hello World container, the command and its output are as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="d7d5b67635b57dafaf8f7b86542804fa" data-text-hash="42ccd5801369e4554b442722eb0aaf5d" id="84" refid="84">
+<div class="code-area-container">
+<pre class="code-area">$ docker run busybox echo "Hello World"
+Unable to find image 'busybox:latest' locally    #A
+latest: Pulling from library/busybox    #A
+7c9d20b9b6cd: Pull complete    #A
+Digest: sha256:fe301db49df08c384001ed752dff6d52b4...    #A
+Status: Downloaded newer image for busybox:latest    #A
+Hello World    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRG9ja2VyIGRvd25sb2FkcyB0aGUgY29udGFpbmVyIGltYWdlCiNCIFRoZSBvdXRwdXQgcHJvZHVjZWQgYnkgdGhlIGVjaG8gY29tbWFuZA=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1b2c8ea1de5d53a3252450082c54b863" data-text-hash="91e24f1e80c8a2757629a21cb8ae2fcc" id="85" refid="85">
+<p>With this single command, you told Docker what image to create the container from and what command to run in the container. This may not look so impressive, but keep in mind that the entire &#8220;application&#8221; was downloaded and executed with a single command, without you having to install the application or any of its dependencies.</p>
+</div>
+<div class="readable-text" data-hash="d264c73ca1ddf3ae158d733a1909b7e8" data-text-hash="5a6c912d275e31ec7845000fb4d6ad32" id="86" refid="86">
+<p>In this example, the application was just a single executable file, but it could also have been a complex application with dozens of libraries and additional files. The entire process of setting up and running the application would be the same. What isn&#8217;t obvious is that it ran in a container, isolated from the other processes on the computer. You&#8217;ll see that this is true in the remaining exercises in this chapter.</p>
+</div>
+<div class="readable-text" data-hash="0e71dc33e9e39f23d3e39fdfa2a24333" data-text-hash="b6f5942a107995497cf69984c5bb4f21" id="87" refid="87">
+<h4>Understanding what happens when you run a container</h4>
+</div>
+<div class="readable-text" data-hash="0cbfd2d75437627bf94c1f8aef310703" data-text-hash="80366e7a3114796b36045ea02383e14b" id="88" refid="88">
+<p>Figure 2.10 shows exactly what happens when you execute the <code>docker</code> <code>run</code> command.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="3dc8bbfdded978240f87b731f5243def" data-text-hash="fb5140414505d2ad8c3c0e037e0a8971" id="89" refid="89">
+<h5>Figure 2.10 Running echo &#8220;Hello world&#8221; in a container based on the busybox container image</h5>
+<img alt="" data-processed="true" height="345" id="Picture_135" loading="lazy" src="EPUB/images/02image011.png" width="789">
+</div>
+<div class="readable-text" data-hash="553bc57fd3badee9a055e0a2be5960c1" data-text-hash="23b8375568a207a412eb8fbb519da4c3" id="90" refid="90">
+<p>The <code>docker</code> CLI tool sends an instruction to run the container to the Docker daemon, which checks whether the <code>busybox</code> image is already present in its local image cache. If it isn&#8217;t, the daemon pulls it from the Docker Hub registry.</p>
+</div>
+<div class="readable-text" data-hash="2b9e1b21ac3c0a7fcab5faa9d8f18e71" data-text-hash="1c3eb4f0662392a9c0878addf2602702" id="91" refid="91">
+<p>After downloading the image to your computer, the Docker daemon creates a container from that image and executes the <code>echo</code> command in it. The command prints the text to the standard output, the process then terminates and the container stops.</p>
+</div>
+<div class="readable-text" data-hash="3eca5f66f737ff2e6a812a833ecb48f0" data-text-hash="1f7bbdf775b28d14b0f22c5619fbbe3a" id="92" refid="92">
+<p>If your local computer runs a Linux OS, the Docker CLI tool and the daemon both run in this OS. If it runs macOS or Windows, the daemon and the containers run in the Linux VM.</p>
+</div>
+<div class="readable-text" data-hash="5aff2759630ed2d2142ee507625c05a0" data-text-hash="d84bfcb21c3639582b0cee56717e71e2" id="93" refid="93">
+<h4>Running other images</h4>
+</div>
+<div class="readable-text" data-hash="59d59f5f9d7cf608a634067ec33bbb47" data-text-hash="b81a4a86a9f9c9696a48bcec1d2d8411" id="94" refid="94">
+<p>Running other existing container images is much the same as running the <code>busybox</code> image. In fact, it&#8217;s often even simpler, since you don&#8217;t normally need to specify what command to execute, as with the echo command in the previous example. The command that should be executed is usually written in the image itself, but you can override it when you run it.</p>
+</div>
+<div class="readable-text" data-hash="e2d34913792616c33dd1da8c782d1cad" data-text-hash="eb1f27c8dcc4b68ac14302821770c522" id="95" refid="95">
+<p>For example, if you want to run the Redis datastore, you can find the image name on <a href=".html">http://hub.docker.com</a> or another public registry. In the case of Redis, one of the images is called <code>redis:alpine</code>, so you&#8217;d run it like this:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="892b20da38e423972bf9c8b96a80ba96" data-text-hash="028264cffe7c5608d5c8486a17dbeb27" id="96" refid="96">
+<div class="code-area-container">
+<pre class="code-area">$ docker run redis:alpine</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5b258bc87a7d3fe178266ce699cd61a8" data-text-hash="b9250a839a392fc0659808939c24cb74" id="97" refid="97">
+<p>To stop and exit the container, press Control-C.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="98" refid="98">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="26e5085941b6b6e7f368ee9a1ee6e513" data-text-hash="3d4919710f6906dee0ed2c6d55dfcb16" id="99" refid="99">
+<p> If you want to run an image from a different registry, you must specify the registry along with the image name. For example, if you want to run an image from the Quay.io registry, which is another publicly accessible image registry, run it as follows: <code>docker run quay.io/some/image</code>.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="17a49edef42009fab634fc7a57e07c47" data-text-hash="4644ffa254cc1dad42032bb73596409b" id="100" refid="100">
+<h4>Understanding image tags</h4>
+</div>
+<div class="readable-text" data-hash="79d36532e6469ef3ca04d98234003b45" data-text-hash="d7f4c0cf8f0d386091141d741467c5c7" id="101" refid="101">
+<p>If you&#8217;ve searched for the Redis image on Docker Hub, you&#8217;ve noticed that there are many image <i>tags</i> you can choose from. For Redis, the tags are <code>latest</code>, <code>buster</code>, <code>alpine</code>, but also <code>5.0.7-buster</code>, <code>5.0.7-alpine</code>, and so on.</p>
+</div>
+<div class="readable-text" data-hash="beb0c9b5f46fd79812a621c82a8bf460" data-text-hash="b1193d98f5a405eafe345ee8f1076c8b" id="102" refid="102">
+<p>Docker allows you to have multiple versions or variants of the same image under the same name. Each variant has a unique tag. If you refer to images without explicitly specifying the tag, Docker assumes that you&#8217;re referring to the special <code>latest</code> tag. When uploading a new version of an image, image authors usually tag it with both the actual version number and with <code>latest</code>. When you want to run the latest version of an image, use the <code>latest</code> tag instead of specifying the version.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="103" refid="103">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="7edbeed64dc746751478a3b0b273d961" data-text-hash="45b2891c9e95e0eb57315f817c8c5679" id="104" refid="104">
+<p> The <code>docker run</code> command only pulls the image if it hasn&#8217;t already pulled it before. Using the <code>latest</code> tag ensures that you get the latest version when you first run the image. The locally cached image is used from that point on.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ffdc6946f46f2a5bb3dd4b130b942d40" data-text-hash="939cb6e1d725168c803ab1e4aa2bf55c" id="105" refid="105">
+<p>Even for a single version, there are usually several variants of an image. For Redis I mentioned <code>5.0.7-buster</code> and <code>5.0.7-alpine</code>. They both contain the same version of Redis, but differ in the base image they are built on. <code>5.0.7-buster</code> is based on Debian version &#8220;Buster&#8221;, while <code>5.0.7-alpine</code> is based on the Alpine Linux base image, a very stripped-down image that is only 5MB in total &#8211; it contains only a small set of the installed binaries you see in a typical Linux distribution.</p>
+</div>
+<div class="readable-text" data-hash="c1080362dc912ec0eb9d3474afd56e6e" data-text-hash="f35393d8c11666c53973170485643f66" id="106" refid="106">
+<p>To run a specific version and/or variant of the image, specify the tag in the image name. For example, to run the <code>5.0.7-alpine</code> tag, you&#8217;d execute the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="80d49dbbc79c1848921be371d175648c" data-text-hash="adc1a9a520a872cb0b700ff42bc6df40" id="107" refid="107">
+<div class="code-area-container">
+<pre class="code-area">$ docker run redis:5.0.7-alpine</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b5d69da081a03e009b80f58b4f99ce97" data-text-hash="eef98853a0d1cff4f80532b91691a840" id="108" refid="108">
+<p>These days, you can find container images for virtually all popular applications. You can use Docker to run those images using the simple <code>docker run</code> single-line command.</p>
+</div>
+<div class="readable-text" data-hash="43b02b87c63e50a2b4a39fc54dee4b37" data-text-hash="b1d7075496d8b40883a96b04590e2b13" id="109" refid="109">
+<h3 id="sigil_toc_id_21">2.1.4&#160;Introducing the Open Container Initiative and Docker alternatives</h3>
+</div>
+<div class="readable-text" data-hash="b0e9622c79d7580e64467a7159716240" data-text-hash="3be85c52c7621495d53a9ec15c74713e" id="110" refid="110">
+<p>Docker was the first container platform to make containers mainstream. I hope I&#8217;ve made it clear that Docker itself is not what provides the process isolation. The actual isolation of containers takes place at the Linux kernel level using the mechanisms it provides. Docker is the tool using these mechanisms to make running container almost trivial. But it&#8217;s by no means the only one.</p>
+</div>
+<div class="readable-text" data-hash="d2e377be3697dca55250d0de81d28b7f" data-text-hash="cb3ca0ff0d102f9d612126dfbf6cd893" id="111" refid="111">
+<h4>Introducing the Open Container Initiative (OCI)</h4>
+</div>
+<div class="readable-text" data-hash="226fe25d594cb47aaf13722ac665ec94" data-text-hash="81c8e2994131ebbc9a469fdaadfd25c6" id="112" refid="112">
+<p>After the success of Docker, the Open Container Initiative (OCI) was born to create open industry standards around container formats and runtime. Docker is part of this initiative, as are other container runtimes and a number of organizations with interest in container technologies.</p>
+</div>
+<div class="readable-text" data-hash="773ec3a1d4dee3691ea9cf53983754b7" data-text-hash="cae38185ca7e6617a66c0df9b0ec2c92" id="113" refid="113">
+<p>OCI members created the <i>OCI Image Format Specification</i>, which prescribes a standard format for container images, and the <i>OCI Runtime Specification</i>, which defines a standard interface for container runtimes with the aim of standardizing the creation, configuration and execution of containers.</p>
+</div>
+<div class="readable-text" data-hash="46d5edfd996ce603e04bff78177ba48b" data-text-hash="2dda33e256f399943816bf2aae5fa247" id="114" refid="114">
+<h4>Introducing the Container Runtime Interface (CRI) and its implementation (CRI-O)</h4>
+</div>
+<div class="readable-text" data-hash="a6def4c32bad57b8914a04a10e31be65" data-text-hash="8f2813f1579743a8948a1e8be284a862" id="115" refid="115">
+<p>This book focuses on using Docker as the container runtime for Kubernetes, as it was initially the only one supported by Kubernetes and is still the most widely used. But Kubernetes now supports many other container runtimes through the Container Runtime Interface (CRI).</p>
+</div>
+<div class="readable-text" data-hash="2a6e12fc771261689a67f62f8b56e329" data-text-hash="7a22f8ae751aded29062f2b8d5c12d27" id="116" refid="116">
+<p>One implementation of CRI is CRI-O, a lightweight alternative to Docker that allows you to leverage any OCI-compliant container runtime with Kubernetes. Examples of OCI-compliant runtimes include <i>rkt</i> (pronounced Rocket), <i>runC</i>, and <i>Kata Containers</i>.</p>
+</div>
+<div class="readable-text" data-hash="624ba678c0c4a236b2336373147aa7fc" data-text-hash="f54f66530afc4ca0d9740792ceb9bf8f" id="117" refid="117">
+<h2 id="sigil_toc_id_22">2.2&#160;Deploying Kiada&#8212;the Kubernetes in Action Demo Application</h2>
+</div>
+<div class="readable-text" data-hash="5175c79da9a8591b34c36ad5723dd2ca" data-text-hash="08bb597d0e1f05656f0ddd4bd3e4628e" id="118" refid="118">
+<p>Now that you&#8217;ve got a working Docker setup, you can start building a more complex application. You&#8217;ll build a microservices-based application called <i>Kiada</i> - the Kubernetes in Action Demo Application.</p>
+</div>
+<div class="readable-text" data-hash="8e738060066a1672f91955800a375596" data-text-hash="ecdd837a336d123f6ad0fdbd2b9ae8af" id="119" refid="119">
+<p>In this chapter, you&#8217;ll use Docker to run this application. In the next and remaining chapters, you&#8217;ll run the application in Kubernetes. Over the course of this book, you&#8217;ll iteratively expand it and learn about individual Kubernetes features that help you solve the typical problems you face when running applications.</p>
+</div>
+<div class="readable-text" data-hash="06f5cc7f202dc723209e5ad34b590610" data-text-hash="15427f9734cfcc359e99fa42d4bba387" id="120" refid="120">
+<h3 id="sigil_toc_id_23">2.2.1&#160;Introducing the Kiada Suite</h3>
+</div>
+<div class="readable-text" data-hash="b76ac19cdf6dee2ee309eaaccb6c4d62" data-text-hash="d805520fdb476cd9c0503b970fc865af" id="121" refid="121">
+<p>The Kubernetes in Action Demo Application is a web-based application that shows quotes from this book, asks you Kubernetes-related questions to help you check how your knowledge is progressing, and provides a list of hyperlinks to external websites related to Kubernetes or this book. It also prints out the information about the container that served processed the browser&#8217;s request. You&#8217;ll soon see why this is important.</p>
+</div>
+<div class="readable-text" data-hash="5c632be9dfd21c9efe75b98f28efb532" data-text-hash="872f922d64478d7fe4a01d6432e9b293" id="122" refid="122">
+<h4>The look and operation of the application</h4>
+</div>
+<div class="readable-text" data-hash="2ee8e748d89370f2768058ffbea93fb3" data-text-hash="b3d1208097f4cb8d2518605e86166422" id="123" refid="123">
+<p>A screenshot of the web application is presented in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="6fe4104b9497a2e518b833d310a35472" data-text-hash="8101a444a673cee48e3b3aeda2e8168e" id="124" refid="124">
+<h5>Figure 2.11 A screenshot of the Kubernetes in Action Demo Application (Kiada)</h5>
+<img alt="" data-processed="true" height="440" id="Picture_136" loading="lazy" src="EPUB/images/02image012.png" width="803">
+</div>
+<div class="readable-text" data-hash="af42ad111ebd8b40598c62d0ee5e9005" data-text-hash="781a90e603c0903d66f8c7de497d2df0" id="125" refid="125">
+<p>The architecture of the Kiada application is shown in the next figure. The HTML is served by a web application running in a Node.js server. The client-side JavaScript code then retrieves the quote and question from the Quote and the Quiz RESTful services. The Node.js application and the services comprise the complete <i>Kiada Suite</i>.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="dd50c2aa9017b532d342aee3587c433a" data-text-hash="9fceef8c75c9d6a2335491b106c5f414" id="126" refid="126">
+<h5>Figure 2.12 The architecture and operation of the Kiada Suite</h5>
+<img alt="" data-processed="true" height="340" id="Picture_137" loading="lazy" src="EPUB/images/02image013.png" width="722">
+</div>
+<div class="readable-text" data-hash="05342c4aa56e62b0553ad83d12715d5a" data-text-hash="6f928740f2235c97fa63c0f0d865d0bd" id="127" refid="127">
+<p>The web browser talks directly to three different services. If you&#8217;re familiar with microservice architectures, you might wonder why no API gateway exists in the system. This is so that I can demonstrate the issues and solutions associated with cases where many different services are deployed in Kubernetes (services that may not belong behind the same API gateway). But chapter 11 will also explain how to introduce Kubernetes-native API gateways into the system.</p>
+</div>
+<div class="readable-text" data-hash="33b0e718e28f498c3e912a88a4788ac1" data-text-hash="4bb404aff1d74f26b02191a2f913c527" id="128" refid="128">
+<h4>The look and operation of the plain-text version</h4>
+</div>
+<div class="readable-text" data-hash="40b7f2ab65d09297a2c25864e1572215" data-text-hash="f8bdf355b39cb7d5bf9a599734e851a5" id="129" refid="129">
+<p>You&#8217;ll spend a lot of time interacting with Kubernetes via a terminal, so you may not want to go back and forth between it and a web browser when you perform the exercises. For this reason, the application can also be used in plain-text mode.</p>
+</div>
+<div class="readable-text" data-hash="427ba4c6977be78913a54cc1bd898e82" data-text-hash="bfd8d9a9ab114b2d32a819b34606e03f" id="130" refid="130">
+<p>The plain-text mode allows you to use the application directly from the terminal using a tool such as <code>curl</code>. In that case, the response sent by the application looks like the following:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="15b74446b03af5fd90f5835fb219ec73" data-text-hash="dc43bcd404273de9e48456ae606a1a32" id="131" refid="131">
+<div class="code-area-container">
+<pre class="code-area">==== TIP OF THE MINUTE
+Liveness probes can only be used in the pod&#8217;s regular containers. 
+They can&#8217;t be defined in init containers.
+ 
+==== POP QUIZ
+Third question
+0) First answer
+1) Second answer
+2) Third answer
+ 
+Submit your answer to /question/0/answers/&lt;index of answer&gt; using the POST method.
+ 
+==== REQUEST INFO
+Request processed by Kubia 1.0 running in pod "kiada-ssl" on node "kind-worker".
+Pod hostname: kiada-ssl; Pod IP: 10.244.2.188; Node IP: 172.18.0.2; Client IP: 127.0.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="60a7b98c927791a5a411eaa034fdcad6" data-text-hash="4841a42ae0f183049f5ed6fd27613c93" id="132" refid="132">
+<p>The HTML version is accessible at the request URI <code>/html</code><code>,</code> whereas the text version is at <code>/text</code>. If the client requests the root URI path <code>/</code>, the application inspects the <code>Accept</code> request header to guess whether the client is a graphical web browser, in which case it redirects it to <code>/html</code>, or a text-based tool like <code>curl</code>, in which case it sends the plain-text response.</p>
+</div>
+<div class="readable-text" data-hash="526c4a10220d273a5e206120009075c2" data-text-hash="4011b154078fbb56da7d859cd0358157" id="133" refid="133">
+<p>In this mode of operation, it&#8217;s the Node.js application that calls the Quote and the Quiz services, as shown in the next figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="b7f98b2e8a44171482cee4fc1e0e219f" data-text-hash="5e72a46d135004f7913703139d31d9ec" id="134" refid="134">
+<h5>Figure 2.13 The operation when the client requests the text version</h5>
+<img alt="" data-processed="true" height="274" id="Picture_138" loading="lazy" src="EPUB/images/02image014.png" width="769">
+</div>
+<div class="readable-text" data-hash="ad597ff35706df2986b9769a5db7a2c4" data-text-hash="3d0df4a54071bb8cc979b7664d8a8165" id="135" refid="135">
+<p>From a networking standpoint, this mode of operation is much different than the one described previously. In this case, the Quote and the Quiz service are invoked within the cluster, whereas previously, they were invoked directly from the browser. To support both operation modes, the services must therefore be exposed both internally and externally.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="136" refid="136">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="fb8edec5b6b38f693543f7ea768d789c" data-text-hash="0db039cbc085ceb224743c04425a523f" id="137" refid="137">
+<p> The initial version of the application will not connect to any services. You&#8217;ll build and incorporate the services in later chapters.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="e1f56fd3113ac22ba7db76035e88c3cf" data-text-hash="6f8c1f18ebb9edf23c39b68cef8361ef" id="138" refid="138">
+<h3 id="sigil_toc_id_24">2.2.2&#160;Building the application</h3>
+</div>
+<div class="readable-text" data-hash="71c1236c9ab42b8d191fe7a2f6996f82" data-text-hash="5523322f7c974fddfbe8d3c957b34a7e" id="139" refid="139">
+<p>With the general overview of the application behind us, it&#8217;s time to start building the application. Instead of going straight to the full-blown version of the application, we&#8217;ll take things slow and build the application iteratively throughout the book.</p>
+</div>
+<div class="readable-text" data-hash="829766d69e9238f2be13acab9eff631e" data-text-hash="e70b4f47b31d4fd72c9d272eff8c4658" id="140" refid="140">
+<h4>Introducing the initial version of the application</h4>
+</div>
+<div class="readable-text" data-hash="78adb5792010f0235d93dfb8bad99118" data-text-hash="522a3592dfe5efac9c5dfc811613429d" id="141" refid="141">
+<p>The initial version of the application that you&#8217;ll run in this chapter, while supporting both HTML and plain-text modes, will not display the quote and pop quiz, but merely the information about the application and the request. This includes the version of the application, the network hostname of the server that processed the client&#8217;s request, and the IP of the client. Here&#8217;s the plain-text response that it sends:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8799ffde594007ef9cb9133cdc6a8914" data-text-hash="26a6260064f4034397813d78bd16e139" id="142" refid="142">
+<div class="code-area-container">
+<pre class="code-area">Kiada version 0.1. Request processed by "&lt;server-hostname&gt;". Client IP: &lt;client-IP&gt;</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ee7a5dba2be440e3f2fcb8365f29de48" data-text-hash="df3a1b24f8ea65fb16553fa6b3935c70" id="143" refid="143">
+<p>The application source code is available in the book&#8217;s code repository on GitHub. You&#8217;ll find the code of the initial version in the directory <code>Chapter02/kiada-0.1</code>. The JavaScript code is in the <code>app.js</code> file and the HTML and other resources are in the <code>html</code> subdirectory. The template for the HTML response is in <code>index.html</code>. For the plain-text response it&#8217;s in <code>index.txt</code>.</p>
+</div>
+<div class="readable-text" data-hash="2d622a30d6564513f4798f3bbc9f82f0" data-text-hash="bd005058513a253a318b846aee8c9651" id="144" refid="144">
+<p>You could now download and install Node.js locally and test the application directly on your computer, but that&#8217;s not necessary. Since you already have Docker installed, it&#8217;s easier to package the application into a container image and run it in a container. This way, you don&#8217;t need to install anything, and you&#8217;ll be able to run the same image on any other Docker-enabled host without installing anything there either.</p>
+</div>
+<div class="readable-text" data-hash="c956ac78b377fc25ec9b18ca69024dd2" data-text-hash="38916543f62292deeff3fb89f71efabf" id="145" refid="145">
+<h4>Creating the Dockerfile for the container image</h4>
+</div>
+<div class="readable-text" data-hash="cd385d11f3b03b7efe96bc8ff58fca89" data-text-hash="5b0eda71b40f11593023d6c74b67f7c3" id="146" refid="146">
+<p>To package your app into an image, you need a file called <code>Dockerfile</code>, which contains a list of instructions that Docker performs when building the image. The following listing shows the contents of the file, which you&#8217;ll find in <a href="kiada-0.1.html">Chapter02/kiada-0.1/Dockerfile</a>.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="7532aee13cdf468353e33807eb055fd2" data-text-hash="350a728c434d2051755c1cf602414073" id="147" refid="147">
+<h5>Listing 2.1 A minimal Dockerfile for building a container image for your app</h5>
+<div class="code-area-container">
+<pre class="code-area">FROM node:16    #A
+COPY app.js /app.js    #B
+COPY html/ /html    #C
+ENTRYPOINT ["node", "app.js"]    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGJhc2UgaW1hZ2UgdG8gYnVpbGQgdXBvbgojQiBBZGRzIHRoZSBhcHAuanMgZmlsZSBpbnRvIHRoZSBjb250YWluZXIgaW1hZ2UKI0MgQ29waWVzIHRoZSBmaWxlcyBpbiB0aGUgaHRtbC8gZGlyZWN0b3J5IGludG8gdGhlIGNvbnRhaW5lciBpbWFnZSBhdCAvaHRtbC8KI0QgU3BlY2lmaWVzIHRoZSBjb21tYW5kIHRvIGV4ZWN1dGUgd2hlbiB0aGUgaW1hZ2UgaXMgcnVu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b90a0125b8e7847dd23222285d0c7ccb" data-text-hash="2d811cb80c36a796a40c3ac3a1650b91" id="148" refid="148">
+<p>The <code>FROM</code> line defines the container image that you&#8217;ll use as the starting point (the base image you&#8217;re building on top of). The base image used in the listing is the <code>node</code> container image with the tag <code>12</code>. In the second line, the <code>app.js</code> file is copied from your local directory into the root directory of the image. Likewise, the third line copies the <code>html</code> directory into the image. Finally, the last line specifies the command that Docker should run when you start the container. In the listing, the command is <code>node</code> <code>app.js</code>.</p>
+</div>
+<div class="callout-container sidebar-container">
+<div class="readable-text" data-hash="3902542ccc7a972ab18a3262d13f2f81" data-text-hash="0a303134dd632e5e738c1e515e7c2986" id="149" refid="149">
+<h5>Choosing a base image</h5>
+</div>
+<div class="readable-text" data-hash="23034c39e90fac8bc4389cbe3d08951e" data-text-hash="a45199460c6ee6b3bf203ce20a6c50fb" id="150" refid="150">
+<p>You may wonder why use this specific image as your base. Because your app is a Node.js app, you need your image to contain the <code>node</code> binary file to run the app. You could have used any image containing this binary, or you could have even used a Linux distribution base image such as <code>fedora</code> or <code>ubuntu</code> and installed Node.js into the container when building the image. But since the <code>node</code> image already contains everything needed to run Node.js apps, it doesn&#8217;t make sense to build the image from scratch. In some organizations, however, the use of a specific base image and adding software to it at build-time may be mandatory.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="abc18c687be629d22885c89c9d99a7c7" data-text-hash="f416c3c0f1ee428169134dfcdd9b8446" id="151" refid="151">
+<h4>Building the container image</h4>
+</div>
+<div class="readable-text" data-hash="5598e13ad1a094885e3d0e7bc6da1de4" data-text-hash="a9e3e0a9e15a095c0bb61c0d9803d312" id="152" refid="152">
+<p>The <code>Dockerfile</code>, the <code>app.js</code> file, and the files in the <code>html</code> directory is all you need to build your image. With the following command, you&#8217;ll build the image and tag it as <code>kiada:latest</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="bd176b5bb185cb7b17d20ac099830d53" data-text-hash="ccca48fadca9dad4dce26f5993627936" id="153" refid="153">
+<div class="code-area-container">
+<pre class="code-area">$ docker build -t kiada:latest .
+Sending build context to Docker daemon  3.072kB
+Step 1/4 : FROM node:16    #A
+12: Pulling from library/node
+092586df9206: Pull complete    #B
+ef599477fae0: Pull complete    #B
+...     #B
+89e674ac3af7: Pull complete    #B
+08df71ec9bb0: Pull complete    #B
+Digest: sha256:a919d679dd773a56acce15afa0f436055c9b9f20e1f28b4469a4bee69e0...
+Status: Downloaded newer image for node:16
+ ---&gt; e498dabfee1c    #C
+Step 2/4 : COPY app.js /app.js    #D
+ ---&gt; 28d67701d6d9    #D
+Step 3/4 : COPY html/ /html    #E
+ ---&gt; 1d4de446f0f0    #E
+Step 4/4 : ENTRYPOINT ["node", "app.js"]    #F
+ ---&gt; Running in a01d42eda116    #F
+Removing intermediate container a01d42eda116    #F
+ ---&gt; b0ecc49d7a1d    #F
+Successfully built b0ecc49d7a1d    #G
+Successfully tagged kiada:latest    #G</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBjb3JyZXNwb25kcyB0byB0aGUgZmlyc3QgbGluZSBvZiB5b3VyIERvY2tlcmZpbGUKI0IgRG9ja2VyIGRvd25sb2FkcyB0aGUgaW5kaXZpZHVhbCBsYXllcnMgb2YgdGhlIG5vZGU6MTYgaW1hZ2UKI0MgVGhpcyBpcyB0aGUgSUQgb2YgaW1hZ2UgYWZ0ZXIgdGhlIGZpcnN0IGJ1aWxkIHN0ZXAgaXMgY29tcGxldGUKI0QgVGhlIGFwcC5qcyBpcyBjb3BpZWQgaW50byB0aGUgaW1hZ2UKI0UgVGhlIGh0bWwgZGlyZWN0b3J5IGlzIGNvcGllZCBpbnRvIHRoZSBpbWFnZQojRiBUaGUgZmluYWwgc3RlcCBvZiB0aGUgYnVpbGQKI0cgVGhlIGZpbmFsIGltYWdlIElEIGFuZCBpdHMgdGFn"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="be68d8dd0b2bfe4bc3cf263cc88ff796" data-text-hash="4a019bab5fea6f169ce9ad66c34199f0" id="154" refid="154">
+<p>The <code>-t</code> option specifies the desired image name and tag, and the dot at the end specifies that Dockerfile and the artefacts needed to build the image are in the current directory. This is the so-called build context.</p>
+</div>
+<div class="readable-text" data-hash="5c9315855796dbae2b0c7144fefc7766" data-text-hash="63892b6a86bb77415dfdc71d5d792a94" id="155" refid="155">
+<p>When the build process is complete, the newly created image is available in your computer&#8217;s local image store. You can see it by listing local images with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="622bae4007aa1d186626f2085ecb0a73" data-text-hash="08a3b4b82430a5f9548215d1561c9029" id="156" refid="156">
+<div class="code-area-container">
+<pre class="code-area">$ docker images
+REPOSITORY   TAG      IMAGE ID           CREATED             VIRTUAL SIZE
+kiada        latest   b0ecc49d7a1d       1 minute ago        908 MB
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="10abe11e6d3345ddfe47ddfbaa8eac9f" data-text-hash="617d5e592ce73358179fef91ee5612e1" id="157" refid="157">
+<h4>Understanding how the image is built</h4>
+</div>
+<div class="readable-text" data-hash="0cbcab6cfbb43f1d901a6e164936b462" data-text-hash="38b6f798337742227c0f5dcba21d3d6b" id="158" refid="158">
+<p>The following figure shows what happens during the build process. You tell Docker to build an image called <code>kiada</code> based on the contents of the current directory. Docker reads the <code>Dockerfile</code> in the directory and builds the image based on the directives in the file.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="e6256de8ec2b9c7adcfe353af23a911d" data-text-hash="61dc841cff65c40ef1635f0d9698e788" id="159" refid="159">
+<h5>Figure 2.14 Building a new container image using a Dockerfile</h5>
+<img alt="" data-processed="true" height="300" id="Picture_139" loading="lazy" src="EPUB/images/02image015.png" width="768">
+</div>
+<div class="readable-text" data-hash="d7d4959261194a7b308d6470da5b74aa" data-text-hash="c7dfc3da895942d07dc6eb7a2536ee75" id="160" refid="160">
+<p>The build itself isn&#8217;t performed by the <code>docker</code> CLI tool. Instead, the contents of the entire directory are uploaded to the Docker daemon and the image is built by it. You&#8217;ve already learned that the CLI tool and the daemon aren&#8217;t necessarily on the same computer. If you&#8217;re using Docker on a non-Linux system such as macOS or Windows, the client is in your host OS, but the daemon runs inside a Linux VM. But it could also run on a remote computer.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="161" refid="161">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="bc92b1e0c9e03f91ecd3f252199dd288" data-text-hash="52ad92dfdba58330ba8419978a2788af" id="162" refid="162">
+<p> Don&#8217;t add unnecessary files to the build directory, as they will slow down the build process&#8212;especially if the Docker daemon is located on a remote system.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="78b44233d7199b14fbdd2364e612afb8" data-text-hash="b36a1b1675270da3e5142c31f6c31644" id="163" refid="163">
+<p>To build the image, Docker first pulls the base image (<code>node:16</code>) from the public image repository (Docker Hub in this case), unless the image is already stored locally. It then creates a new container from the image and executes the next directive from the Dockerfile. The container&#8217;s final state yields a new image with its own ID. The build process continues by processing the remaining directives in the Dockerfile. Each one creates a new image. The final image is then tagged with the tag you specified with the <code>-t</code> flag in the <code>docker build</code> command.</p>
+</div>
+<div class="readable-text" data-hash="9f58de70369894432ca1f9d8edda077f" data-text-hash="08cf781d93e5f6533a83770928ea02b0" id="164" refid="164">
+<h4>Understanding the image layers</h4>
+</div>
+<div class="readable-text" data-hash="3882a76bfb0db001bee6e7614a421697" data-text-hash="1138b7bab54a5eb4252a4661b4f7b613" id="165" refid="165">
+<p>Some pages ago, you learned that images consist of several layers. One might think that each image consists of only the layers of the base image and a single new layer on top, but that&#8217;s not the case. When building an image, a new layer is created for each individual directive in the Dockerfile.</p>
+</div>
+<div class="readable-text" data-hash="7ed713bd1f231d547637a29bdd6eb28a" data-text-hash="ff472bd02b3ff88935e0b0bb8f1c23d2" id="166" refid="166">
+<p>During the build of the <code>kiada</code> image, after it pulls all the layers of the base image, Docker creates a new layer and adds the <code>app.js</code> file into it. It then adds another layer with the files from the <code>html</code> directory and finally creates the last layer, which specifies the command to run when the container is started. This last layer is then tagged as <code>kiada:latest</code>.</p>
+</div>
+<div class="readable-text" data-hash="d017726d015fb2608e9453d20e753170" data-text-hash="0150e9dc0a4cd0bb6fd85866c90e0288" id="167" refid="167">
+<p>You can see the layers of an image and their size by running <code>docker history</code>. The command and its output are shown next (note that the top-most layers are printed first):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="aa55631864e1cbf5c79711fe983d8308" data-text-hash="061f7fd4d6fc3fa14a4fdbdb348d5580" id="168" refid="168">
+<div class="code-area-container">
+<pre class="code-area">$ docker history kiada:latest
+IMAGE         CREATED     CREATED BY                            SIZE 
+b0ecc49d7a1d  7 min ago   /bin/sh -c #(nop) ENTRYPOINT ["n...   0B    #A
+1d4de446f0f0  7 min ago   /bin/sh -c #(nop) COPY dir:6ecee...   534kB    #A
+28d67701d6d9  7 min ago   /bin/sh -c #(nop) COPY file:2ed5...   2.8kB    #A
+e498dabfee1c  2 days ago  /bin/sh -c #(nop) CMD ["node"]        0B    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c #(nop) ENTRYPOINT ["d...   0B    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c #(nop) COPY file:2387...   116B    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c set -ex &amp;&amp; for key in...   5.4MB    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c #(nop)  ENV YARN_VERS...   0B    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c ARCH= &amp;&amp; dpkgArch="$(...   67MB    #B
+&lt;missing&gt;     2 days ago  /bin/sh -c #(nop)  ENV NODE_VERS...   0B    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c groupadd --gid 1000 n...   333kB    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c set -ex;  apt-get upd...   562MB    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c apt-get update &amp;&amp; apt...   142MB    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c set -ex;  if ! comman...   7.8MB    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c apt-get update &amp;&amp; apt...   23.2MB    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c #(nop)  CMD ["bash"]       0B    #B
+&lt;missing&gt;     3 weeks ago /bin/sh -c #(nop) ADD file:9788b...   101MB    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHRocmVlIGxheWVycyB0aGF0IHlvdSBhZGRlZAojQiBUaGUgbGF5ZXJzIG9mIHRoZSBub2RlOjE2IGltYWdlIGFuZCBpdHMgYmFzZSBpbWFnZShzKQ=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b0b2224aeda00852854b6b490cfdcb58" data-text-hash="aa02bf48fa825be92416daf6fe4f8ba5" id="169" refid="169">
+<p>Most of the layers you see come from the <code>node:16</code> image (they also include layers of that image&#8217;s own base image). The three uppermost layers correspond to the <code>COPY</code> and <code>ENTRYPOINT</code> directives in the Dockerfile.</p>
+</div>
+<div class="readable-text" data-hash="691fab41505305e6b838461107ac2409" data-text-hash="4e2b7f3668bdfc69f98eacc4486fd62f" id="170" refid="170">
+<p>As you can see in the <code>CREATED BY</code> column, each layer is created by executing a command in the container. In addition to adding files with the <code>COPY</code> directive, you can also use other directives in the Dockerfile. For example, the <code>RUN</code> directive executes a command in the container during the build. In the listing above, you&#8217;ll find a layer where the <code>apt-get update</code> and some additional <code>apt-get</code> commands were executed. <code>apt-get</code> is part of the Ubuntu package manager used to install software packages. The command shown in the listing installs some packages onto the image&#8217;s filesystem.</p>
+</div>
+<div class="readable-text" data-hash="1504fff2c5472cb8fa3e383f9e2d6b8c" data-text-hash="422d5df599309f322e8cd0cc472ab746" id="171" refid="171">
+<p>To learn about <code>RUN</code> and other directives you can use in a Dockerfile, refer to the Dockerfile reference at <a href="builder.html">https://docs.docker.com/engine/reference/builder/</a>.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="172" refid="172">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="d0ed81510d8fade02edb7fb7bd35e624" data-text-hash="71d7ac73b2535dabc02021412dd1dc98" id="173" refid="173">
+<p> Each directive creates a new layer. I have already mentioned that when you delete a file, it is only marked as deleted in the new layer and is not removed from the layers below. Therefore, deleting a file with a subsequent directive won&#8217;t reduce the size of the image. If you use the <code>RUN</code> directive, make sure that the command it executes deletes all temporary files it creates before it terminates.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="31bf74a1bc3083c0d88f09e4b2b7dec8" data-text-hash="2e85b8d7b1fc98690669e0624eb2dee5" id="174" refid="174">
+<h3 id="sigil_toc_id_25">2.2.3&#160;Running the container</h3>
+</div>
+<div class="readable-text" data-hash="42be268518e970f74cd93856a15c60d4" data-text-hash="35f3ec792c7c16ef23fe5fc43282c4ef" id="175" refid="175">
+<p>With the image built and ready, you can now run the container with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8d8a5950f22a4d15dcf36dc35e8fcf51" data-text-hash="3e3f5609909e6470ac7355e3d438ba18" id="176" refid="176">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --name kiada-container -p 1234:8080 -d kiada
+9d62e8a9c37e056a82bb1efad57789e947df58669f94adc2006c087a03c54e02</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1e714aad85d6483341219b4395b367e9" data-text-hash="a13e46ea8afb84b0c2c1145cfd102e09" id="177" refid="177">
+<p>This tells Docker to run a new container called <code>kiada-container</code> from the <code>kiada</code> image. The container is detached from the console (<code>-d</code> flag) and runs in the background. Port <code>1234</code> on the host computer is mapped to port <code>8080</code> in the container (specified by the <code>-p</code> <code>1234:8080</code> option), so you can access the app at <a href=".html">http://localhost:1234</a>.</p>
+</div>
+<div class="readable-text" data-hash="62b427146ac057d36ae7368cfa64f3b4" data-text-hash="0ee2deeeb70e5a63a527ea5d15205409" id="178" refid="178">
+<p>The following figure should help you visualize how everything fits together. Note that the Linux VM exists only if you use macOS or Windows. If you use Linux directly, there is no VM and the box depicting port <code>1234</code> is at the edge of the local computer.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="11b19642b45499532ef54d0cc3911daa" data-text-hash="4c015281abcee4becf06f2004659ea0c" id="179" refid="179">
+<h5>Figure 2.15 Visualizing your running container</h5>
+<img alt="" data-processed="true" height="309" id="Picture_1" loading="lazy" src="EPUB/images/02image016.png" width="763">
+</div>
+<div class="readable-text" data-hash="f0311aa2e042f7781d4f93383881d008" data-text-hash="c802e43b1eeba5ee195340e3b4751a26" id="180" refid="180">
+<h4>Accessing your app</h4>
+</div>
+<div class="readable-text" data-hash="ad1253230c4a56c07bbcac74760d2a7e" data-text-hash="bc391ed2c71d3d0656fc285ea1a27500" id="181" refid="181">
+<p>Now access the application at <a href=".html">http://localhost:1234</a> using <code>curl</code> or your internet browser:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="b868efea3d2f003c5b0729421c2da6d3" data-text-hash="e17e7d2d2a4e22da6214a287d09e49c5" id="182" refid="182">
+<div class="code-area-container">
+<pre class="code-area">$ curl localhost:1234
+Kiada version 0.1. Request processed by "44d76963e8e1". Client IP: ::ffff:172.17.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="183" refid="183">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="01bc657b761ff5dcab6f9f56cf2fb1c1" data-text-hash="604b58e5f7c6f5191848b492dc14ea49" id="184" refid="184">
+<p> If the Docker Daemon runs on a different machine, you must replace <code>localhost</code> with the IP of that machine. You can look it up in the <code>DOCKER_HOST</code> environment variable.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="ffb3c7c6bc025a6cfc0a7cf4cf73b84d" data-text-hash="36a4cc0ee9071d14ffa4a90de0287a08" id="185" refid="185">
+<p>If all went well, you should see the response sent by the application. In my case, it returns <code>44d76963e8e1</code> as its hostname. In your case, you&#8217;ll see a different hexadecimal number. That&#8217;s the ID of the container. You&#8217;ll also see it displayed when you list the running containers next.</p>
+</div>
+<div class="readable-text" data-hash="11ab46938a65193e872186bd598ccda5" data-text-hash="03983997d2c14342de74bd6a7d4b11be" id="186" refid="186">
+<h4>Listing all running containers</h4>
+</div>
+<div class="readable-text" data-hash="fe3806923b443ad052e78bfaaf30d560" data-text-hash="7a7c09db4d22d8a94f6c05d1738ac3f6" id="187" refid="187">
+<p>To list all the containers that are running on your computer, run the following command. Its output has been edited to make it more readable&#8212;the last two lines of the output are the continuation of the first two.</p>
+</div>
+<div class="browsable-container listing-container" data-hash="c3dea50d412e655af17a881bda8b972f" data-text-hash="ddd68185e29a9f6ba56695fe01418004" id="188" refid="188">
+<div class="code-area-container">
+<pre class="code-area">$ docker ps
+CONTAINER ID    IMAGE           COMMAND          CREATED        ...
+44d76963e8e1    kiada:latest    "node app.js"    6 minutes ago  ...
+ 
+...  STATUS          PORTS                     NAMES
+...  Up 6 minutes    0.0.0.0:1234-&gt;8080/tcp    kiada-container</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="fab4653c2baf97c8c6d0f4bfae705b1f" data-text-hash="00776877b80af5024bac8510c7cda615" id="189" refid="189">
+<p>For each container, Docker prints its ID and name, the image it uses, and the command it executes. It also shows when the container was created, what status it has, and which host ports are mapped to the container.</p>
+</div>
+<div class="readable-text" data-hash="2b44a7876706c5c1c55fb840858bbc51" data-text-hash="a26f40038be4f8ccbd8d804e4d3781a0" id="190" refid="190">
+<h4>Getting additional information about a container</h4>
+</div>
+<div class="readable-text" data-hash="2fa7c9acb3befd6a3cbc9f3630cbe192" data-text-hash="68e9ec942fce23065fd048b3e2fe37b7" id="191" refid="191">
+<p>The <code>docker</code> <code>ps</code> command shows the most basic information about the containers. To see additional information, you can use <code>docker</code> <code>inspect</code>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="af690c6bc56b3213d404bc835f2e6fed" data-text-hash="1ae5341567ccc9db3b8aef690f8f3442" id="192" refid="192">
+<div class="code-area-container">
+<pre class="code-area">$ docker inspect kiada-container</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="2e9224a58d53457b0452cd817c9880eb" data-text-hash="ca634f2cd0867c6b438a66d080264adb" id="193" refid="193">
+<p>Docker prints a long JSON-formatted document containing a lot of information about the container, such as its state, config, and network settings, including its IP address.</p>
+</div>
+<div class="readable-text" data-hash="9513202c4e47d12de0501cef31340f03" data-text-hash="de1b9551e8785967647b9074c34a5daa" id="194" refid="194">
+<h4>Inspecting the application log</h4>
+</div>
+<div class="readable-text" data-hash="9ebcf9566acf8a2c208353d18c3d3b50" data-text-hash="221abab4b7e3624383bf8f61c9be6a75" id="195" refid="195">
+<p>Docker captures and stores everything the application writes to the standard output and error streams. This is typically the place where applications write their logs. You can use the <code>docker logs</code> command to see the output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5cc9fc6a2f82e2f8617590e74b3dafed" data-text-hash="d52cd9929219e9e77422d9ba7b1895fd" id="196" refid="196">
+<div class="code-area-container">
+<pre class="code-area">$ docker logs kiada-container
+Kiada - Kubernetes in Action Demo Application
+---------------------------------------------
+Kiada 0.1 starting...
+Local hostname is 44d76963e8e1
+Listening on port 8080
+Received request for / from ::ffff:172.17.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8ad27087dd05117f2361943d1836e2af" data-text-hash="1c0b8a7906c47018158c54a0cb434823" id="197" refid="197">
+<p>You now know the basic commands for executing and inspecting an application in a container. Next, you&#8217;ll learn how to distribute it.</p>
+</div>
+<div class="readable-text" data-hash="085b7d7142beadc02e6e9147077e6a34" data-text-hash="47076bdd68c50c58c28ae4952eb73a92" id="198" refid="198">
+<h3 id="sigil_toc_id_26">2.2.4&#160;Distributing the container image</h3>
+</div>
+<div class="readable-text" data-hash="a350e4b7169b59daab0ac2f641148f4c" data-text-hash="8b6b20e8e95fec50813241601cf9aff6" id="199" refid="199">
+<p>The image you&#8217;ve built is only available locally. To run it on other computers, you must first push it to an external image registry. Let&#8217;s push it to the public Docker Hub registry, so that you don&#8217;t need to set up a private one. You can also use other registries, such as Quay.io, which I&#8217;ve already mentioned, or the Google Container Registry.</p>
+</div>
+<div class="readable-text" data-hash="3c048f420c0e77ae83ec0409adf881f3" data-text-hash="4094edb5b19209858586f5de4c6d7f80" id="200" refid="200">
+<p>Before you push the image, you must re-tag it according to Docker Hub&#8217;s image naming schema. The image name must include your Docker Hub ID, which you choose when you register at <a href=".html">http://hub.docker.com</a>. I&#8217;ll use my own ID (<code>luksa</code>) in the following examples, so remember to replace it with your ID when trying the commands yourself.</p>
+</div>
+<div class="readable-text" data-hash="ca6be04b1f9f274e35456e98f67c95b1" data-text-hash="59310a6389863df27f1783c601bf99fd" id="201" refid="201">
+<h4>Tagging an image under an additional tag</h4>
+</div>
+<div class="readable-text" data-hash="a2252ec80101b7907f02314692cd546b" data-text-hash="f98df33493d8d8e1b40f1dfd4b2f299d" id="202" refid="202">
+<p>Once you have your ID, you&#8217;re ready to add an additional tag <code>for</code> your image. Its current name is <code>kiada</code> and you&#8217;ll now tag it also as <code>yourid/kiada:0.1</code> (replace <code>yourid</code> with your actual Docker Hub ID). This is the command I used:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="03658ab75ebef0942fc7f828313deb75" data-text-hash="dcdebb876533105a32712b47d80cfa61" id="203" refid="203">
+<div class="code-area-container">
+<pre class="code-area">$ docker tag kiada luksa/kiada:0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1c669d087d8377929dd02991ffec48e7" data-text-hash="b341b0831530899fce89df8f8a213cde" id="204" refid="204">
+<p>Run <code>docker images</code> again to confirm that your image now has two names :</p>
+</div>
+<div class="browsable-container listing-container" data-hash="9ce8eb4704dcae8ef91d553890202847" data-text-hash="7bb77c4c946cbc0d290bdac574731a84" id="205" refid="205">
+<div class="code-area-container">
+<pre class="code-area">$ docker images
+REPOSITORY     TAG       IMAGE ID        CREATED              VIRTUAL SIZE
+luksa/kiada    0.1       b0ecc49d7a1d    About an hour ago    908 MB
+kiada          latest    b0ecc49d7a1d    About an hour ago    908 MB
+node           12        e498dabfee1c    3 days ago           908 MB
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6dd805c220cc9cef334ebe1e7162b25b" data-text-hash="b2e13d929b01ae6bdc730e37de4a0d9e" id="206" refid="206">
+<p>As you can see, both <code>kiada</code> and <code>luksa/kiada:0.1</code> point to the same image ID, meaning that these aren&#8217;t two images, but a single image with two names.</p>
+</div>
+<div class="readable-text" data-hash="5956dd328c2fb9918809de48a2ef2dd7" data-text-hash="5f221af91703646f41e826d45260201a" id="207" refid="207">
+<h4>Pushing the image to Docker Hub</h4>
+</div>
+<div class="readable-text" data-hash="3aa5c11838f263e1acbdc4868b99224c" data-text-hash="db268330e57c502426d2e7dc3eac5071" id="208" refid="208">
+<p>Before you can push the image to Docker Hub, you must log in with your user ID using the <code>docker</code> <code>login</code> command as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="92d7125e26fff412c77f11fdbf08a4e8" data-text-hash="31f66ece78be49f03b12881cc0d1daa3" id="209" refid="209">
+<div class="code-area-container">
+<pre class="code-area">$ docker login -u yourid docker.io</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="7d2ab11c0db6fc4981faeee3bb83027e" data-text-hash="d55d47c6be664df0b6753824d67316a7" id="210" refid="210">
+<p>The command will ask you to enter your Docker Hub password. After you&#8217;re logged in, push the <code>yourid/kiada:0.1</code> image to Docker Hub with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1baad43ff326a7069fdcd774ecea2ff6" data-text-hash="fa0fd1e66fbb7cca21313477fe5308ae" id="211" refid="211">
+<div class="code-area-container">
+<pre class="code-area">$ docker push yourid/kiada:0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3f8d92818a6046052c0a483ac741bb83" data-text-hash="92410b29e07e21b0864d278ce87e9755" id="212" refid="212">
+<h4>Running the image on other hosts</h4>
+</div>
+<div class="readable-text" data-hash="a51f40cecb5e1f6e66dc98a95fe4c10d" data-text-hash="8de351aaa34b041205e17bd43b382326" id="213" refid="213">
+<p>When the push to Docker Hub is complete, the image is available to all. You can now run the image on any Docker-enabled host by running the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="e804548a8a770c6e6b0aabcfb31351d5" data-text-hash="3c6979aa7e9d5e5ff681392af7f3552f" id="214" refid="214">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --name kiada-container -p 1234:8080 -d luksa/kiada:0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e25bbb626b70b687b9672a7e3be467ed" data-text-hash="304300df36240b09a47f2496cbc27529" id="215" refid="215">
+<p>If the container runs correctly on your computer, it should run on any other Linux computer, provided that the Node.js binary doesn&#8217;t need any special Kernel features (it doesn&#8217;t).</p>
+</div>
+<div class="readable-text" data-hash="a144ceb7cf2cdf91cb22407e0b5afc32" data-text-hash="73e094fdd1a5834755c56c89381ee17f" id="216" refid="216">
+<h3 id="sigil_toc_id_27">2.2.5&#160;Stopping and deleting the container</h3>
+</div>
+<div class="readable-text" data-hash="cc076f6cb17c1d73d5f620b3f34ac63a" data-text-hash="50c9db6326bea2595b85443d2ef4625b" id="217" refid="217">
+<p>If you&#8217;ve run the container on the other host, you can now terminate it, as you&#8217;ll only need the one on your local computer for the exercises that follow.</p>
+</div>
+<div class="readable-text" data-hash="3da9a6183cc90621043c818f5409ca50" data-text-hash="b55fc26007f3b09a194c004f47a366ca" id="218" refid="218">
+<h4>Stopping a container</h4>
+</div>
+<div class="readable-text" data-hash="100006f1d7fd6c7b386dfc2d54636ebd" data-text-hash="4c8e6d9782e18957b3bed386206dbf92" id="219" refid="219">
+<p>Instruct Docker to stop the container with this command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="291d9700224ee7043f6f0a99d7feeb8f" data-text-hash="9ea7a6b2fd56379dfcc8a328c4dec054" id="220" refid="220">
+<div class="code-area-container">
+<pre class="code-area">$ docker stop kiada-container</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b11384b4b9fc393ea64da3d4e5fe5e78" data-text-hash="f4c882f0386573a848a250654e0fedbc" id="221" refid="221">
+<p>This sends a termination signal to the main process in the container so that it can shut down gracefully. If the process doesn&#8217;t respond to the termination signal or doesn&#8217;t shut down in time, Docker kills it. When the top-level process in the container terminates, no other process runs in the container, so the container is stopped.</p>
+</div>
+<div class="readable-text" data-hash="0b436ddb5c867a18ec9efca4b9a32087" data-text-hash="31d9a135d54b91e861cd5a9898bd20d1" id="222" refid="222">
+<h4>Deleting a container</h4>
+</div>
+<div class="readable-text" data-hash="38024efcbd9252c45171f06f2a1fa68b" data-text-hash="2769ba04f2d7592a842e266fd8c5bdf0" id="223" refid="223">
+<p>The container is no longer running, but it still exists. Docker keeps it around in case you decide to start it again. You can see stopped containers by running <code>docker</code> <code>ps</code> <code>-a</code>. The <code>-a</code> option prints all the containers - those running and those that have been stopped. As an exercise, you can start the container again by running <code>docker start kiada-container</code>.</p>
+</div>
+<div class="readable-text" data-hash="8ca923588aa3441b39f863713a1d2ffc" data-text-hash="18a1aa873002e634d7e8ea7851b190d2" id="224" refid="224">
+<p>You can safely delete the container on the other host, because you no longer need it. To delete it, run the following <code>docker</code> <code>rm</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="6420fa9d611733c3760ccee75779d6fe" data-text-hash="61ccfa35875ca43d0c661724a8e3da16" id="225" refid="225">
+<div class="code-area-container">
+<pre class="code-area">$ docker rm kiada-container</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b8eb1e27a4936f778560bfe0a3e5075d" data-text-hash="eac0509fe99cf9a5cb02f6a9a9f8b878" id="226" refid="226">
+<p>This deletes the container. All its contents are removed and it can no longer be started. The image is still there, though. If you decide to create the container again, the image won&#8217;t need to be downloaded again. If you also want to delete the image, use the <code>docker rmi</code> command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="0d1e7efcf1eedf48578d8e8e1982db87" data-text-hash="aef6930585e38ee148fd0b7d20cf0f8e" id="227" refid="227">
+<div class="code-area-container">
+<pre class="code-area">$ docker rmi kiada:latest</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="33bd7856179fa634526c45df164d0ebc" data-text-hash="e400f09697d88defe752465ae9dc4538" id="228" refid="228">
+<p>Alternatively, you can remove all unused images with the <code>docker image prune</code> command.</p>
+</div>
+<div class="readable-text" data-hash="a7f6b1659e4a996269198c5247a9c72e" data-text-hash="95ad37cafb9eb2426572048e674a9a08" id="229" refid="229">
+<h2 id="sigil_toc_id_28">2.3&#160;Understanding containers</h2>
+</div>
+<div class="readable-text" data-hash="d772cbd6b8b47de95035661813880353" data-text-hash="2cfa706ae9b13d08e5f3f3ecef547f93" id="230" refid="230">
+<p>You should keep the container running on your local computer so that you can use it in the following exercises, in which you&#8217;ll examine how containers allow process isolation without using virtual machines. Several features of the Linux kernel make this possible and it&#8217;s time to get to know them.</p>
+</div>
+<div class="readable-text" data-hash="e4f182653a57b6111a8ea0bd9ee5930d" data-text-hash="b10d3e3d7c180c821a5b9b5592bb3e0b" id="231" refid="231">
+<h3 id="sigil_toc_id_29">2.3.1&#160;Using Namespaces to customize the environment of a process</h3>
+</div>
+<div class="readable-text" data-hash="fd40ff78860ef999df51996a0354e371" data-text-hash="313d2457aec17f42cfc6063dc6fbb9cb" id="232" refid="232">
+<p>The first feature called <i>Linux</i> <i>Namespaces</i> ensures that each process has its own view of the system. This means that a process running in a container will only see some of the files, processes and network interfaces on the system, as well as a different system hostname, just as if it were running in a separate virtual machine.</p>
+</div>
+<div class="readable-text" data-hash="3f193c04778ea5e3acbcfe39b3143143" data-text-hash="3f38f9400c9ee13e540e443552a00d81" id="233" refid="233">
+<p>Initially, all the system resources available in a Linux OS, such as filesystems, process IDs, user IDs, network interfaces, and others, are all in the same bucket that all processes see and use. But the Kernel allows you to create additional buckets known as namespaces and move resources into them so that they are organized in smaller sets. This allows you to make each set visible only to one process or a group of processes. When you create a new process, you can specify which namespace it should use. The process only sees resources that are in this namespace and none in the other namespaces.</p>
+</div>
+<div class="readable-text" data-hash="f800da7139e6b77e88a8fde021ec1e7a" data-text-hash="5bff6a4c795ba656e7493fd88feae505" id="234" refid="234">
+<h4>Introducing the available namespace types</h4>
+</div>
+<div class="readable-text" data-hash="08597a4c46c10b1e7378323bff959a37" data-text-hash="3e10a9a595531a42823fe5980212268f" id="235" refid="235">
+<p>More specifically, there isn&#8217;t just a single type of namespace. There are in fact several types &#8211; one for each resource type. A process thus uses not only one namespace, but one namespace for each type.</p>
+</div>
+<div class="readable-text" data-hash="a3cbf558ab5c68d28a1e915ef4b016b7" data-text-hash="b005fdca4b1adf8b5d30ad6011680cf8" id="236" refid="236">
+<p>The following types of namespaces exist:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="f8e2087c45f1796a0d1daf6787691d08" data-text-hash="f8e2087c45f1796a0d1daf6787691d08" id="237" refid="237">The Mount namespace (mnt) isolates mount points (file systems).</li>
+<li class="readable-text" data-hash="021f5597c91d15779320afcef0ffd8f0" data-text-hash="021f5597c91d15779320afcef0ffd8f0" id="238" refid="238">The Process ID namespace (pid) isolates process IDs.</li>
+<li class="readable-text" data-hash="b8d582e81c685b30bfdfaf716aaab516" data-text-hash="b8d582e81c685b30bfdfaf716aaab516" id="239" refid="239">The Network namespace (net) isolates network devices, stacks, ports, etc.</li>
+<li class="readable-text" data-hash="0d7234fad4a1f0ec70e4c118e405e184" data-text-hash="0d7234fad4a1f0ec70e4c118e405e184" id="240" refid="240">The Inter-process communication namespace (ipc) isolates the communication between processes (this includes isolating message queues, shared memory, and others).</li>
+<li class="readable-text" data-hash="b56eb497f10c2cace924c64b05f0680f" data-text-hash="b56eb497f10c2cace924c64b05f0680f" id="241" refid="241">The UNIX Time-sharing System (UTS) namespace isolates the system hostname and the Network Information Service (NIS) domain name.</li>
+<li class="readable-text" data-hash="fef09fb2b264388bcf82e12a3dd9351b" data-text-hash="fef09fb2b264388bcf82e12a3dd9351b" id="242" refid="242">The User ID namespace (user) isolates user and group IDs.</li>
+<li class="readable-text" data-hash="acfb5b593d83326f9044b4f53faf341c" data-text-hash="acfb5b593d83326f9044b4f53faf341c" id="243" refid="243">The Time namespace allows each container to have its own offset to the system clocks.</li>
+<li class="readable-text" data-hash="9ed483b8b9ccab49409a82dad9aa530f" data-text-hash="9ed483b8b9ccab49409a82dad9aa530f" id="244" refid="244">The Cgroup namespace isolates the Control Groups root directory. You&#8217;ll learn about cgroups later in this chapter.</li>
+</ul>
+<div class="readable-text" data-hash="5e5a728bdd25d23e4035ebee222d4d40" data-text-hash="b3fd2a7fcd90e72282a29d7cd48ae9cb" id="245" refid="245">
+<h4>Using network namespaces to give a process a dedicated set of network interfaces</h4>
+</div>
+<div class="readable-text" data-hash="ff73aab33ef6e43268a2526dcfce8f10" data-text-hash="b96954783649c068694f54f87a1557d0" id="246" refid="246">
+<p>The network namespace in which a process runs determines what network interfaces the process can see. Each network interface belongs to exactly one namespace but can be moved from one namespace to another. If each container uses its own network namespace, each container sees its own set of network interfaces.</p>
+</div>
+<div class="readable-text" data-hash="48e7f56ec24a25b44553decbff7c3b37" data-text-hash="0a51dfa1fa26b88e05adc06e83a17625" id="247" refid="247">
+<p>Examine the following figure for a better overview of how network namespaces are used to create a container. Imagine you want to run a containerized process and provide it with a dedicated set of network interfaces that only that process can use.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="39615440c6b50d1e8480bde1ad62640c" data-text-hash="280e3836eaacd53389f62c6d97f146d8" id="248" refid="248">
+<h5>Figure 2.16 The network namespace limits which network interfaces a process uses</h5>
+<img alt="" data-processed="true" height="461" id="Picture_140" loading="lazy" src="EPUB/images/02image017.png" width="801">
+</div>
+<div class="readable-text" data-hash="a61694546b92b237647a18646429fbdb" data-text-hash="32fbc4ace689c09d5b228b7c1859c14f" id="249" refid="249">
+<p>Initially, only the default network namespace exists. You then create two new network interfaces for the container and a new network namespace. The interfaces can then be moved from the default namespace to the new namespace. Once there, they can be renamed, because names must only be unique in each namespace. Finally, the process can be started in this network namespace, which allows it to only see the two interfaces that were created for it.</p>
+</div>
+<div class="readable-text" data-hash="2a4160d45326dcfbdf7f8d1a1e481038" data-text-hash="0bcb922721dcef5ee19b2b99d1eb8233" id="250" refid="250">
+<p>By looking solely at the available network interfaces, the process can&#8217;t tell whether it&#8217;s in a container or a VM or an OS running directly on a bare-metal machine.</p>
+</div>
+<div class="readable-text" data-hash="b20198ebed904f7c2037ace220098d37" data-text-hash="f9a2a105dd837123fb15690a9b2f40f9" id="251" refid="251">
+<h4>Using the UTS namespace to give a process a dedicated hostname</h4>
+</div>
+<div class="readable-text" data-hash="0c24e076318bdad9f859e7dd2ba15920" data-text-hash="77bccc8364f29bdb77fcfd6d680b1258" id="252" refid="252">
+<p>Another example of how to make it look like the process is running on its own host is to use the UTS namespace. It determines what hostname and domain name the process running inside this namespace sees. By assigning two different UTS namespaces to two different processes, you can make them see different system hostnames. To the two processes, it looks as if they run on two different computers.</p>
+</div>
+<div class="readable-text" data-hash="67abcf6f73b391feeab3df0f5bda34c0" data-text-hash="2be1919e7bbcb8146334683969648392" id="253" refid="253">
+<h4>Understanding how namespaces isolate processes from each other</h4>
+</div>
+<div class="readable-text" data-hash="0333ed9796945372b6b5114078e66b86" data-text-hash="96364be7bca105d8d4bcd1595da4e5c7" id="254" refid="254">
+<p>By creating a dedicated namespace instance for all available namespace types and assigning it to a process, you can make the process believe that it&#8217;s running in its own OS. The main reason for this is that each process has its own environment. A process can only see and use the resources in its own namespaces. It can&#8217;t use any in other namespaces. Likewise, other processes can&#8217;t use its resources either. This is how containers isolate the environments of the processes that run within them.</p>
+</div>
+<div class="readable-text" data-hash="8f56f61bc0fded90a73786fd8e737f93" data-text-hash="466b52586281eee874c60ecaa084babe" id="255" refid="255">
+<h4>Sharing namespaces between multiple processes</h4>
+</div>
+<div class="readable-text" data-hash="2f36e314b7d40218f8e5839c6fd83da2" data-text-hash="9a587d240c5ee68945eda2e8e14db7e2" id="256" refid="256">
+<p>In the next chapter you&#8217;ll learn that you don&#8217;t always want to isolate the containers completely from each other. Related containers may want to share certain resources. The following figure shows an example of two processes that share the same network interfaces and the host and domain name of the system, but not the file system.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="8ce2d65a7f5e1ed9a14a25b119208ec6" data-text-hash="c176ff24acf94055641dce48efc16a33" id="257" refid="257">
+<h5>Figure 2.17 Each process is associated with multiple namespace types, some of which can be shared.</h5>
+<img alt="" data-processed="true" height="319" id="Picture_141" loading="lazy" src="EPUB/images/02image018.png" width="760">
+</div>
+<div class="readable-text" data-hash="02a31122e5e8929e38f6a83c2f77bfac" data-text-hash="561f542fe524800676c9ac5f82d9ce2d" id="258" refid="258">
+<p>Concentrate on the shared network devices first. The two processes see and use the same two devices (<code>eth0</code> and <code>lo</code>) because they use the same network namespace. This allows them to bind to the same IP address and communicate through the loopback device, just as they could if they were running on a machine that doesn&#8217;t use containers. The two processes also use the same UTS namespace and therefore see the same system host name. In contrast, they each use their own mount namespace, which means they have separate file systems.</p>
+</div>
+<div class="readable-text" data-hash="5c0b7dd172b1026c0f3a2baed74f6385" data-text-hash="61d4ed210db993168a30eeddd5c78246" id="259" refid="259">
+<p>In summary, processes may want to share some resources but not others. This is possible because separate namespace <i>types</i> exist. A process has an associated namespace for each type.</p>
+</div>
+<div class="readable-text" data-hash="a48934d44442ea61031ed13f748f1471" data-text-hash="8898872b3ab30d6919f54fb711e560d4" id="260" refid="260">
+<p>In view of all this, one might ask what is a container at all? A process that runs &#8220;in a container&#8221; doesn&#8217;t run in something that resembles a real enclosure like a VM. It&#8217;s only a process to which several namespaces (one for each type) are assigned. Some are shared with other processes, while others are not. This means that the boundaries between the processes do not all fall on the same line.</p>
+</div>
+<div class="readable-text" data-hash="11aa145f8b8907a7af997d909f9d9b01" data-text-hash="3fba9fc3e452f4ab1882955c41660d1c" id="261" refid="261">
+<p>In a later chapter, you&#8217;ll learn how to debug a container by running a new process directly on the host OS, but using the network namespace of an existing container, while using the host&#8217;s default namespaces for everything else. This will allow you to debug the container&#8217;s networking system with tools available on the host that may not be available in the container.</p>
+</div>
+<div class="readable-text" data-hash="be4def8bd7b0993a3873f69bd32e57b4" data-text-hash="f48b3bff5e0e081b208cc92e798fa356" id="262" refid="262">
+<h3 id="sigil_toc_id_30">2.3.2&#160;Exploring the environment of a running container</h3>
+</div>
+<div class="readable-text" data-hash="448e3ccd07a1597d25df4799af4cb965" data-text-hash="de5f0c4e50031384086d258ae1d7f2c9" id="263" refid="263">
+<p>What if you want to see what the environment inside the container looks like? What is the system host name, what is the local IP address, what binaries and libraries are available on the file system, and so on?</p>
+</div>
+<div class="readable-text" data-hash="03a9b2e85c6e967ca2e9201ffafe7d5a" data-text-hash="fb1ba38ee194af2809612a9cad3c23e2" id="264" refid="264">
+<p>To explore these features in the case of a VM, you typically connect to it remotely via ssh and use a shell to execute commands. With containers, you run a shell in the container.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="265" refid="265">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e4d4c5b29084532325b83740661ad802" data-text-hash="fc92c93ef2aee2d7f56753b77ee7da20" id="266" refid="266">
+<p> The shell&#8217;s executable file must be present in the container&#8217;s file system. This isn&#8217;t always the case with containers running in production.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="b33c717e2ccd1be6699e3785cf1ea33d" data-text-hash="ccab8e5afa26828d79d8c7e4cdca42d9" id="267" refid="267">
+<h4>Running a shell inside an existing container</h4>
+</div>
+<div class="readable-text" data-hash="37117fd32ebe2f9e9c2a274e166eb6bf" data-text-hash="6a800928bcc4835f801c9f1e1aed02bf" id="268" refid="268">
+<p>The Node.js image on which your image is based provides the bash shell, meaning you can run it in the container with the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f26f7618822a440e14944f2b52ca1680" data-text-hash="63da451bc6023f3a136bf0b84f6cd821" id="269" refid="269">
+<div class="code-area-container">
+<pre class="code-area">$ docker exec -it kiada-container bash
+root@44d76963e8e1:/#    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBpcyB0aGUgc2hlbGzigJlzIGNvbW1hbmQgcHJvbXB0"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="1a650d259c807295986ee37d75f5f1b8" data-text-hash="0910bc696be43b3d4b0ccc6f3c34a509" id="270" refid="270">
+<p>This command runs <code>bash</code> as an additional process in the existing <code>kiada-container</code> container. The process has the same Linux namespaces as the main container process (the running Node.js server). This way you can explore the container from within and see how Node.js and your app see the system when running in the container. The <code>-it</code> option is shorthand for two options:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="9a559665c5db0aa24e83c7c8d4a91112" data-text-hash="76066454930a954080d31f9b2456b8a0" id="271" refid="271"><code class="codechar">-i</code> tells Docker to run the command in interactive mode.</li>
+<li class="readable-text" data-hash="533be9990a4e10c1b45bfd54ad49d96f" data-text-hash="388683cb064006b9d852d989591a0c0d" id="272" refid="272"><code>-t</code> tells it to allocate a pseudo terminal (TTY) so you can use the shell properly.</li>
+</ul>
+<div class="readable-text" data-hash="b9900694b45c314c3b0cd9358f8c85ce" data-text-hash="4d565bd4ec59af65af2862ef21cf9a34" id="273" refid="273">
+<p>You need both if you want to use the shell the way you&#8217;re used to. If you omit the first, you can&#8217;t execute any commands, and if you omit the second, the command prompt doesn&#8217;t appear and some commands may complain that the <code>TERM</code> variable is not set.</p>
+</div>
+<div class="readable-text" data-hash="b384d24b9704b9fa4c0b97ad04461b44" data-text-hash="6ef33c0361193c6b265afe72e4b60508" id="274" refid="274">
+<h4>Listing running processes in a container</h4>
+</div>
+<div class="readable-text" data-hash="b309a94b075cd2c085619aa574932482" data-text-hash="16e35c7a3aaa1a8725a1f70170d5f373" id="275" refid="275">
+<p>Let&#8217;s list the processes running in the container by executing the <code>ps aux</code> command inside the shell that you ran in the container:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="f64f844da548b5111b65e78eee196bb0" data-text-hash="b544d1b8024e9d6131c3f4568c8a0f92" id="276" refid="276">
+<div class="code-area-container">
+<pre class="code-area">root@44d76963e8e1:/# ps aux
+USER  PID %CPU %MEM    VSZ   RSS TTY STAT START TIME COMMAND
+root    1  0.0  0.1 676380 16504 ?   Sl   12:31 0:00 node app.js
+root   10  0.0  0.0  20216  1924 ?   Ss   12:31 0:00 bash
+root   19  0.0  0.0  17492  1136 ?   R+   12:38 0:00 ps aux</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="48d1a790a5eef0009487e347c02ba484" data-text-hash="4409fa1ede2da9d99bd127b743f6e767" id="277" refid="277">
+<p>The list shows only three processes. These are the only ones that run in the container. You can&#8217;t see the other processes that run in the host OS or in other containers because the container runs in its own Process ID namespace.</p>
+</div>
+<div class="readable-text" data-hash="87f09e316ab1f903e74355132822640b" data-text-hash="f6dba9ab878dcbd825080734828bcfd2" id="278" refid="278">
+<h4>Seeing container processes in the host&#8217;s list of processes</h4>
+</div>
+<div class="readable-text" data-hash="1d9bcd0f730c8f8ee26c947f6cc08574" data-text-hash="dbefc8b9843662c919ab6b5d954c5842" id="279" refid="279">
+<p>If you now open another terminal and list the processes in the host OS itself, you <i>will</i> also see the processes that run in the container. This will confirm that the processes in the container are in fact regular processes that run in the host OS. Here&#8217;s the command and its output:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="23943c27d4b75404540f193675b64171" data-text-hash="1d933c650cffc39a0c93d50e6449a0f7" id="280" refid="280">
+<div class="code-area-container">
+<pre class="code-area">$ ps aux | grep app.js
+USER  PID %CPU %MEM    VSZ   RSS TTY STAT START TIME COMMAND
+root  382  0.0  0.1 676380 16504 ?   Sl   12:31 0:00 node app.js</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="281" refid="281">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="efe86f1a95de4bca03b1d1fc34a81f36" data-text-hash="13f3d6a237823559130edc4469082ee0" id="282" refid="282">
+<p> If you use macOS or Windows, you must list the processes in the VM that hosts the Docker daemon, as that&#8217;s where your containers run. In Docker Desktop, you can enter the VM using the command <code>wsl -d docker-desktop</code> or with <code>docker run --net=host --ipc=host --uts=host --pid=host -it --security-opt=seccomp=unconfined --privileged --rm -v /:/host alpine chroot /host</code></p>
+</div>
+</div>
+<div class="readable-text" data-hash="cc26628e3cac19ba2f97193b18984bd8" data-text-hash="ef1110efedbd8757cab68322ae9fd412" id="283" refid="283">
+<p>If you have a sharp eye, you may notice that the process IDs in the container are different from those on the host. Because the container uses its own Process ID namespace it has its own process tree with its own ID number sequence. As the next figure shows, the tree is a subtree of the host&#8217;s full process tree. Each process thus has two IDs.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="821f7d67caef826941733d36acfeae9e" data-text-hash="3decb1fa068d9b777349bd5449ed56b0" id="284" refid="284">
+<h5>Figure 2.18 The PID namespace makes a process sub-tree appear as a separate process tree with its own numbering sequence</h5>
+<img alt="" data-processed="true" height="314" id="Picture_142" loading="lazy" src="EPUB/images/02image019.png" width="716">
+</div>
+<div class="readable-text" data-hash="0433f1c897cfb5f11071cdc11dff22d8" data-text-hash="1ef5c8d8936f7bfb8aaeab75487e11ba" id="285" refid="285">
+<h4>Understanding container filesystem isolation from the host and other containers</h4>
+</div>
+<div class="readable-text" data-hash="f489fbff3f8433d8c79b540da58612ff" data-text-hash="79253c0ce56f0e393df136c1b3729a26" id="286" refid="286">
+<p>As with an isolated process tree, each container also has an isolated filesystem. If you list the contents of the container&#8217;s root directory, only the files in the container are displayed. This includes files from the container image and files created during container operation, such as log files. The next listing shows the files in the <code>kiada</code> container&#8217;s root file directory:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="a2f509781c74f7f8642eb4e91883ea60" data-text-hash="f5cb3820a638010d81a5507fbdebb1a4" id="287" refid="287">
+<div class="code-area-container">
+<pre class="code-area">root@44d76963e8e1:/# ls /
+app.js  boot  etc   lib    media  opt   root  sbin  sys  usr
+bin     dev   home  lib64  mnt    proc  run   srv   tmp  var</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6311bca4bb9434ca8e31eb08c9f3cbbf" data-text-hash="f09fe1092106660f41c8210dd7e0db3e" id="288" refid="288">
+<p>It contains the <code>app.js</code> file and other system directories that are part of the <code>node:16</code> base image. You are welcome to browse the container&#8217;s filesystem. You&#8217;ll see that there is no way to view files from the host&#8217;s filesystem. This is great, because it prevents a potential attacker from gaining access to them through vulnerabilities in the Node.js server.</p>
+</div>
+<div class="readable-text" data-hash="381556fd3b0b491054177ceb67fcab38" data-text-hash="5740b8be80b514b1ff7136c7868f3727" id="289" refid="289">
+<p>To leave the container, leave the shell by running the <code>exit</code> command or pressing Control-D and you&#8217;ll be returned to your host computer (similar to logging out from an <code>ssh</code> session).</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="290" refid="290">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="63152cb622b2bd35b137645c9e89f303" data-text-hash="3e192971d192bb4f0c312b9982f421b8" id="291" refid="291">
+<p> Entering a running container like this is useful when debugging an app running in a container. When something breaks, the first thing you&#8217;ll want to investigate is the actual state of the system your application sees.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="0a7eaf52739a48578ba608b067579bf7" data-text-hash="fd34bf088db7e2b00dea753ffb152163" id="292" refid="292">
+<h3 id="sigil_toc_id_31">2.3.3&#160;Limiting a process&#8217; resource usage with Linux Control Groups</h3>
+</div>
+<div class="readable-text" data-hash="edd5ed68343736084e0f9dd1604f147b" data-text-hash="ce6dbbf4c166ab3aff3361f1c8bc6a40" id="293" refid="293">
+<p>Linux Namespaces make it possible for processes to access only some of the host&#8217;s resources, but they don&#8217;t limit how much of a single resource each process can consume. For example, you can use namespaces to allow a process to access only a particular network interface, but you can&#8217;t limit the network bandwidth the process consumes. Likewise, you can&#8217;t use namespaces to limit the CPU time or memory available to a process. You may want to do that to prevent one process from consuming all the CPU time and preventing critical system processes from running properly. For that, we need another feature of the Linux kernel.</p>
+</div>
+<div class="readable-text" data-hash="949874e7cc11a50e61e646ff4bb23211" data-text-hash="09b8aa9ee0e7f685d0dfb02cecd42326" id="294" refid="294">
+<h4>Introducing cgroups</h4>
+</div>
+<div class="readable-text" data-hash="0004eedf0ce4786eb65556fcd6e87cdc" data-text-hash="337d85e1ebc4f175fe059288c4be2bc0" id="295" refid="295">
+<p>The second Linux kernel feature that makes containers possible is called <i>Linux</i> <i>Control</i> <i>Groups</i> <i>(cgroups)</i>. It limits, accounts for and isolates system resources such as CPU, memory and disk or network bandwidth. When using cgroups, a process or group of processes can only use the allotted CPU time, memory, and network bandwidth for example. This way, processes cannot occupy resources that are reserved for other processes.</p>
+</div>
+<div class="readable-text" data-hash="149ed8aebb4d75a749e955d2ba9e7ae1" data-text-hash="45f29fe4ded78bba26f32b29c3193536" id="296" refid="296">
+<p>At this point, you don&#8217;t need to know how Control Groups do all this, but it may be worth seeing how you can ask Docker to limit the amount of CPU and memory a container can use.</p>
+</div>
+<div class="readable-text" data-hash="84b0d072eca05991f596836b95f8285c" data-text-hash="7114514cc2119abb49fa3dbcc8789545" id="297" refid="297">
+<h4>Limiting a container&#8217;s use of the CPU</h4>
+</div>
+<div class="readable-text" data-hash="75f37c60fe54f500a7f48978d5047a22" data-text-hash="8dba9591784ed63010a2df3c8f8cfede" id="298" refid="298">
+<p>If you don&#8217;t impose any restrictions on the container&#8217;s use of the CPU, it has unrestricted access to all CPU cores on the host. You can explicitly specify which cores a container can use with Docker&#8217;s <code>--cpuset-cpus</code> option. For example, to allow the container to only use cores one and two, you can run the container with the following option:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="361f180434abd82aecf42fb9b8a880e6" data-text-hash="9b135a2987bf0a14faac5bc8e5abb458" id="299" refid="299">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --cpuset-cpus="1,2" ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="8ddc76ff8da9b002ee73184f40d5a329" data-text-hash="af0c1113a78fd8e99e1a359d852b4fd4" id="300" refid="300">
+<p>You can also limit the available CPU time using options <code>--cpus</code>, <code>--cpu-period</code>, <code>--cpu-quota</code> and <code>--cpu-shares</code>. For example, to allow the container to use only half of a CPU core, run the container as follows:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="773e37dd6057dac04523865aac6e5bd6" data-text-hash="19f23f6e69375c28da7c9c2f1958a156" id="301" refid="301">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --cpus="0.5" ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="89562b875f29ce876cec1a4ad3c1d80a" data-text-hash="267a4d4f75a3d69c168435387cd35bf0" id="302" refid="302">
+<h4>Limiting a container&#8217;s use of memory</h4>
+</div>
+<div class="readable-text" data-hash="a441be5a66b9721f7c0f6c3281444402" data-text-hash="0d1b75e8bd9a9fc85651edfbd6fcaefa" id="303" refid="303">
+<p>As with CPU, a container can use all the available system memory, just like any regular OS process, but you may want to limit this. Docker provides the following options to limit container memory and swap usage: <code>--memory</code>, <code>--memory-reservation</code>, <code>--kernel-memory</code>, <code>--memory-swap</code>, and <code>--memory-swappiness</code>.</p>
+</div>
+<div class="readable-text" data-hash="4175b3e6426ab671019893fc0f6ae5dd" data-text-hash="ab0b125f339a95568e0932d38870636c" id="304" refid="304">
+<p>For example, to set the maximum memory size available in the container to 100MB, run the container as follows (<code>m</code> stands for megabyte):</p>
+</div>
+<div class="browsable-container listing-container" data-hash="1b0f1561fef249e7317004882ea169de" data-text-hash="5b9012e2e63295e52f8ad8d89c38550b" id="305" refid="305">
+<div class="code-area-container">
+<pre class="code-area">$ docker run --memory="100m" ...</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="473ea638430ac1c85c5095d51bace235" data-text-hash="938ae3ff1391e775b68dacc0ebc3b4d8" id="306" refid="306">
+<p>Behind the scenes, all these Docker options merely configure the cgroups of the process. It&#8217;s the Kernel that takes care of limiting the resources available to the process. See the Docker documentation for more information about the other memory and CPU limit options.</p>
+</div>
+<div class="readable-text" data-hash="a641dec4f6b41c8cea127e4812c11c6c" data-text-hash="5b39ff85e7bd43aebcf62450e74c994c" id="307" refid="307">
+<h3 id="sigil_toc_id_32">2.3.4&#160;Strengthening isolation between containers</h3>
+</div>
+<div class="readable-text" data-hash="d40ee437ca161db2d480485d9b8c4889" data-text-hash="f4064da76cb920acc0cc078cb38ac5a3" id="308" refid="308">
+<p>Linux Namespaces and Cgroups separate the containers&#8217; environments and prevent one container from starving the other containers of compute resources. But the processes in these containers use the same system kernel, so we can&#8217;t say that they are really isolated. A rogue container could make malicious system calls that would affect its neighbours.</p>
+</div>
+<div class="readable-text" data-hash="141d1102c33465239d58a531f4367673" data-text-hash="d77588ac7c5d808aa9a494d0dbec6869" id="309" refid="309">
+<p>Imagine a Kubernetes node on which several containers run. Each has its own network devices and files and can only consume a limited amount of CPU and memory. At first glance, a rogue program in one of these containers can&#8217;t cause damage to the other containers. But what if the rogue program modifies the system clock that is shared by all containers?</p>
+</div>
+<div class="readable-text" data-hash="45a177637d4663501cea6256a48dad07" data-text-hash="44728155b97b7ce324158908065046d9" id="310" refid="310">
+<p>Depending on the application, changing the time may not be too much of a problem, but allowing programs to make any system call to the kernel allows them to do virtually anything. Sys-calls allow them to modify the kernel memory, add or remove kernel modules, and many other things that regular containers aren&#8217;t supposed to do.</p>
+</div>
+<div class="readable-text" data-hash="12f62af4ba4c10a9466608b87e1e06aa" data-text-hash="76bb65aed57ff332ea012f5c589cbea7" id="311" refid="311">
+<p>This brings us to the third set of technologies that make containers possible. Explaining them fully is outside the scope of this book, so please refer to other resources that focus specifically on containers or the technologies used to secure them. This section provides a brief introduction to these technologies.</p>
+</div>
+<div class="readable-text" data-hash="27f601c718f0ca756fbd2dd79fdea7b8" data-text-hash="e10547ab12de53d7d2d9eeddfdbb0918" id="312" refid="312">
+<h4>Giving containers full privileges to the system</h4>
+</div>
+<div class="readable-text" data-hash="987b98b723cf3933df6ca79617e60596" data-text-hash="069863aa47398c278b45fa09872e4e03" id="313" refid="313">
+<p>The operating system kernel provides a set of <i>sys-calls</i> that programs use to interact with the operating system and underlying hardware. These includes calls to create processes, manipulate files and devices, establish communication channels between applications, and so on.</p>
+</div>
+<div class="readable-text" data-hash="168a09beb021e8bc46cabaaad5169d92" data-text-hash="598a6d2864845f46e70c560381169f81" id="314" refid="314">
+<p>Some of these sys-calls are safe and available to any process, but others are reserved for processes with elevated privileges only. If you look at the example presented earlier, applications running on the Kubernetes node should be allowed to open their local files, but not change the system clock or modify the kernel in a way that breaks the other containers.</p>
+</div>
+<div class="readable-text" data-hash="691d108ff88b861b68de934f8147e892" data-text-hash="470377a210a7cec135234dfaf5a6b0ab" id="315" refid="315">
+<p>Most containers should run without elevated privileges. Only those programs that you trust and that actually need the additional privileges should run in privileged containers.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="316" refid="316">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="a12a0de9925d0c30a14098794ae57541" data-text-hash="4284237edff8df9030a67154d83ea2a2" id="317" refid="317">
+<p> With Docker you create a privileged container by using the <code>--privileged</code> flag.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="35af51ae2bc05f4b8a41bfd269354162" data-text-hash="3657c1923aa93dcebe693e3b18431763" id="318" refid="318">
+<h4>Using Capabilities to give containers a subset of all privileges</h4>
+</div>
+<div class="readable-text" data-hash="eb0f76097269d81fe4b7b42ad919fc0a" data-text-hash="4d3c9653bc399c59cc4722c144db2461" id="319" refid="319">
+<p>If an application only needs to invoke some of the sys-calls that require elevated privileges, creating a container with full privileges is not ideal. Fortunately, the Linux kernel also divides privileges into units called <i>capabilities</i>. Examples of capabilities are:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="6236a72eccc081d686b1e22f3325d038" data-text-hash="bf92594f9f557f23696e9874ce5f9f21" id="320" refid="320"><code class="codechar">CAP_NET_ADMIN</code> allows the process to perform network-related operations,</li>
+<li class="readable-text" data-hash="74478c235d4f8139f46b357785037a41" data-text-hash="e25bf6793d785550306cfce965cb2064" id="321" refid="321"><code>CAP_NET_BIND_SERVICE</code> allows it to bind to port numbers less than 1024,</li>
+<li class="readable-text" data-hash="64c4b0fdeb849631799c2fbd86a12fb8" data-text-hash="493ec59844aa1b3cc38278931391cf33" id="322" refid="322"><code>CAP_SYS_TIME</code> allows it to modify the system clock, and so on.</li>
+</ul>
+<div class="readable-text" data-hash="1dec0232448c16c240efd1f90078b8ff" data-text-hash="e77732cbf2affb665cbd9287eb3acaaa" id="323" refid="323">
+<p>Capabilities can be added or removed (<i>dropped</i>) from a container when you create it. Each capability represents a set of privileges available to the processes in the container. Docker and Kubernetes drop all capabilities except those required by typical applications, but users can add or drop other capabilities if authorized to do so.</p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="324" refid="324">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="551d58d02feb62a2dda2f3da7b4c9a87" data-text-hash="c8b8cf553e9c5f85c7cc92484aee727d" id="325" refid="325">
+<p> Always follow the <i>principle of least privilege</i> when running containers. Don&#8217;t give them any capabilities that they don&#8217;t need. This prevents attackers from using them to gain access to your operating system.</p>
+</div>
+</div>
+<div class="readable-text" data-hash="1d1dcbe796c13f723722ddedae97cbff" data-text-hash="fd7daccc49cfe6c98fa379959a4c7c8b" id="326" refid="326">
+<h4>Using seccomp profiles to filter individual sys-calls</h4>
+</div>
+<div class="readable-text" data-hash="6492c69a4f2ae06b2716342fb9adddab" data-text-hash="7ad1d0559408b82b78bc9a02e1913c19" id="327" refid="327">
+<p>If you need even finer control over what sys-calls a program can make, you can use <i>seccomp</i> (Secure Computing Mode). You can create a custom seccomp profile by creating a JSON file that lists the sys-calls that the container using the profile is allowed to make. You then provide the file to Docker when you create the container.</p>
+</div>
+<div class="readable-text" data-hash="f6f86f933457d75e7905b3c2977daab3" data-text-hash="9cb6696fbca71b11b0edff69376d21cf" id="328" refid="328">
+<h4>Hardening containers using AppArmor and SELinux</h4>
+</div>
+<div class="readable-text" data-hash="d399e4966207b0227e7d2b72e29348e1" data-text-hash="2b7395772e51ced7e8099e81a8c52a4a" id="329" refid="329">
+<p>And as if the technologies discussed so far weren&#8217;t enough, containers can also be secured with two additional mandatory access control (MAC) mechanisms: SELinux (Security-Enhanced Linux) and AppArmor (Application Armor).</p>
+</div>
+<div class="readable-text" data-hash="17c38465b2053434a763ff9796966420" data-text-hash="22a2d69d0f47afdb4171ccec2bd700e4" id="330" refid="330">
+<p>With SELinux, you attach labels to files and system resources, as well as to users and processes. A user or process can only access a file or resource if the labels of all subjects and objects involved match a set of policies. AppArmor is similar but uses file paths instead of labels and focuses on processes rather than users.</p>
+</div>
+<div class="readable-text" data-hash="0a61e893c5f3448eb749bc4679f9f50a" data-text-hash="00715c48dcc11c742494aa83fde15e0a" id="331" refid="331">
+<p>Both SELinux and AppArmor considerably improve the security of an operating system, but don&#8217;t worry if you are overwhelmed by all these security-related mechanisms. The aim of this section was to shed light on everything involved in the proper isolation of containers, but a basic understanding of namespaces should be more than sufficient for the moment.</p>
+</div>
+<div class="readable-text" data-hash="3ad8e2c2be5290338d81dbd8dc6e305b" data-text-hash="d9aaa47b0fa6b63c1dbfa4e212c435b9" id="332" refid="332">
+<h2 id="sigil_toc_id_33">2.4&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="0a2dbc980034234458a66622acebccef" data-text-hash="82f430c63299a3f406cf2afd5686aef2" id="333" refid="333">
+<p>If you were new to containers before reading this chapter, you should now understand what they are, why we use them, and what features of the Linux kernel make them possible. If you have previously used containers, I hope this chapter has helped to clarify your uncertainties about how containers work, and you now understand that they&#8217;re nothing more than regular OS processes that the Linux kernel isolates from other processes.</p>
+</div>
+<div class="readable-text" data-hash="addaa58f0a100254e267dc2f467f7bfd" data-text-hash="5cbe5f9944aa8c036bc6d28e7bdbe10c" id="334" refid="334">
+<p>After reading this chapter, you should know that:</p>
+</div>
+<ul>
+<li class="readable-text" data-hash="038a65635382c2abe9a3daf1cf4447f4" data-text-hash="038a65635382c2abe9a3daf1cf4447f4" id="335" refid="335">Containers are regular processes, but isolated from each other and the other processes running in the host OS.</li>
+<li class="readable-text" data-hash="d480eeb024eb2a73d4682a9c78211fab" data-text-hash="d480eeb024eb2a73d4682a9c78211fab" id="336" refid="336">Containers are much lighter than virtual machines, but because they use the same Linux kernel, they are not as isolated as VMs.</li>
+<li class="readable-text" data-hash="81f81661ddf3da44cb1addb461c2d0bd" data-text-hash="81f81661ddf3da44cb1addb461c2d0bd" id="337" refid="337">Docker was the first container platform to make containers popular and the first container runtime supported by Kubernetes. Now, others are supported through the Container Runtime Interface (CRI).</li>
+<li class="readable-text" data-hash="6b6b51ecdbd8e591c6eb91b3809ffd75" data-text-hash="6b6b51ecdbd8e591c6eb91b3809ffd75" id="338" refid="338">A container image contains the user application and all its dependencies. It is distributed through a container registry and used to create running containers.</li>
+<li class="readable-text" data-hash="8785de29caa80eab205fae43ed322563" data-text-hash="60c79dfc614e09b008687b20eacf9070" id="339" refid="339">Containers can be downloaded and executed with a single <code>docker run</code> command.</li>
+<li class="readable-text" data-hash="1525b8e9ebd128e71f9a6fc86db60de2" data-text-hash="9a31f34f2436dbb651bc1939c3409541" id="340" refid="340">Docker builds an image from a <code>Dockerfile</code> that contains commands that Docker should execute during the build process. Images consist of layers that can be shared between multiple images. Each layer only needs to be transmitted and stored once.</li>
+<li class="readable-text" data-hash="e08fe588c748892c0b2e4f27ee9f1b20" data-text-hash="e08fe588c748892c0b2e4f27ee9f1b20" id="341" refid="341">Containers are isolated by Linux kernel features called Namespaces, Control groups, Capabilities, seccomp, AppArmor and/or SELinux. Namespaces ensure that a container sees only a part of the resources available on the host, Control groups limit the amount of a resource it can use, while other features strengthen the isolation between containers.</li>
+</ul>
+<div class="readable-text" data-hash="f4c9fd241cc66091bd4f9d50390c0ca8" data-text-hash="5405ea708a1b53c2503dbd77ec8be822" id="342" refid="342">
+<p>After inspecting the containers on this ship, you&#8217;re now ready to raise the anchor and sail into the next chapter, where you&#8217;ll learn about running containers with Kubernetes.</p>
+</div></div>
+
+        </body>
+        
+        

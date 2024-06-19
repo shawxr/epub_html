@@ -1,0 +1,1021 @@
+
+        <html lang="en">
+        <head>
+        <meta charset="UTF-8"/>
+        </head>
+        <body>
+        <div><div class="readable-text" data-hash="4d3ba1f8a7cfebd671b6a802a44de68a" data-text-hash="9e8bcade3079170e0d71adb4c775a922" id="1" refid="1">
+<h1>13 Replicating Pods with ReplicaSets</h1>
+</div>
+<div class="introduction-summary">
+<h3 class="intro-header">This chapter covers</h3>
+<ul>
+<li class="readable-text" data-hash="2308ca81bfc5a2770c492e271f0dba2f" data-text-hash="1c7898bbc748a16221f40cf18a39b523" id="2" refid="2"> <span>Replicating Pods with the ReplicaSet object</span></li>
+<li class="readable-text" data-hash="b1de54eec1ade22f264728b411c19850" data-text-hash="1a9294e002f5bb03397ade460846580e" id="3" refid="3"> <span>Keeping Pods running when cluster nodes fail</span></li>
+<li class="readable-text" data-hash="24f85887c72f77c2ad1d0db0e44a53a9" data-text-hash="03228cd9401744dadb5eb207f53997b1" id="4" refid="4"> <span>The reconciliation control loop in Kubernetes controllers</span></li>
+<li class="readable-text" data-hash="6356f62b57b0bc6fc33fade28d6ab713" data-text-hash="3ef67747a82e2b1a6c35511c7b6b1c34" id="5" refid="5"> <span>API Object ownership and garbage collection</span></li>
+</ul>
+</div>
+<div class="readable-text" data-hash="1d2ad7318bc7b655af542293e7d17d31" data-text-hash="2e7b5d509dc9a98fc92075608be61a12" id="6" refid="6">
+<p><span>So far in this book, you&#8217;ve deployed workloads by creating Pod objects directly. In a production cluster, you might need to deploy dozens or even hundreds of copies of the same Pod, so creating and managing those Pods would be difficult. Fortunately, in Kubernetes, you can automate the creation and management of Pod replicas with the ReplicaSet object.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="7" refid="7">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e0d2b04f9e575c9c7613cfdd3c260369" data-text-hash="1127013a8eb8ce63764e05a65f7801fe" id="8" refid="8">
+<p> <span>Before ReplicaSets were introduced, similar functionality was provided by the ReplicationController object type, which is now deprecated. A ReplicationController behaves exactly like a ReplicaSet, so everything that&#8217;s explained in this chapter also applies to ReplicationControllers.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="c91d1d0f5895578d6cd93e833074187f" data-text-hash="6e1e22940ab3553bd09a2ed2f628c257" id="9" refid="9">
+<p><span>Before you begin, make sure that the Pods, Services, and other objects of the Kiada suite are present in your cluster. If you followed the exercises in the previous chapter, they should already be there. If not, you can create them by creating the</span> <code>kiada</code> <span>namespace and applying all the manifests in the</span> <code>Chapter13/SETUP/</code> <span>directory with the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d4799377f52a3cd0f9a6ae7d43b563c4" data-text-hash="793765f6f10f418df0bb0c36178a15b1" id="10" refid="10">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f SETUP -R</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="260cc6dcef2c22785feb4596e3fe5a61" data-text-hash="10de4bc81f754b19b0d27246a0589c05" id="11" refid="11">
+<h5>NOTE</h5>
+</div>
+<div class="readable-text" data-hash="d91bfa1d5a5a5e0faa8f62ea70fc2269" data-text-hash="0b670ccc76803eaf961db4fab2a54bbc" id="12" refid="12">
+<p> <span>You can find the code files for this chapter at <a href="master.html">https://github.com/luksa/kubernetes-in-action-2nd-edition/tree/master/Chapter13</a>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="a9ccfd7e8eb9e24f18ff77e910477d47" data-text-hash="b0b3ab8c7b71afca801b9a13b3a31387" id="13" refid="13">
+<h2 id="sigil_toc_id_235">13.1&#160;Introducing ReplicaSets</h2>
+</div>
+<div class="readable-text" data-hash="71fabd1072e85137b631c36c67228da3" data-text-hash="017460336243cf61ec5df1910b4604c4" id="14" refid="14">
+<p><span>A ReplicaSet represents a group of Pod replicas (exact copies of a Pod). Instead of creating Pods one by one, you can create a ReplicaSet object</span> in which you specify a Pod template and <span>the desired number of</span> replicas, <span>and</span> then <span>have Kubernetes create the Pods</span>, as shown in the following figure.</p>
+</div>
+<div class="browsable-container figure-container" data-hash="887be5f7e2e84590386d72a30381464e" data-text-hash="896b0d44748c997516fe4d535e6eb1f9" id="15" refid="15">
+<h5><span>Figure 13.1 ReplicaSets in a nutshell</span></h5>
+<img alt="" data-processed="true" height="180" id="Picture_1" loading="lazy" src="EPUB/images/13_img_0001.png" width="798">
+</div>
+<div class="readable-text" data-hash="e555b82c768eda74eaeade74fa16a982" data-text-hash="e3576d392123dddcebd67435ba861303" id="16" refid="16">
+<p><span>The ReplicaSet allows you to manage the Pods as a single unit, but that&#8217;s about it. If you want to expose these Pods as one, you still need a Service object. As you can see in the following figure, each set of Pods that provides a particular service usually needs both a ReplicaSet and a Service object.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="e7e31edd059310afbeba3bbd4629dcbd" data-text-hash="4887ccfcf54c479ee76d3bc47f483220" id="17" refid="17">
+<h5><span>Figure 13.2 The relationship between Services, ReplicaSets, and Pods.</span></h5>
+<img alt="" data-processed="true" height="187" id="Picture_2" loading="lazy" src="EPUB/images/13_img_0002.png" width="801">
+</div>
+<div class="readable-text" data-hash="4c9eedbb49101258d0b78b565dc046f2" data-text-hash="42c5c3c1d0b09bddddab129c50d6ecbf" id="18" refid="18">
+<p><span>And j</span>ust <span>as</span> with Services, the <span>ReplicaSet&#8217;s label selector and Pod labels</span> determine which Pods belong to the ReplicaSet. <span>As shown in the following figure, a ReplicaSet only cares about the Pods that match its label selector and ignores the rest.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="1ee98d462e99fcfa90e1afa1f6c21e0d" data-text-hash="e0d8362b532eefad3e258ab94ea36248" id="19" refid="19">
+<h5>Figure 13.3 <span>A ReplicaSet only cares about Pods that match its label selector</span></h5>
+<img alt="" data-processed="true" height="258" id="Picture_6" loading="lazy" src="EPUB/images/13_img_0003.png" width="794">
+</div>
+<div class="readable-text" data-hash="496ebc2728a8e3d2b941e5815abd431b" data-text-hash="94d4ab826ae4507ccc3fb05d4456b452" id="20" refid="20">
+<p><span>Based on the information so far, you might think that you only use a ReplicaSet if you want to create multiple copies of a Pod, but that&#8217;s not the case. Even if you only need to create a single Pod, it&#8217;s better to do it through a ReplicaSet than to create it directly, because the ReplicaSet ensures that the Pod is always there to do its job.</span></p>
+</div>
+<div class="readable-text" data-hash="c35bd8f869cd01f120ad343d572340a4" data-text-hash="3c16a89ee6ee6ca44c092c7451d4d079" id="21" refid="21">
+<p><span>Imagine creating a Pod directly for an important service, and then the node running the Pod fails when you&#8217;re not there. Your service is down until you recreate the Pod. If you&#8217;d deployed the Pod via a ReplicaSet, it would automatically recreate the Pod. It&#8217;s clearly better to create Pods via a ReplicaSet than directly.</span></p>
+</div>
+<div class="readable-text" data-hash="b07066d414e36fe83ac68353895bc0fa" data-text-hash="0780d6ad8ec8f81c8f760e5a495eac6b" id="22" refid="22">
+<p><span>However, as useful as ReplicaSets can be, they don&#8217;t provide everything you need to run a workload long-term. At some point, you&#8217;ll want to upgrade the workload to a newer version, and that&#8217;s where ReplicaSets fall short. For this reason, applications are typically deployed not through ReplicaSets, but through Deployments that let you update them declaratively. This begs the question of why you need to learn about ReplicaSets if you&#8217;re not going to use them. The reason is that most of the functionality that a Deployment provides is provided by the ReplicaSets that Kubernetes creates underneath it. Deployments take care of updates, but everything else is handled by the underlying ReplicaSets. Therefore, it&#8217;s important to understand what they do and how.</span></p>
+</div>
+<div class="readable-text" data-hash="d33e22df3971cdc74f7294307d855f4e" data-text-hash="b015b540787e06709383b6bb0a161578" id="23" refid="23">
+<h3 id="sigil_toc_id_236">13.1.1&#160;Creating a ReplicaSet</h3>
+</div>
+<div class="readable-text" data-hash="b884569aa7828e803dbbe64513e277e1" data-text-hash="2e0b7ebf5f7ee1eb0c195503a9436d69" id="24" refid="24">
+<p><span>Let&#8217;s start by creating the ReplicaSet object for the Kiada service. The service currently runs in three Pods that you created directly from three separate Pod manifests, which you&#8217;ll now replace with a single ReplicaSet manifest. Before you create the manifest, let&#8217;s look at what fields you need to specify in the</span> <code>spec</code> <span>section.</span></p>
+</div>
+<div class="readable-text" data-hash="322598183f2408fabed527796f343325" data-text-hash="9735646e7e1f6444182e3e99738f48b6" id="25" refid="25">
+<h4>Introducing the ReplicaSet spec</h4>
+</div>
+<div class="readable-text" data-hash="4005b79f3adcd9c125fc44da0c67e724" data-text-hash="733d279078df394c60e4cacd7ed006e7" id="26" refid="26">
+<p><span>A ReplicaSet is a relatively simple object. The following table explains the three key fields you specify in the ReplicaSet&#8217;s</span> <code>spec</code> <span>section.</span></p>
+</div>
+<div class="browsable-container" data-hash="97eb82a593103911205c24f050c798d8" data-text-hash="2296d5e786dec43ad7c62d41811678a8" id="27" refid="27">
+<h5><span>Table 13.1 The main fields in the ReplicaSet specification</span></h5>
+<table border="1" cellpadding="0" cellspacing="0" width="100%">
+<tbody>
+<tr>
+<td> <p><span>Field name</span></p> </td>
+<td> <p><span>Description</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>replicas
+</pre> </td>
+<td> <p><span>The desired number of replicas. When you create the ReplicaSet object, Kubernetes creates this many Pods from the Pod template. It keeps this number of Pods until you delete the ReplicaSet.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>selector
+</pre> </td>
+<td> <p><span>The label selector contains either a map of labels in the</span> <code>matchLabels</code> <span>subfield or a list of label selector requirements in the</span> <code>matchExpressions</code> <span>subfield. Pods that match the label selector are considered part of this ReplicaSet.</span></p> </td>
+</tr>
+<tr>
+<td> <p></p><pre>template
+</pre> </td>
+<td> <p><span>The Pod template for the ReplicaSet&#8217;s Pods. When a new Pod needs to be created, the object is created using this template.</span></p> </td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="readable-text" data-hash="f8a1dd7ecbd16f3afbc691f3638db975" data-text-hash="33ed4fab758e7506d62ea2a576ffa82d" id="28" refid="28">
+<p><span>The</span> <code>selector</code> <span>and</span> <code>template</code> <span>fields are required, but you can omit the</span> <code>replicas</code> <span>field. If you do, a single replica is created.</span></p>
+</div>
+<div class="readable-text" data-hash="74863b2ccb76225db68e8b134f0827ba" data-text-hash="a0bb9773474fcee69d4ee07111e339c7" id="29" refid="29">
+<h4>Creating a ReplicaSet object manifest</h4>
+</div>
+<div class="readable-text" data-hash="c7e8754c96690518205a94715676ce3d" data-text-hash="fabd5611929c86b5249f26897e689f83" id="30" refid="30">
+<p><span>Create a ReplicaSet object manifest for the Kiada Pods. The following listing shows what it looks like. You can find the manifest in the file</span> <code>rs.kiada.yaml</code><span>.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="24d1c087a47f9a1a34e6799c449efe35" data-text-hash="af76573eb9f25c5c5c0eef159fd1c32e" id="31" refid="31">
+<h5>Listing 13.1 The kiada ReplicaSet object manifest</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1    #A
+kind: ReplicaSet    #A
+metadata:
+  name: kiada    #B
+spec:
+  replicas: 5    #C
+  selector:    #D
+    matchLabels:    #D
+      app: kiada    #D
+      rel: stable    #D
+  template:    #E
+    metadata:    #E
+      labels:    #E
+        app: kiada    #E
+        rel: stable    #E
+    spec:    #E
+      containers:    #E
+      - name: kiada    #E
+        image: luksa/kiada:0.5    #E
+        ...    #E
+      volumes:    #E
+      - ...    #E</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGljYVNldHMgYXJlIGluIHRoZSBhcHBzIEFQSSBncm91cCwgdmVyc2lvbiB2MS4KI0IgTGlrZSBhbGwgb3RoZXIgb2JqZWN0cywgdGhlIFJlcGxpY2FTZXQgbmFtZSBpcyBzcGVjaWZpZWQgaW4gdGhlIG1ldGFkYXRhIHNlY3Rpb24uCiNDIFRoaXMgc3BlY2lmaWVzIHRoZSBudW1iZXIgb2YgUG9kcyB0aGlzIFJlcGxpY2FTZXQgc2hvdWxkIGNvbnRhaW4uCiNEIEFzIHdpdGggU2VydmljZXMsIGEgUmVwbGljYVNldCB1c2VzIGEgbGFiZWwgc2VsZWN0b3IgdG8gZGVmaW5lIHdoaWNoIFBvZHMgYmVsb25nIHRvIHRoaXMgUmVwbGljYVNldC4KI0UgVGhlIFJlcGxpY2FTZXQgY3JlYXRlcyBQb2Qgb2JqZWN0cyBmcm9tIHRoaXMgdGVtcGxhdGUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="ef2c869cfce3c43ee2ba9125d69fa482" data-text-hash="82f5fce32d3f1b8b76863e5d892619ff" id="32" refid="32">
+<p><span>ReplicaSets are part of the</span> <code>apps</code> <span>API group, version</span> <code>v1</code><span>. As explained in the previous table, the</span> <code>replicas</code> <span>field specifies that this ReplicaSet should create three copies of the Pod using the template in the</span> <code>template</code> <span>field.</span></p>
+</div>
+<div class="readable-text" data-hash="20bad02385826ed8d57fc9603efdb18c" data-text-hash="71b8b07031adec1bb01afa88974370a5" id="33" refid="33">
+<p><span>You&#8217;ll notice that the</span> <code>labels</code> <span>in the Pod template match those in the</span> <code>selector</code> <span>field. If they don&#8217;t, the Kubernetes API will reject the ReplicaSet because the Pods created with the template won&#8217;t count against the desired number of replicas, which would result in the creation of an infinite number of Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="764dabfe46a9e13444ca7eb0506cd940" data-text-hash="a1738e82bce25cb612b1d6974ddb2905" id="34" refid="34">
+<p><span>Did you notice that there&#8217;s no Pod name in the template? That&#8217;s because the Pod names are generated from the ReplicaSet name.</span></p>
+</div>
+<div class="readable-text" data-hash="c6ce9e2ae2afa9e918f7b4b91b74991c" data-text-hash="0f5f6eacf091d584aa5a50d01e6ba143" id="35" refid="35">
+<p><span>The rest of the template exactly matches the manifests of the kiada Pods you created in the previous chapters. To create the ReplicaSet, you use the</span> <code>kubectl apply</code> <span>command that you&#8217;ve used many times before. The command is as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="28a77b5f2d708fa7c47d6b5c49b0abcc" data-text-hash="b16de14c745b09b5458618238eb46cec" id="36" refid="36">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl apply -f rs.kiada.yaml
+replicaset.apps/kiada created</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b7b487bae8ab70024d50d83bdfe38736" data-text-hash="27aaf83786a1352844e746183798347c" id="37" refid="37">
+<h3 id="sigil_toc_id_237">13.1.2&#160;Inspecting a ReplicaSet and its Pods</h3>
+</div>
+<div class="readable-text" data-hash="23c98e1376f3fd9a40d0f0731aa1ca0a" data-text-hash="cef5f95bb009dbc520ad55ba0283079b" id="38" refid="38">
+<p><span>To display basic information about the ReplicaSet you just created, use the</span> <code>kubectl get</code> <span>command like so:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="8e80dbb10e24651eedf9b7870d45607c" data-text-hash="2802cee3662602019aa0e878e54a72e2" id="39" refid="39">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs kiada
+NAME    DESIRED   CURRENT   READY   AGE
+kiada   5         5         5       1m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="40" refid="40">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="d5c0bd18b51a446e6f156e63e4fd803f" data-text-hash="b424d1acacdff0464b0775c7ae5ce4c7" id="41" refid="41">
+<p> <span>The shorthand for replicaset is rs.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="dc9aee01b098e08396c79708bc9fd97d" data-text-hash="c433ee92596ee7c87b1434303cdb3446" id="42" refid="42">
+<p><span>The output of the command shows the desired number of replicas, the current number of replicas, and the number of replicas that are considered ready as reported by their readiness probes. This information is read from the</span> <code>replicas</code><span>,</span> <code>fullyLabeledReplicas</code><span>, and</span> <code>readyReplicas</code> <span>status fields of the ReplicaSet object, respectively. Another status field called</span> <code>availableReplicas</code> <span>indicates how many replicas are available, but its value isn&#8217;t displayed by the</span> <code>kubectl get</code> <span>command.</span></p>
+</div>
+<div class="readable-text" data-hash="bdde8d0e72e6e4fe727864e3160d2f53" data-text-hash="f261d808561ba4a156066ff4d0d0ef2b" id="43" refid="43">
+<p><span>If you run the</span> <code>kubectl get replicasets</code> <span>command with the</span> <code>-o wide</code> <span>option, some additional very useful information is displayed. Run the following command to find out what:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="c584ad16b6ccc933ac6c700abe49b332" data-text-hash="921b9fb146e77d7fc55396f0993f9965" id="44" refid="44">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs -o wide
+NAME    ...   CONTAINERS    IMAGES                                     SELECTOR
+kiada ... kiada,envoy luksa/kiada:0.5,envoyproxy/envoy:v1.14.1 app=kiada,rel=stable</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="3765e80ee3d20885d3222cf09c0e64c8" data-text-hash="edd75200cb933233d9553bfa6c729b0f" id="45" refid="45">
+<p><span>In addition to the columns displayed previously, this expanded output shows not only the label selector, but also the container names and images used in the Pod template. Considering how important this information is, it&#8217;s surprising that it&#8217;s not displayed when listing the Pods with</span> <code>kubectl get pods</code><span>.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="46" refid="46">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="873dd923bcb5785c7cc392509b28bf34" data-text-hash="03820655e29dc9f590fffc408f7b540f" id="47" refid="47">
+<p> <span>To see container and image names, list ReplicaSets with the</span> <code>-o wide</code> <span>option instead of trying to get this information from the Pods.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="b4973ffcbda2488ef85464a12b4ab67c" data-text-hash="69a6db375f431dae998c05d4766e15b0" id="48" refid="48">
+<p><span>To see all the information about a ReplicaSet, use the</span> <code>kubectl describe</code> <span>command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="7bac963c26b617284651e46cbd73088a" data-text-hash="b7ace4c38058fca065b2f1abb1084f6d" id="49" refid="49">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe rs kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="18d264eaf725e7af29e1751b0d982b84" data-text-hash="a7e44d3d063b265208e6a5fd1121c4ce" id="50" refid="50">
+<p><span>The output shows the label selector used in the ReplicaSet, the number of Pods and their status, and the full template used to create those Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="e1dac9ea6e7799bff5906d714c665f4c" data-text-hash="12cb80f6366816602afaa9497ef02deb" id="51" refid="51">
+<h4>Listing the Pods in a ReplicaSet</h4>
+</div>
+<div class="readable-text" data-hash="2a64701d4bdc1997343b84f9d7600cb9" data-text-hash="5a42f8e8c39273c517ca8211e02f4ef2" id="52" refid="52">
+<p><span>Kubectl doesn&#8217;t provide a direct way to list the Pods in a ReplicaSet, but you can take the ReplicaSet&#8217;s label selector and use it in the</span> <code>kubectl get pods</code> <span>command as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="b4ea12944827a35f30ed2a2b9c8f61b9" data-text-hash="65c38d0518e9a2532aed9883c2385066" id="53" refid="53">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l app=kiada,rel=stable
+NAME          READY   STATUS    RESTARTS   AGE
+kiada-001     2/2     Running   0          12m    #A
+kiada-002     2/2     Running   0          12m    #A
+kiada-003     2/2     Running   0          12m    #A
+kiada-86wzp   2/2     Running   0          8s    #B
+kiada-k9hn2   2/2     Running   0          8s    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIHRocmVlIGtpYWRhIFBvZHMgeW91IGNyZWF0ZWQgaW4gdGhlIHByZXZpb3VzIGNoYXB0ZXJzLgojQiBUd28gbmV3IGtpYWRhIFBvZHMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f130c044a72590c34f0998ffc97104c2" data-text-hash="d6f325bd27e5dd636c0f1effc7234f01" id="54" refid="54">
+<p><span>Before you created the ReplicaSet, you had three kiada Pods from the previous chapters and now you have five, which is the desired number of replicas defined in the ReplicaSet. The labels of the three existing Pods matched the ReplicaSet&#8217;s label selector and were adopted by the ReplicaSet. Two additional Pods were created to ensure that the number of Pods in the set matched the desired number of replicas.</span></p>
+</div>
+<div class="readable-text" data-hash="e2aedacc8482c94b09dd9343950c209c" data-text-hash="7a234dad32f94fc0dcf319ac84b8ba39" id="55" refid="55">
+<h4>Understanding how Pods in a ReplicaSet are named</h4>
+</div>
+<div class="readable-text" data-hash="0b451389a482bf8a9c8897d2eeafff4a" data-text-hash="60ea02e06c2010b91726bd045d626a23" id="56" refid="56">
+<p><span>As you can see, the names of the two new Pods contain five random alphanumeric characters instead of continuing the sequence of numbers you used in your Pod names. It&#8217;s typical for Kubernetes to assign random names to the objects it creates.</span></p>
+</div>
+<div class="readable-text" data-hash="1fad63465e838d01fbb537e1ab9f6ab9" data-text-hash="f42031fad9bca175d478b0b14c554ab4" id="57" refid="57">
+<p><span>There&#8217;s even a special</span> <code>metadata</code> <span>field that lets you create objects without giving the full name. Instead of the</span> <code>name</code> <span>field, you specify the name prefix in the</span> <code>generateName</code> <span>field. You first used this field in chapter 8, when you ran the</span> <code>kubectl create</code> <span>command several times to create multiple copies of a Pod and give each a unique name. The same approach is used when Kubernetes creates Pods for a ReplicaSet.</span></p>
+</div>
+<div class="readable-text" data-hash="dca51a9f5a37a54bc07712c419e1d31c" data-text-hash="87ad6897dbf2abda6d053bd12f2e6569" id="58" refid="58">
+<p><span>When Kubernetes creates Pods for a ReplicaSet, it sets the</span> <code>generateName</code> <span>field to match the ReplicaSet name. The Kubernetes API server then generates the full name and puts it in the</span> <code>name</code> <span>field. To see this, select one of the two additional Pods that were created and check its metadata section as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="cebfe400aa33b21e635a481ee5728c0c" data-text-hash="1a7bf4fb27ad642f1680dce066b44887" id="59" refid="59">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada-86wzp -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: kiada-    #A
+  labels:
+    ...
+  name: kiada-86wzp    #B
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBmaWVsZOKAmXMgdmFsdWUgbWF0Y2hlcyB0aGUgbmFtZSBvZiB0aGUgUmVwbGljYVNldC4gVGhlIHByZXNlbmNlIG9mIHRoaXMgZmllbGQgdGVsbHMgdGhlIEt1YmVybmV0ZXMgQVBJIHRvIGdlbmVyYXRlIHRoZSBuYW1lIGZvciB0aGlzIFBvZCwgdXNpbmcgdGhpcyBmaWVsZOKAmXMgdmFsdWUgYXMgdGhlIHByZWZpeC4KI0IgVGhlIFBvZOKAmXMgbmFtZSBnZW5lcmF0ZWQgYnkgdGhlIEt1YmVybmV0ZXMgQVBJLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="40f8f0c94d9da600d2b51b770ce18cff" data-text-hash="4497447a28c737e0395dea2eac07df45" id="60" refid="60">
+<p><span>In the case of ReplicaSet Pods, giving the Pods random names makes sense because these Pods are exact copies of each other and therefore fungible. There&#8217;s also no concept of order between these Pods, so the use of sequential numbers is nonsensical. Even though the Pod names look reasonable now, imagine what happens if you delete some of them. If you delete them out of order, the numbers are no longer consecutive. However, for stateful workloads, it may make sense to number the Pods sequentially. That&#8217;s what happens when you use a StatefulSet object to create the Pods. You&#8217;ll learn more about StatefulSets in chapter 16.</span></p>
+</div>
+<div class="readable-text" data-hash="1bf24bf61e549c19cdeb9ca50a234513" data-text-hash="4392d907fd67f2179d36d85f9187253a" id="61" refid="61">
+<h4>Displaying the logs of the ReplicaSet's Pods</h4>
+</div>
+<div class="readable-text" data-hash="e161574ac1fda2472546a2886abc0adf" data-text-hash="4dc73206860459ab5d715c8408149283" id="62" refid="62">
+<p>The random <span>names of ReplicaSet</span> Pod<span>s</span> make <span>them</span> somewhat difficult to work with. For example, to <span>view</span> the logs of one of these Pods, it's relatively <span>tedious</span> to type the name of the Pod <span>when you run</span> the <code>kubectl logs</code> command. <span>If</span> the ReplicaSet contains <span>only</span> a single Pod, <span>entering</span> the full name seems unnecessary. Fortunately, in <span>this</span> case, you can print the Pod's logs <span>as follows</span>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="5307ea58021a6f26bc0ba4edf4907758" data-text-hash="bc4ad54fe1c284c32c18d95e1176565e" id="63" refid="63">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs rs/kiada -c kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="9c2a683aefc15c6fbe17799494e83454" data-text-hash="932b00580ccba59682bd9c90aa03993f" id="64" refid="64">
+<p><span>So instead of specifying the Pod name, you type</span> <code>rs/kiada</code><span>, where</span> <code>rs</code> <span>is the abbreviation for ReplicaSet and</span> <code>kiada</code> <span>is the name of the ReplicaSet object.</span> The <code>-c kiada</code> option <span>tells</span> <code>kubectl</code> to print the log of the <code>kiada</code> container. <span>You need to use this option only if the Pod has more than one container.</span> If the ReplicaSet <span>has</span> multiple Pods, as in your case, <span>only the logs of one of the Pods will be displayed.</span></p>
+</div>
+<div class="readable-text" data-hash="237bfd3ba16a472a7c074673c292a934" data-text-hash="d111cfddf5a0c3b6a958c5c31e8dfddb" id="65" refid="65">
+<p><span>I</span>f you want to see the logs of all the Pods, you can run the <code>kubectl logs</code> command with a label selector <span>instead</span>. For example, to stream the logs of the <code>envoy</code> containers in all <code>kiada</code> Pods, run the following command:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="8f6ec96c13caba00da970ac1403e7662" data-text-hash="480c67d0b142c9c4e5ce34ec4875cd0f" id="66" refid="66">
+<div class="code-area-container">
+<pre class="code-area">$ kubect logs -l app=kiada -c envoy</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c72e8af8a3608d4d90a323e23795c52f" data-text-hash="7a3805b1d72f8183ccaf58bcac9bfe16" id="67" refid="67">
+<p>To display the logs of all containers, use the <code>--all-containers</code> <span>option</span> instead of specifying the container name. Of course, <span>if you&#8217;re</span> displaying the logs of multiple Pods or containers, you can't tell where each line <span>came</span> from. Use the <code>--prefix</code> option to prefix each log line with the <span>name of the</span> Pod and container it <span>came</span> from, <span>like this</span>:</p>
+</div>
+<div class="browsable-container listing-container" data-hash="35d9f374933e3acbc3a883ead981d440" data-text-hash="c08efcdcd7c1fb7e60ae9c1648a96dd0" id="68" refid="68">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs -l app=kiada --all-containers --prefix</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f86b75cc57182672cad9caef04d6c226" data-text-hash="d001d056853706ab8c4498f81bdb6b51" id="69" refid="69">
+<p><span>Viewing logs from multiple Pods is very useful when traffic is split between Pods and you want to view every request received, regardless of which Pod handled it. For example, try streaming the logs with the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="f793de160fc3ccc854f047a19427c3d4" data-text-hash="05ce7680a5e0e56950d6afd499dcee53" id="70" refid="70">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl logs -l app=kiada -c kiada --prefix -f</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5798a9440c1adb43fa87735a5b4d60ad" data-text-hash="8c80023060d31e74293138b2ed662046" id="71" refid="71">
+<p><span>Now open the application in your web browser or with</span> <code>curl</code><span>. Use the Ingress, LoadBalancer, or NodePort service as explained in the previous two chapters.</span></p>
+</div>
+<div class="readable-text" data-hash="df3eb4b263fc94e77da49d7e96d8113a" data-text-hash="4c7d6cdf9be4b3a3a7fb50213d899ed0" id="72" refid="72">
+<h3 id="sigil_toc_id_238">13.1.3&#160;Understanding Pod ownership</h3>
+</div>
+<div class="readable-text" data-hash="87c33ef7cacbf8bb96c67c4a8ed36e6d" data-text-hash="531771a6cab328f674a7de8c1f5504be" id="73" refid="73">
+<p><span>Kubernetes created the two new Pods from the template you specified in the ReplicaSet object. They&#8217;re owned and controlled by the ReplicaSet, just like the three Pods you created manually. You can see this when you use the</span> <code>kubectl describe</code> <span>command to inspect the Pods. For example, check the</span> <code>kiada-001</code> <span>Pod as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="bb5fe88f4ec1cef4960727a62a7b23a9" data-text-hash="0f2a6a6496e0b99907f1282da5d08b6d" id="74" refid="74">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe po kiada-001
+Name:         kiada-001
+Namespace:    kiada
+...
+Controlled By:  ReplicaSet/kiada    #A
+...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBQb2QgaXMgbm93IGNvbnRyb2xsZWQgYnkgdGhlIGtpYWRhIFJlcGxpY2FTZXQu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="da35b2c9debc4894f3d5c5737406239f" data-text-hash="57331e56ab4d2b5a75e1ea21431a8209" id="75" refid="75">
+<p><span>The</span> <code>kubectl describe</code> <span>command gets this information from the</span> <code>metadata</code> <span>section of the Pod&#8217;s manifest. Let&#8217;s take a closer look. Run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="a6bae55a41e4eb36b5f01e873e963ab2" data-text-hash="a36b55a48c90a2aa0cc78288bdf4369e" id="76" refid="76">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po kiada-001 -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: kiada
+    rel: stable
+  name: kiada-001
+  namespace: kiada
+  ownerReferences:    #A
+  - apiVersion: apps/v1    #A
+    blockOwnerDeletion: true    #A
+    controller: true    #A
+    kind: ReplicaSet    #A
+    name: kiada    #A
+    uid: 8e19d9b3-bbf1-4830-b0b4-da81dd0e6e22    #A
+  resourceVersion: "527511"
+  uid: d87afa5c-297d-4ccb-bb0a-9eb48670673f
+spec:
+  ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQW4gb2JqZWN04oCZcyBtZXRhZGF0YSBzZWN0aW9uIG1heSBjb250YWluIGEgbGlzdCBvZiB0aGUgb2JqZWN04oCZcyBvd25lcnMu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="c3a0d96f7c65128ded1814567d62eca4" data-text-hash="1ed98492585d5adf660445717879f5e3" id="77" refid="77">
+<p><span>The</span> <code>metadata</code> <span>section in an object manifest sometimes contains the</span> <code>ownerReferences</code> <span>field, which contains references to the owner(s) of the object. This field can contain multiple owners, but most objects have only a single owner, just like the</span> <code>kiada-001</code> <span>Pod. In the case of this Pod, the</span> <code>kiada</code> <span>ReplicaSet is the <i>owner</i>, and the Pod is the so-called <i>dependent</i>.</span></p>
+</div>
+<div class="readable-text" data-hash="0d992cec80f3b667b58c083589302f77" data-text-hash="648789b1bb7b0650b5eb867aa4646b27" id="78" refid="78">
+<p><span>Kubernetes has a garbage collector that automatically deletes dependent objects when their owner is deleted. If an object has multiple owners, the object is deleted when all its owners are gone. If you delete the ReplicaSet object that owns the</span> <code>kiada-001</code> <span>and the other Pods, the garbage collector would also delete the Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="9e0cb29d6b6dcf43caa51845222b0ab1" data-text-hash="e74171dac02ae5bc79d7c42ede2afe17" id="79" refid="79">
+<p><span>An owner reference can also indicate which owner is the controller of the object. The</span> <code>kiada-001</code> <span>Pod is controlled by the</span> <code>kiada</code> <span>ReplicaSet, as indicated by the</span> <code>controller: true</code> <span>line in the manifest. This means that you should no longer control the three Pods directly, but through the ReplicaSet object.</span></p>
+</div>
+<div class="readable-text" data-hash="693ef1d7291dcf12a98968d3698e2bfa" data-text-hash="0e09e91aad4f7de17a022f321733801f" id="80" refid="80">
+<h2 id="sigil_toc_id_239">13.2&#160;Updating a ReplicaSet</h2>
+</div>
+<div class="readable-text" data-hash="f9ffef4404fea340c8f2b6a3d6d3ddcb" data-text-hash="3213a35ef12d227552881e7f6f0c1495" id="81" refid="81">
+<p><span>In a ReplicaSet, you specify the desired number of replicas, a Pod template, and a label selector. The selector is immutable, but you can update the other two properties. By changing the desired number of replicas, you scale the ReplicaSet. Let&#8217;s see what happens when you do that.</span></p>
+</div>
+<div class="readable-text" data-hash="7602cbd12d165f7cad60ba43d5aa23b5" data-text-hash="0945f461cad18287bc107a9645354897" id="82" refid="82">
+<h3 id="sigil_toc_id_240">13.2.1&#160;Scaling a ReplicaSet</h3>
+</div>
+<div class="readable-text" data-hash="a66ee8ad3af36fb2c459123ec5c6107f" data-text-hash="9b598924a1634d644058eea020e09f58" id="83" refid="83">
+<p><span>In the ReplicaSet, you&#8217;ve set the desired number of replicas to five, and that&#8217;s the number of Pods currently owned by the ReplicaSet. However, you can now update the ReplicaSet object to change this number. You can do this either by changing the value in the manifest file and reapplying it, or by editing the object directly with the</span> <code>kubectl edit</code> <span>command. However, the easiest way to scale a ReplicaSet is to use the</span> <code>kubectl scale</code> <span>command.</span></p>
+</div>
+<div class="readable-text" data-hash="5d7d41aa23162e7efad4ea1855d13c47" data-text-hash="bb1677e1089b81d36cf0618655d82863" id="84" refid="84">
+<h4>Scaling a ReplicaSet using the kubectl scale command</h4>
+</div>
+<div class="readable-text" data-hash="0e72318d14e792f51c0283584a1c9982" data-text-hash="0c1a7a9808cc95f0bcd083c9807915e5" id="85" refid="85">
+<p><span>Let&#8217;s increase the number of kiada Pods to six. To do this, execute the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="2bcf7cdd024c30804274f41c6db28d60" data-text-hash="df8951902972aab994d588fc3ada3178" id="86" refid="86">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale rs kiada --replicas 6
+replicaset.apps/kiada scaled</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a819a2e95172aec774346d4cf15b8806" data-text-hash="f6a5644c17590c524848e8233295763e" id="87" refid="87">
+<p><span>Now check the ReplicaSet again to confirm that it now has six Pods:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="deaeadf3152dec586e792c894e529ee9" data-text-hash="86cdcb4e54e1ef8f182a18c19e663b92" id="88" refid="88">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs kiada
+NAME    DESIRED   CURRENT   READY   AGE
+kiada   6         6         5       10m</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="b399440d823bf2fa2d50c04b34a6e3ab" data-text-hash="61c4629e1367a04dd2848989c67f75b3" id="89" refid="89">
+<p><span>The columns indicate that the ReplicaSet is now configured with six Pods, and this is also the current number of Pods. One of the Pods isn&#8217;t yet ready, but only because it was just created. List the Pods again to confirm that an additional Pod instance has been created:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="5f753e8c88bda5a199938f3bae38901b" data-text-hash="a0f796b04b5eb2a37db0d775a151c6ad" id="90" refid="90">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l app=kiada,rel=stable
+NAME          READY   STATUS    RESTARTS   AGE
+kiada-001     2/2     Running   0          22m
+kiada-002     2/2     Running   0          22m
+kiada-003     2/2     Running   0          22m
+kiada-86wzp   2/2     Running   0          10m
+kiada-dmshr   2/2     Running   0          11s    #A
+kiada-k9hn2   2/2     Running   0          10m</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIEFHRSBjb2x1bW4gaW5kaWNhdGVzIHRoYXQgdGhpcyBQb2QgaGFzIGp1c3QgYmVlbiBjcmVhdGVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f7d500198fe80991b7f325e74dd92ba6" data-text-hash="3b13a0ac3137f4f21e50f766e9af34bd" id="91" refid="91">
+<p><span>As expected, a new Pod was created, bringing the total number of Pods to the desired six. If this application served actual users and you needed to scale to a hundred Pods or more due to increased traffic, you could do so in a snap with the same command. However, your cluster may not be able to handle that many Pods.</span></p>
+</div>
+<div class="readable-text" data-hash="412a8b647d76cd4a4b86bd558f0c5458" data-text-hash="1df5800b97942924057a8c76d485a99c" id="92" refid="92">
+<h4>Scaling down</h4>
+</div>
+<div class="readable-text" data-hash="5ef30d21be562b4d1edfb8f4dc940247" data-text-hash="6896cc5260f1bf94a76f078fe783aaef" id="93" refid="93">
+<p><span>Just as you scale up a ReplicaSet, you can also scale it down with the same command. You can also scale a ReplicaSet by editing its manifest with</span> <code>kubectl edit</code><span>. Let&#8217;s scale it to four replicas using this method. Run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="ebec9d2976221f1d8dff3d7561df3f9f" data-text-hash="4d6ac20b75f252ef9088186614799d33" id="94" refid="94">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl edit rs kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="623a0902adbaffb79794b8abeed2d012" data-text-hash="5cd2d2c811decb44659af696ccccda12" id="95" refid="95">
+<p><span>This should open the ReplicaSet object manifest in your text editor. Find the</span> <code>replicas</code> <span>field and change the value to</span> <code>4.</code> <span>Save the file and close the editor so</span> <code>kubectl</code> <span>can post the updated manifest to the Kubernetes API. Verify that you now have four Pods:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="bb2afe7633ca232206aeeea7b33da4e5" data-text-hash="009443430fd3c6bbd74f711ae6f34b78" id="96" refid="96">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada,rel=stable
+NAME          READY   STATUS        RESTARTS   AGE
+kiada-001     2/2     Running       0          28m
+kiada-002     2/2     Running       0          28m
+kiada-003     2/2     Running       0          28m
+kiada-86wzp   0/2     Terminating   0          16m    #A
+kiada-dmshr   2/2     Terminating   0          125m    #A
+kiada-k9hn2   2/2     Running       0          16m</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVHdvIFBvZHMgaGF2ZSBiZWVuIG1hcmtlZCBmb3IgZGVsZXRpb24gYW5kIHdpbGwgZGlzYXBwZWFyIHdoZW4gYWxsIHRoZWlyIGNvbnRhaW5lcnMgdGVybWluYXRlLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="313a628b57e5ddb21eb48f58b9bfa8e8" data-text-hash="46b825e30725257d4647f633b01c5cee" id="97" refid="97">
+<p><span>As expected, two of the Pods are being terminated and should disappear when the processes in their containers stop running. But how does Kubernetes decide which Pods to remove? Does it just select them randomly?</span></p>
+</div>
+<div class="readable-text" data-hash="cbd3566baeadca4fa7295fce17b4a7f8" data-text-hash="f4347580da42f4df555f109865cd17fa" id="98" refid="98">
+<h4>Understanding which Pods are deleted first when a ReplicaSet is scaled down</h4>
+</div>
+<div class="readable-text" data-hash="9ebcb9664c1b14266f379efdb641c95f" data-text-hash="10a41196b737b5cf8ae69299cd0fb5aa" id="99" refid="99">
+<p><span>When you scale down a ReplicaSet, Kubernetes follows some well thought out rules to decide which Pod(s) to delete first. It deletes Pods in the following order:</span></p>
+</div>
+<ol>
+<li class="readable-text" data-hash="b85017cea787d4c660e9eadc9dcbc8b4" data-text-hash="d4bb5bb5dd90fac4d9ac4286406aad11" id="100" refid="100"><span>Pods that aren&#8217;t yet assigned to a node.</span></li>
+<li class="readable-text" data-hash="fae567aee71d18ab2c1c5da6386d1818" data-text-hash="779945da4b3871675a4e0ed70c510eda" id="101" refid="101"><span>Pods whose phase is unknown.</span></li>
+<li class="readable-text" data-hash="4cf30771d6a2b9ce79107a07d02eaa64" data-text-hash="aa7bebb00588ee71cb8da97fe2e89fab" id="102" refid="102"><span>Pods that aren&#8217;t ready.</span></li>
+<li class="readable-text" data-hash="88fe907979d2712d123163fdef638921" data-text-hash="0b335fba3a28704455d4eef5e2f1951d" id="103" refid="103"><span>Pods that have a lower deletion cost.</span></li>
+<li class="readable-text" data-hash="d0c62153b49fb68aaa87f7eb81bf63f1" data-text-hash="98e8cd68528d7e5f1545d3cb60e1a0da" id="104" refid="104"><span>Pods that are collocated with a greater number of related replicas.</span></li>
+<li class="readable-text" data-hash="7c7c19ffef2a559df827d42179ca1a0a" data-text-hash="f31a28db9681e140a25d677f2bd874d4" id="105" refid="105"><span>Pods that have been ready for a shorter time.</span></li>
+<li class="readable-text" data-hash="2f85eae90d6d9cfb69194e6ef37c62fa" data-text-hash="387d2976d40fc5759309fc89ee7cb944" id="106" refid="106"><span>Pods with a greater number of container restarts.</span></li>
+<li class="readable-text" data-hash="79e7f18611ea286dcd392bed35b6ad93" data-text-hash="5e3215a6b8eec2f5be550002c7d10adf" id="107" refid="107"><span>Pods that were created later than the other Pods.</span></li>
+</ol>
+<div class="readable-text" data-hash="42bc7a5ac037706e83a51269c80fbebc" data-text-hash="c72a2b5f78cfe528047c08efca5948bb" id="108" refid="108">
+<p><span>These rules ensure that Pods that haven&#8217;t been scheduled yet, and defective Pods are deleted first, while the well-functioning ones are left alone. You can also influence which Pod is deleted first by setting the annotation</span> <code>controller.kubernetes.io/pod-deletion-cost</code> <span>on your Pods. The value of the annotation must be a string that can be parsed into a 32-bit integer. Pods without this annotation and those with a lower value will be deleted before Pods with higher values.</span></p>
+</div>
+<div class="readable-text" data-hash="e7b72adae6022151943f27378d8f9add" data-text-hash="85cbc89deef25ec50a3fe5c486adcb18" id="109" refid="109">
+<p><span>Kubernetes also tries to keep the Pods evenly distributed across the cluster nodes. The following figure shows an example where the ReplicaSet is scaled from five to three replicas. Because the third node runs two collocated replicas more than the other two nodes, the Pods on the third node are deleted first. If this rule didn&#8217;t exist, you could end up with three replicas on a single node.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="4a0012728e53a1359b9b0bfd46e49a63" data-text-hash="11206e88d7fce8c8a92f412622d67432" id="110" refid="110">
+<h5><span>Figure 13.4 Kubernetes keeps related Pods evenly distributed across the cluster nodes.</span></h5>
+<img alt="" data-processed="true" height="223" id="Picture_7" loading="lazy" src="EPUB/images/13_img_0004.png" width="779">
+</div>
+<div class="readable-text" data-hash="05be194950f10561d0ba5c42873a160a" data-text-hash="0e59880bd17d3ea7ecd001fe57437e2a" id="111" refid="111">
+<h4>Scaling down to zero</h4>
+</div>
+<div class="readable-text" data-hash="e2fb087994c9e0df8458c622ef9a8687" data-text-hash="c0379503a42b8acb0e0a8dc6e3d2a57e" id="112" refid="112">
+<p><span>In some cases, it&#8217;s useful to scale the number of replicas down to zero. All Pods managed by the ReplicaSet will be deleted, but the ReplicaSet object itself will remain and can be scaled back up at will. You can try this now by running the following commands:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="bcca4e293bfa8a872202ed05ea0c9fc5" data-text-hash="9598a3de79a042ec9af1e761103ca455" id="113" refid="113">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale rs kiada --replicas 0    #A
+replicaset.apps/kiada scaled
+ 
+$ kubectl get po -l app=kiada    #B
+No resources found in kiada namespace.    #B
+ 
+$ kubectl scale rs kiada --replicas 2    #C
+replicaset.apps/kiada scaled
+ 
+$ kubectl get po -l app=kiada
+NAME          READY   STATUS    RESTARTS   AGE    #D
+kiada-dl7vz   2/2     Running   0          6s    #D
+kiada-dn9fb   2/2     Running   0          6s    #D</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgU2NhbGUgdGhlIGtpYWRhIFJlcGxpY2FTZXQgdG8gemVyby4KI0IgQWxsIHRoZSBQb2RzIGhhdmUgYmVlbiBkZWxldGVkLgojQyBTY2FsZSB0aGUgUmVwbGljYVNldCB0byB0d28gcmVwbGljYXMuCiNEIFR3byBQb2RzIGFyZSBub3cgcnVubmluZy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="09c9fcbbfb78a4a35b1d2e8ac7b68dc0" data-text-hash="0060e46129aa7fef13e95d9e1a1407c4" id="114" refid="114">
+<p><span>As you&#8217;ll see in the next chapter, a ReplicaSet scaled to zero is very common when the ReplicaSet is owned by a Deployment object.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="5c622e940054ac4ab45712e2d7b5d25d" data-text-hash="12ae2a12586001e30745cb0457586ae3" id="115" refid="115">
+<h5>Tip</h5>
+</div>
+<div class="readable-text" data-hash="74f97782769b47f25bfa22bf14e1b2b9" data-text-hash="69fc87bb5e24ccd23587146ada3ded96" id="116" refid="116">
+<p> <span>If you need to temporarily shut down all instances of your workload, set the desired number of replicas to zero instead of deleting the ReplicaSet object.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="3d21e11c9c58a762cc85c8a81ebcb0e1" data-text-hash="f45cfeb1313a5bc5080475f8e7040520" id="117" refid="117">
+<h3 id="sigil_toc_id_241">13.2.2&#160;Updating the Pod template</h3>
+</div>
+<div class="readable-text" data-hash="820c649edbdd7ec6171c4d41790a702f" data-text-hash="fac4d2a3173985b0f50510f587a08de6" id="118" refid="118">
+<p><span>In the next chapter, you&#8217;ll learn about the Deployment object, which differs from ReplicaSets in how it handles Pod template updates. This difference is why you usually manage Pods with Deployments and not ReplicaSets. Therefore, it&#8217;s important to see what ReplicaSets don&#8217;t do.</span></p>
+</div>
+<div class="readable-text" data-hash="1d80587c69695d97bfc936986b127a50" data-text-hash="40e2e71ea2596e67e165b7c379dbfce9" id="119" refid="119">
+<h4>Editing a ReplicaSet&#8217;s Pod template</h4>
+</div>
+<div class="readable-text" data-hash="79036d5fbd6797063df0f01a227e2862" data-text-hash="be529606e10f5c38830685ae8fc89802" id="120" refid="120">
+<p><span>The kiada Pods currently have labels that indicate the name of the application and the release type (whether it&#8217;s a stable release or something else). It would be great if a label indicated the exact version number, so you can easily distinguish between them when you run different versions simultaneously.</span></p>
+</div>
+<div class="readable-text" data-hash="62e2954f90fe7a5dbdba0a9479d197ee" data-text-hash="99fe3c6373d58a7a7e1de2883858852d" id="121" refid="121">
+<p><span>To add a label to the Pods that the ReplicaSet creates, you must add the label to its Pod template. You can&#8217;t add the label with the</span> <code>kubectl label</code> <span>command, because then it would be added to the ReplicaSet itself and not to the Pod template. There&#8217;s no</span> <code>kubectl</code> <span>command that does this, so you must edit the manifest with</span> <code>kubectl edit</code> <span>as you did before. Find the</span> <code>template</code> <span>field and add the label key</span> <code>ver</code> <span>with value</span> <code>0.5</code> <span>to the</span> <code>metadata.labels</code> <span>field in the template, as shown in the following listing.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="85e27907a50d3a0f51d4a236156188af" data-text-hash="0b9ded6b0d30847c68ae998b340a954d" id="122" refid="122">
+<h5>Listing 13.2 Adding a label to the Pod template</h5>
+<div class="code-area-container">
+<pre class="code-area">apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  ...
+spec:
+  replicas: 2
+  selector:    #A
+    matchLabels:    #A
+      app: kiada    #A
+      rel: stable    #A
+  template:
+    metadata:
+      labels:
+        app: kiada
+        rel: stable
+        ver: '0.5'    #B
+    spec:
+      ...</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgRG8gbm90IGFkZCB0aGUgbGFiZWwgdG8gdGhlIHNlbGVjdG9yLgojQiBBZGQgdGhlIGxhYmVsIGhlcmUuIExhYmVsIHZhbHVlcyBtdXN0IGJlIHN0cmluZ3MsIHNvIHlvdSBtdXN0IGVuY2xvc2UgdGhlIHZlcnNpb24gbnVtYmVyIGluIHF1b3Rlcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="abe3be7e950f0d154d5bc2eb912134b1" data-text-hash="5ec8daaa4b6fb1cf38fa0d9d1d101812" id="123" refid="123">
+<p><span>Make sure you add the label in the right place. Don&#8217;t add it to the selector, as this would cause the Kubernetes API to reject your update, since the selector is immutable. The version number must be enclosed in quotes, otherwise the YAML parser will interpret it as a decimal number and the update will fail, since label values must be strings. Save the file and close the editor so that</span> <code>kubectl</code> <span>can post the updated manifest to the API server.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="124" refid="124">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c51d33a17d407eb188b0ec87429a63ce" data-text-hash="5288e86f952812f82e58af3056b254ee" id="125" refid="125">
+<p> <span>Did you notice that the labels in the Pod template and those in the selector aren&#8217;t identical? They don&#8217;t have to be identical, but the labels in the selector must be a subset of the labels in the template.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="98c9930f7c41559461b3885382565cf4" data-text-hash="bcac43cdf39118761f8e3186695b00bc" id="126" refid="126">
+<h4>Understanding how the ReplicaSet&#8217;s Pod template is used</h4>
+</div>
+<div class="readable-text" data-hash="7f5a4b895f4c3fefe1add8c94440d349" data-text-hash="25d8624c801f869baf97c284389cfb6f" id="127" refid="127">
+<p><span>You updated the Pod template, now check if the change is reflected in the Pods. List the Pods and their labels as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="1ca23b1258752c8e2d45b604ae727157" data-text-hash="4b8832f94014e18990612dc5fa907035" id="128" refid="128">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada --show-labels
+NAME          READY   STATUS    RESTARTS   AGE   LABELS
+kiada-dl7vz   2/2     Running   0          10m   app=kiada,rel=stable
+kiada-dn9fb   2/2     Running   0          10m   app=kiada,rel=stable</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="26c4e5c1e4dbd18ef440da8b5aa2e4db" data-text-hash="166b5436772e11572b1628db34a55256" id="129" refid="129">
+<p><span>Since the Pods still only have the two labels from the original Pod template, it&#8217;s clear that Kubernetes didn&#8217;t update the Pods. However, if you now scale the ReplicaSet up by one, the new Pod should contain the label you added, as shown here:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="896cee3b67b97a507258103a54859840" data-text-hash="465a323250f1ed4efde19e88934409dd" id="130" refid="130">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl scale rs kiada --replicas 3
+replicaset.apps/kiada scaled
+ 
+$ kubectl get pods -l app=kiada --show-labels
+NAME          READY   STATUS    RESTARTS   AGE   LABELS
+kiada-dl7vz   2/2     Running   0          14m   app=kiada,rel=stable
+kiada-dn9fb   2/2     Running   0          14m   app=kiada,rel=stable
+kiada-z9dp2   2/2     Running   0          47s   app=kiada,rel=stable,ver=0.5    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIG5ld2x5IGNyZWF0ZWQgUG9kIGhhcyB0aGUgYWRkaXRpb25hbCBsYWJlbC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="03d7031e53b44bf16c05b43beaa84050" data-text-hash="a8a397ab5d102dac6492f213ef5df593" id="131" refid="131">
+<p><span>You should think of the Pod template as a cookie cutter that Kubernetes uses to cut out new Pods. When you change the Pod template, only the cookie cutter changes and that only affects the Pods that are created afterwards.</span></p>
+</div>
+<div class="readable-text" data-hash="c50426c7b6908e59dcc81da1bfeaaf09" data-text-hash="8f19a973e2f3c3e17a968a24b279983e" id="132" refid="132">
+<h2 id="sigil_toc_id_242">13.3&#160;Understanding the operation of the ReplicaSet controller</h2>
+</div>
+<div class="readable-text" data-hash="b12b3fa1bdcf6efecc848018c961ce99" data-text-hash="5b4ef1aa91c0ea9a71a46b040987d295" id="133" refid="133">
+<p><span>In the previous sections, you saw how changing the</span> <code>replicas</code> <span>and</span> <code>template</code> <span>within the ReplicaSet object causes Kubernetes to do something with the Pods that belong to the ReplicaSet. The Kubernetes component that performs these actions is called the controller. Most of the object types you create through your cluster&#8217;s API have an associated controller. For example, in the previous chapter you learned about the Ingress controller, which manages Ingress objects. There&#8217;s also the Endpoints controller for the Endpoints objects, the Namespace controller for the Namespace objects, and so on.</span></p>
+</div>
+<div class="readable-text" data-hash="9bf6a292941c6450deb052dc514d95b4" data-text-hash="4cac929529599c35dfd9c861f508fa55" id="134" refid="134">
+<p><span>Not surprisingly, ReplicaSets are managed by the ReplicaSet controller. Any change you make to a ReplicaSet object is detected and processed by this controller. When you scale the ReplicaSet, the controller is the one that creates or deletes the Pods. Each time it does this, it also creates an Event object that informs you of what it&#8217;s done. As you learned in chapter 4, you can see the events associated with an object at the bottom of the output of the</span> <code>kubectl describe</code> <span>command as shown in the next snippet, or by using the</span> <code>kubectl get events</code> <span>command to specifically list the Event objects.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="1058de4b2074047e2725211e6bf21f27" data-text-hash="49f43a96c1607f0951a2a48afcc8f5e1" id="135" refid="135">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl describe rs kiada
+...
+Events:
+  Type    Reason            Age   From                   Message
+  ----    ------            ----  ----                   -------
+  Normal  SuccessfulDelete  34m   replicaset-controller  Deleted pod: kiada-k9hn2    #A
+  Normal  SuccessfulCreate  30m   replicaset-controller  Created pod: kiada-dl7vz    #B
+  Normal  SuccessfulCreate  30m   replicaset-controller  Created pod: kiada-dn9fb    #B
+  Normal  SuccessfulCreate  16m   replicaset-controller  Created pod: kiada-z9dp2    #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBldmVudCBpbmRpY2F0ZXMgdGhhdCB0aGUgY29udHJvbGxlciBkZWxldGVkIGEgUG9kLgojQiBUaGVzZSBldmVudHMgc2hvdyB0aGF0IHRoZSBSZXBsaWNhU2V0IGNvbnRyb2xsZXIgY3JlYXRlZCB0aHJlZSBQb2RzLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e553be143985c4541b99ea90629d481b" data-text-hash="165449b1f7ec49793ee4fe478fef85c6" id="136" refid="136">
+<p><span>To understand ReplicaSets, you must understand the operation of their controller.</span></p>
+</div>
+<div class="readable-text" data-hash="02deb06db9cd6bad1d3dcc4c9021b517" data-text-hash="daf11889af87f712322073f900974b7e" id="137" refid="137">
+<h3 id="sigil_toc_id_243">13.3.1&#160;Introducing the reconciliation control loop</h3>
+</div>
+<div class="readable-text" data-hash="a5224ef462208353c28e1cf9e92acfeb" data-text-hash="37d2eb786eb57d803f7565653f768496" id="138" refid="138">
+<p><span>As shown in the following figure, a controller observes the state of both the owner and the dependent objects. After each change in this state, the controller compares the state of the dependent objects with the desired state specified in the owning object. If these two states differ, the controller makes changes to the dependent object(s) to reconcile the two states. This is the so-called reconciliation control loop that you&#8217;ll find in all controllers.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="046de970750ffacda1149f2b559f844b" data-text-hash="594fa2330570460851bbbcd9a6f53edf" id="139" refid="139">
+<h5>Figure 13.5 A controller's reconciliation control loop</h5>
+<img alt="" data-processed="true" height="246" id="Picture_8" loading="lazy" src="EPUB/images/13_img_0005.png" width="803">
+</div>
+<div class="readable-text" data-hash="341c0d4e521be0b3ae64a0571ad418be" data-text-hash="fc6633e934806bbd86c6e334f3437763" id="140" refid="140">
+<p><span>The ReplicaSet controller&#8217;s reconciliation control loop consists of observing ReplicaSets and Pods. Each time a ReplicaSet or Pod changes, the controller checks the list of Pods associated with the ReplicaSet and ensures that the actual number of Pods matches the desired number specified in the ReplicaSet. If the actual number of Pods is lower than the desired number, it creates new replicas from the Pod template. If the number of Pods is higher than desired, it deletes the excess replicas. The flowchart in the following figure explains the entire process.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="9426cfce30145c6a61ced029869f27a0" data-text-hash="dba216dc5a55aee2e55914742a87d60d" id="141" refid="141">
+<h5><span>Figure 13.6 The ReplicaSet controller&#8217;s reconciliation loop</span></h5>
+<img alt="" data-processed="true" height="278" id="Picture_10" loading="lazy" src="EPUB/images/13_img_0006.png" width="768">
+</div>
+<div class="readable-text" data-hash="312ac8163db5eccaf2519b404e5d9d0d" data-text-hash="03c19a17ea50fc743e3dc48ca5a8ed1a" id="142" refid="142">
+<h3 id="sigil_toc_id_244">13.3.2&#160;Understanding how the ReplicaSet controller reacts to Pod changes</h3>
+</div>
+<div class="readable-text" data-hash="9ed0dee48b5dddb4a595e5a370899bf2" data-text-hash="abcc24b8e46e65beb5c08422e40bea85" id="143" refid="143">
+<p><span>You&#8217;ve seen how the controller responds immediately to changes in the ReplicaSet&#8217;s</span> <code>replicas</code> <span>field. However, that&#8217;s not the only way the desired number and the actual number of Pods</span> can <span>differ. What if no one touches the ReplicaSet, but the actual number of Pods changes? The ReplicaSet controller&#8217;s job is to make sure that the number of Pods always matches the specified number. Therefore, it should also come into action in this case.</span></p>
+</div>
+<div class="readable-text" data-hash="7adda79e8dfdfcda0e8a6199cd4bfeee" data-text-hash="73e7ce724f8ed8347f7eb72a722ac971" id="144" refid="144">
+<h4>Deleting a Pod managed by a ReplicaSet</h4>
+</div>
+<div class="readable-text" data-hash="af088e925ec2375611f331bca254237a" data-text-hash="e76c7973cfe524babed18b7c3a211d43" id="145" refid="145">
+<p><span>Let&#8217;s look at what happens if you delete one of the Pods managed by the ReplicaSet. Select one and delete it with</span> <code>kubectl delete</code><span>:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="526c0b338383459d7df389224c6eecec" data-text-hash="a0330e115cbbf8ffd006edde8eda5fcd" id="146" refid="146">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pod kiada-z9dp2    #A
+pod "kiada-z9dp2" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgUmVwbGFjZSB0aGUgUG9kIG5hbWUgd2l0aCBvbmUgb2YgeW91ciBvd24gUG9kcy4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="76d9bad8c3f8efadcf46fbdc465c6263" data-text-hash="ce5019c25ca27cba1fe1bb34992c4727" id="147" refid="147">
+<p><span>Now list the Pods again:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="df2dd45424b2ac261b6bb4878f327e90" data-text-hash="350a8f8c906287bc509dbf72074277b0" id="148" refid="148">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada
+NAME          READY   STATUS    RESTARTS   AGE
+kiada-dl7vz   2/2     Running   0          34m
+kiada-dn9fb   2/2     Running   0          34m
+kiada-rfkqb   2/2     Running   0          47s    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTmV3bHkgY3JlYXRlZCBQb2Qu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="e0aa9c5e9cfd165e89a72f9cdd88aa99" data-text-hash="3a831a5036a8a42fd15e52225ec65567" id="149" refid="149">
+<p><span>The Pod you deleted is gone, but a new Pod has appeared to replace the missing Pod. The number of Pods again matches the desired number of replicas set in the ReplicaSet object. Again, the ReplicaSet controller reacted immediately and reconciled the actual state with the desired state.</span></p>
+</div>
+<div class="readable-text" data-hash="b7bd25adbc17af5dfecf8472f0bd2859" data-text-hash="2a60140e9c4b45bccfdee1b5d62616e9" id="150" refid="150">
+<p><span>Even if you delete all kiada Pods, three new ones will appear immediately so that they can serve your users. You can see this by running the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="8d5c9d90be12b065da741f22e6540528" data-text-hash="40df39965c6693882d8eb62b62159a61" id="151" refid="151">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete pod -l app=kiada</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="a9c5ec5e815c9421ec19df4e9d165167" data-text-hash="b5e8e12b335fcb37b0fcfc0c0d38f44b" id="152" refid="152">
+<h4>Creating a Pod that matches the ReplicaSet&#8217;s label selector</h4>
+</div>
+<div class="readable-text" data-hash="35ea9fc8a0358e57f44bd8d34d8c5ea1" data-text-hash="4dbd58e3b6df236ffdc8c341a02d530e" id="153" refid="153">
+<p><span>Just as the ReplicaSet controller creates new Pods when it finds that there are fewer Pods than needed, it also deletes Pods when it finds too many. You&#8217;ve already seen this happen when you reduced the desired number of replicas, but what if you manually create a Pod that matches the ReplicaSet&#8217;s label selector? From the controller&#8217;s point of view, one of the Pods must disappear.</span></p>
+</div>
+<div class="readable-text" data-hash="600372956c6ddd6141631856de3aef2e" data-text-hash="3d0cae950d8cba8366d2988723b24aa0" id="154" refid="154">
+<p><span>Let&#8217;s create a Pod called</span> <code>one-kiada-too-many</code><span>. The name doesn&#8217;t match the prefix that the controller assigns to the ReplicaSet&#8217;s Pods, but the Pod&#8217;s labels match the ReplicaSet&#8217;s label selector. You can find the Pod manifest in the file</span> <code>pod.one-kiada-too-many.yaml</code><span>. Apply the manifest with</span> <code>kubectl apply</code> <span>to create the Pod, and then immediately list the</span> <code>kiada</code> <span>Pods as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="67eeb5fbbf8846d03065e3e6e2a6a5bf" data-text-hash="20fa458c6cd23172db165976b24b32ba" id="155" refid="155">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get po -l app=kiada
+NAME                 READY   STATUS        RESTARTS   AGE
+kiada-jp4vh          2/2     Running       0          11m
+kiada-r4k9f          2/2     Running       0          11m
+kiada-shfgj          2/2     Running       0          11m
+one-kiada-too-many   0/2     Terminating   0          3s    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgQWx0aG91Z2ggeW91IGp1c3QgY3JlYXRlZCB0aGlzIFBvZCwgaXTigJlzIGFscmVhZHkgYmVpbmcgcmVtb3ZlZC4="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d9cf64a6a267acfb9ccec3f41d0ed427" data-text-hash="afd4f7d604d89e6e632a86b3f159ceab" id="156" refid="156">
+<p><span>As expected, the ReplicaSet controller deletes the Pod as soon as it detects it. The controller doesn&#8217;t like it when you create Pods that match the label selector of a ReplicaSet. As shown, the name of the Pod doesn&#8217;t matter. Only the Pod&#8217;s labels matter.</span></p>
+</div>
+<div class="readable-text" data-hash="9db8995464b86bdea3b15e4c4f8819fc" data-text-hash="80caa9436642429a9819d259bba53faa" id="157" refid="157">
+<h4>What happens when a node that runs a ReplicaSet&#8217;s Pod fails?</h4>
+</div>
+<div class="readable-text" data-hash="7e2da1e94d69f12b8574886118731277" data-text-hash="58a23dd6258df8403cb0525759860a4d" id="158" refid="158">
+<p><span>In the previous examples, you saw how a ReplicaSet controller reacts when someone tampers with the Pods of a ReplicaSet. Although these examples do a good job of illustrating how the ReplicaSet controller works, they don&#8217;t really show the true benefit of using a ReplicaSet to run Pods. The best reason to create Pods via a ReplicaSet instead of directly is that the Pods are automatically replaced when your cluster nodes fail.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="bf26d85e1aec3d63e66619eaa6943458" data-text-hash="0eaadb4fcb48a0a0ed7bc9868be9fbaa" id="159" refid="159">
+<h5>Warning</h5>
+</div>
+<div class="readable-text" data-hash="584fa8df10d8e23dcd93d14bebed3549" data-text-hash="3d7101a233873ba34fd4a0dee90022ee" id="160" refid="160">
+<p> <span>In the next example, a cluster node is caused to fail. In a poorly configured cluster, this can cause the entire cluster to fail. Therefore, you should only perform this exercise if you&#8217;re willing to rebuild the cluster from scratch if necessary.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="cc34075b69deb2a307599f6666f82dcc" data-text-hash="91199c6907363580d9cd2f2d078503e0" id="161" refid="161">
+<p><span>To see what happens when a node stops responding, you can disable its network interface. If you created your cluster with the kind tool, you can disable the network interface of the</span> <code>kind-worker2</code> <span>node with the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="7b07f5ee8cfb5763474680cd971a73ea" data-text-hash="0154c1648e24fb6845e751f2e70328ff" id="162" refid="162">
+<div class="code-area-container">
+<pre class="code-area">$ docker exec kind-worker2 ip link set eth0 down</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="163" refid="163">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="9af8a37ef5fbad19945f5fa71d203241" data-text-hash="2e76ac509edbbf91ab5acfb2863c0d0f" id="164" refid="164">
+<p> <span>Pick a node that has at least one of your kiada Pods running on it. List the Pods with the</span> <code>-o</code> <code>wide</code> <span>option to see which node each Pod runs on.</span></p>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="165" refid="165">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="c622a2124f83f32dd1d0da1190ee3b01" data-text-hash="2100cf16d51a76f7939fd67cd4b69b8a" id="166" refid="166">
+<p> <span>If you&#8217;re using GKE, you can log into the node with the</span> <code>gcloud compute ssh</code> <span>command and shut down its network interface with the</span> <code>sudo ifconfig eth0 down</code> <span>command. The ssh session will stop responding, so you&#8217;ll need to close it by pressing Enter, followed by &#8220;~.&#8221; (tilde and dot, without the quotes).</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="7c7897b57bd9486b78a21110711446b3" data-text-hash="00f9bb5044aebbff4cbc1fa2c6a66d71" id="167" refid="167">
+<p><span>Soon, the status of the Node object representing the cluster node changes to</span> <code>NotReady</code><span>:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="f0e49ee53cc1108ae342d299ebf73bad" data-text-hash="e830dd621918594c156c37b1db415f58" id="168" refid="168">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get node
+NAME                 STATUS     ROLES                  AGE    VERSION
+kind-control-plane   Ready      control-plane,master   2d3h   v1.21.1
+kind-worker          Ready      &lt;none&gt;                 2d3h   v1.21.1
+kind-worker2         NotReady   &lt;none&gt;                 2d3h   v1.21.1    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhpcyBub2RlIGlzIG5vIGxvbmdlciBvbmxpbmUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f53390edf67e0f359f8f22eaeebd6edc" data-text-hash="8601e754c663645cb95f4ad12bf69c54" id="169" refid="169">
+<p><span>This status indicates that the Kubelet running on the node hasn&#8217;t contacted the API server for some time. Since this isn&#8217;t a clear sign that the node is down, as it could just be a temporary network glitch, this doesn&#8217;t immediately affect the status of the Pods running on the node. They&#8217;ll continue to show as</span> <code>Running</code><span>. However, after a few minutes, Kubernetes realizes that the node is down and marks the Pods for deletion.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="170" refid="170">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="52e36757a608a2bcd6284516aa4f646e" data-text-hash="7535844cce61c7b727c2b8a9ff44cb49" id="171" refid="171">
+<p> <span>The time that elapses between a node becoming unavailable and its Pods being deleted can be configured using the <i>Taints and</i> <i>Tolerations</i> mechanism, which is explained in chapter 23.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="eb593db7353275f350f2fa377a5f2499" data-text-hash="417c314ef3d0cd3e6ba02b2c6db92244" id="172" refid="172">
+<p><span>Once the Pods are marked for deletion, the ReplicaSet controller creates new Pods to replace them. You can see this in the following output.</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="04ac291535542b5ad77d00ca8b3105ae" data-text-hash="dd8c4bf79c32701a870f91d0c19154ff" id="173" refid="173">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada -o wide
+NAME          READY   STATUS        RESTARTS   AGE   IP             NODE
+kiada-ffstj   2/2     Running       0          35s   10.244.1.150   kind-worker    #A
+kiada-l2r85   2/2     Terminating   0          37m   10.244.2.173   kind-worker2    #B
+kiada-n98df   2/2     Terminating   0          37m   10.244.2.174   kind-worker2    #B
+kiada-vnc4b   2/2     Running       0          37m   10.244.1.148   kind-worker
+kiada-wkpsn   2/2     Running       0          35s   10.244.1.151   kind-worker    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgTmV3IFBvZHMgdGhhdCB3ZXJlIGNyZWF0ZWQgdG8gcmVwbGFjZSB0aGUgb25lcyBvbiB0aGUgZmFpbGVkIG5vZGUuCiNCIFRoZSB0d28gUG9kcyBvbiB0aGUgZmFpbGVkIG5vZGUu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="6145966c5b5d5e1068cfa40397cd41d6" data-text-hash="73cdf5fe976e5c7486b8019c6f2f4c69" id="174" refid="174">
+<p><span>As you can see in the output, the two Pods on the</span> <code>kind-worker2</code> <span>node are marked as</span> <code>Terminating</code> <span>and have been replaced by two new Pods scheduled to the healthy node</span> <code>kind-worker</code><span>. Again, three Pod replicas are running as specified in the ReplicaSet.</span></p>
+</div>
+<div class="readable-text" data-hash="963e8fc0a7285251031ba9822716a836" data-text-hash="2facf0f2aefc09b55835e299fe99f6d9" id="175" refid="175">
+<p><span>The two Pods that are being deleted remain in the</span> <code>Terminating</code> <span>state until the node comes back online. In reality, the containers in those Pods are still running because the Kubelet on the node can&#8217;t communicate with the API server and therefore doesn&#8217;t know that they should be terminated. However, when the node&#8217;s network interface comes back online, the Kubelet terminates the containers, and the Pod objects are deleted. The following commands restore the node&#8217;s network interface:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="6fc06cabe616c950dab441961b0f0a1e" data-text-hash="18f3fffce3360f7d55171dbdf39d92a8" id="176" refid="176">
+<div class="code-area-container">
+<pre class="code-area">$ docker exec kind-worker2 ip link set eth0 up
+$ docker exec kind-worker2 ip route add default via 172.18.0.1</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="913bfe4db6ff10ae6398ecf136205cb5" data-text-hash="d4ee968754d5729ef8f32eaeaad82805" id="177" refid="177">
+<p><span>Your cluster may be using a gateway IP other than</span> <code>172.18.0.1</code><span>. To find it, run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="169b206c4221a00f3c1ef5607ace6320" data-text-hash="644155311d7a0020cdfd8790720b8063" id="178" refid="178">
+<div class="code-area-container">
+<pre class="code-area">$ docker network inspect kind -f '{{ (index .IPAM.Config 0).Gateway }}'</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="179" refid="179">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="e1e65a484afab2f6b93f934755237890" data-text-hash="6a22796f038aae276a432d1d6341f6cd" id="180" refid="180">
+<p> <span>If you&#8217;re using GKE, you must remotely reset the node with the</span> <code>gcloud compute instances reset &lt;node-name&gt;</code> <span>command.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="11ee5dd01ac5fadee638de4078f7ced6" data-text-hash="8367b4a520d2e9541ca83bcb62a376ad" id="181" refid="181">
+<h4>When do Pods not get replaced?</h4>
+</div>
+<div class="readable-text" data-hash="27af42bdb4344be4b727de2337c161e5" data-text-hash="16f289d3d556c59b9c70f9d3f19c5d65" id="182" refid="182">
+<p><span>The previous sections have demonstrated that the ReplicaSet controller ensures that there are always as many healthy Pods as specified in the ReplicaSet object. But is this always the case? Is it possible to get into a state where the number of Pods matches the desired replica count, but the Pods can&#8217;t provide the service to their clients?</span></p>
+</div>
+<div class="readable-text" data-hash="7852a6a92d4a456c48b0a374765d1b58" data-text-hash="06b276b0d1ea7ac24249e85043040e8c" id="183" refid="183">
+<p><span>Remember the liveness and readiness probes? If a container&#8217;s liveness probe fails, the container is restarted. If the probe fails multiple times, there&#8217;s a significant time delay before the container is restarted. This is due to the exponential backoff mechanism explained in chapter 6. During the backoff delay, the container isn&#8217;t in operation. However, it&#8217;s assumed that the container will eventually be back in service. If the container fails the readiness rather than the liveness probe, it&#8217;s also assumed that the problem will eventually be fixed.</span></p>
+</div>
+<div class="readable-text" data-hash="1cdbfee6f4d962923ab35652b953fa75" data-text-hash="4ca91460ac5aa927d07ca59e694317df" id="184" refid="184">
+<p><span>For this reason, Pods whose containers continually crash or fail their probes are never automatically deleted, even though the ReplicaSet controller could easily replace them with Pods that might run properly. Therefore, be aware that a ReplicaSet doesn&#8217;t guarantee that you&#8217;ll always have as many healthy replicas as you specify in the ReplicaSet object.</span></p>
+</div>
+<div class="readable-text" data-hash="13079458405c339945bdf352b6781bdc" data-text-hash="9df6ca27c9b12666d4a21510b6979f88" id="185" refid="185">
+<p><span>You can see this for yourself by failing one of the Pods&#8217; readiness probes with the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="50bc3a4d43143062a9ef500a4abe0eed" data-text-hash="2fc88628f7aa6e9db1b4e1239f766506" id="186" refid="186">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl exec rs/kiada -c kiada -- curl -X POST localhost:9901/healthcheck/fail</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="187" refid="187">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="21f00823d2b3547538bbde18bbaf8ebb" data-text-hash="5653da7dc2d46c88c7cb1eba2aacf1e6" id="188" refid="188">
+<p> <span>If you specify the ReplicaSet instead of the Pod name when running the</span> <code>kubectl exec</code> <span>command, the specified command is run in one of the Pods, not all of them, just as with</span> <code>kubectl logs</code><span>.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="1667c4dcb7e9e93c7f367d4f192c132c" data-text-hash="66414000e38fb3e1c32eada12d1dd159" id="189" refid="189">
+<p><span>After about thirty seconds, the</span> <code>kubectl get pods</code> <span>command indicates that one of the Pod&#8217;s containers is no longer ready:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="3e8772a54197d4c9d3e3e736676e525c" data-text-hash="7d95983ee1cca4ea8b938a5b02a13004" id="190" refid="190">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada
+NAME          READY   STATUS    RESTARTS   AGE
+kiada-78j7m   1/2     Running   0          21m    #A
+kiada-98lmx   2/2     Running   0          21m
+kiada-wk99p   2/2     Running   0          21m</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIFJFQURZIGNvbHVtbiBzaG93cyB0aGF0IG9ubHkgb25lIG9mIHR3byBjb250YWluZXJzIGluIHRoZSBQb2QgaXMgcmVhZHku"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="d17ff8ccb9f22bdf4f35e21b4adeeb03" data-text-hash="f62787ec50dece9dd32042260e074639" id="191" refid="191">
+<p><span>The Pod no longer receives any traffic from the clients, but the ReplicaSet controller doesn&#8217;t delete and replace it, even though it&#8217;s aware that only two of the three Pods are ready and accessible, as indicated by the ReplicaSet status:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="b75165d0828e4b638d497b0ddd03f853" data-text-hash="26a7801daac563d0c0f54a41800bac39" id="192" refid="192">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get rs
+NAME    DESIRED   CURRENT   READY   AGE
+kiada   3         3         2       2h    #A</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgT25seSB0d28gb2YgdGhlIHRocmVlIFBvZHMgYXJlIHJlYWR5Lg=="></div>
+</div>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="13f2c6c2da8a5d923d4f021dffdd99c0" data-text-hash="279ac5dd73c3a5783ebeb10e172c4f38" id="193" refid="193">
+<h5>IMPORTANT</h5>
+</div>
+<div class="readable-text" data-hash="80c96115d084e891fe890b25f8100432" data-text-hash="44186894c2f789037e207bba4a85dc09" id="194" refid="194">
+<p> <span>A ReplicaSet only ensures that the desired number of Pods are present. It doesn&#8217;t ensure that their containers are actually running and ready to handle traffic.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="5d2c7c2fed359dde95575bd45e2e0a70" data-text-hash="be4c7364d7e1ab56fac52b8a17e6c073" id="195" refid="195">
+<p><span>If this happens in a real production cluster and the remaining Pods can&#8217;t handle all the traffic, you&#8217;ll have to delete the bad Pod yourself. But what if you want to find out what&#8217;s wrong with the Pod first? How can you quickly replace the faulty Pod without deleting it so you can debug it?</span></p>
+</div>
+<div class="readable-text" data-hash="fa3cadd0fd40f505dadacf9f1c64442e" data-text-hash="87982f4b1b4e4cb5fb5cdbc1a05eaa24" id="196" refid="196">
+<p><span>You could scale the ReplicaSet up by one replica, but then you&#8217;ll have to scale back down when you finish debugging the faulty Pod. Fortunately, there&#8217;s a better way. It&#8217;ll be explained in the next section.</span></p>
+</div>
+<div class="readable-text" data-hash="cd275bc971e60117c4bf27586bf73349" data-text-hash="2cd4ec1ba529b78007d74a31ad9aae30" id="197" refid="197">
+<h3 id="sigil_toc_id_245">13.3.3&#160;Removing a Pod from the ReplicaSet&#8217;s control</h3>
+</div>
+<div class="readable-text" data-hash="72dd7bd8be074479363f75eede5f4aba" data-text-hash="36a925cac40af259f84eb997ceb3c9b9" id="198" refid="198">
+<p><span>You already know that the ReplicaSet controller is constantly making sure that the number of Pods that match the ReplicaSet&#8217;s label selector matches the desired number of replicas. So, if you remove a Pod from the set of Pods that match the selector, the controller replaces it. To do this, you simply change the labels of the faulty Pod, as shown in the following figure.</span></p>
+</div>
+<div class="browsable-container figure-container" data-hash="a9dfe39c9bc005aee083d26321b4a4d4" data-text-hash="8659c1a2c23f71bf1497eb84a192fd25" id="199" refid="199">
+<h5><span>Figure 13.7 Changing a Pod&#8217;s labels to remove it from the ReplicaSet</span></h5>
+<img alt="" data-processed="true" height="319" id="Picture_12" loading="lazy" src="EPUB/images/13_img_0007.png" width="826">
+</div>
+<div class="readable-text" data-hash="1344ea362f8b247bb633b1dfa4eff5b1" data-text-hash="b5ef3213ad42cc1872519a84758770aa" id="200" refid="200">
+<p><span>The ReplicaSet controller replaces the Pod with a new one, and from that point on, no longer pays attention to the faulty Pod. You can calmly figure out what&#8217;s wrong with it while the new Pod takes over the traffic.</span></p>
+</div>
+<div class="readable-text" data-hash="d5289fa5fe3ac51fa3eb6f62c33bdcbd" data-text-hash="6ae9f81ea9da002add1c763512881628" id="201" refid="201">
+<p><span>Let&#8217;s try this with the Pod whose readiness probe you failed in the previous section. For a Pod to match the ReplicaSet&#8217;s label selector, it must have the labels</span> <code>app=kiada</code> <span>and</span> <code>rel=stable</code><span>. Pods without these labels aren&#8217;t considered part of the ReplicaSet. So, to remove the broken Pod from the ReplicaSet, you need to remove or change at least one of these two labels. One way is to change the value of the</span> <code>rel</code> <span>label to</span> <code>debug</code> <span>as follows:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="c42b23ace4d1dda7dcb82b68941c7be2" data-text-hash="84ccd56936e45dffeb4e7b74096b5eea" id="202" refid="202">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl label po kiada-78j7m rel=debug --overwrite</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="04b3c6c59be8968eccf097ea4ed2d8e1" data-text-hash="507629c61ba2c5dfba25284b0042fb34" id="203" refid="203">
+<p><span>Since only two Pods now match the label selector, one less than the desired number of replicas, the controller immediately creates another Pod, as shown in the following output:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="b6134392212c43f0b566aab08f6a1377" data-text-hash="894094d341405589c17d8b20315adfb4" id="204" refid="204">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada -L app,rel
+NAME          READY   STATUS    RESTARTS   AGE   APP     REL
+kiada-78j7m   1/2     Running   0          60m   kiada   debug   #A
+kiada-98lmx   2/2     Running   0          60m   kiada   stable
+kiada-wk99p   2/2     Running   0          60m   kiada   stable
+kiada-xtxcl   2/2     Running   0          9s    kiada   stable   #B</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIGJyb2tlbiBQb2QgdGhhdCBubyBsb25nZXIgbWF0Y2hlcyB0aGUgUmVwbGljYVNldOKAmXMgbGFiZWwgc2VsZWN0b3IuCiNCIFRoaXMgUG9kIHdhcyBjcmVhdGVkIHRvIHJlcGxhY2UgdGhlIGJyb2tlbiBQb2Qu"></div>
+</div>
+</div>
+<div class="readable-text" data-hash="58c2e34cda503b11cc5c3174accc8ca2" data-text-hash="acdb1888a37974926ea8e50f66aed12b" id="205" refid="205">
+<p><span>As you can see from the values in the</span> <code>APP</code> <span>and</span> <code>REL</code> <span>columns, three Pods match the selector, while the broken Pod doesn&#8217;t. This Pod is no longer managed by the ReplicaSet. Therefore, when you&#8217;re done inspecting the Pod, you need to delete it manually.</span></p>
+</div>
+<div class="callout-container fm-callout">
+<div class="readable-text" data-hash="f35a087d0dc71beb3a7204d91c1c49e4" data-text-hash="3b0649c72650c313a357338dcdfb64ec" id="206" refid="206">
+<h5>Note</h5>
+</div>
+<div class="readable-text" data-hash="755e43b1a5b2da0da4a3acd20f81bd4b" data-text-hash="4eb46e385e098831fb7fa2105c8504a7" id="207" refid="207">
+<p> <span>When you remove a Pod from a ReplicaSet, the reference to the ReplicaSet object is removed from the Pod&#8217;s</span> <code>ownerReferences</code> <span>field.</span></p>
+</div>
+</div>
+<div class="readable-text" data-hash="22786a2434799d798d14227c1695e8ad" data-text-hash="511300023e3fbfef8d8008646525d5bd" id="208" refid="208">
+<p><span>Now that you&#8217;ve seen how the ReplicaSet controller responds to all the events shown in this and previous sections, you understand everything you need to know about this controller.</span></p>
+</div>
+<div class="readable-text" data-hash="7108bb4cfc33dd49d26dda09cebf6a9b" data-text-hash="6c034f02515a3da31b8e6c20beceadc2" id="209" refid="209">
+<h2 id="sigil_toc_id_246">13.4&#160;Deleting a ReplicaSet</h2>
+</div>
+<div class="readable-text" data-hash="0f3f2cabad64b2e7bdd2b64222da5afe" data-text-hash="7cdeac61683dcf783053494f3704cb3b" id="210" refid="210">
+<p><span>A ReplicaSet represents a group of Pod replicas that you manage as a unit. By creating a ReplicaSet object, you indicate that you want a specific number of Pod replicas based on a specific Pod template in your cluster. By deleting the ReplicaSet object, you indicate that you no longer want those Pods. So when you delete a ReplicaSet, all the Pods that belong to it are also deleted. This is done by the garbage collector, as explained earlier in this chapter.</span></p>
+</div>
+<div class="readable-text" data-hash="bdee2cfea118d90fe6016ccb05952507" data-text-hash="d5fc7ca8eefdca9899deb149d56dfbfb" id="211" refid="211">
+<h3 id="sigil_toc_id_247">13.4.1&#160;Deleting a ReplicaSet and all associated Pods</h3>
+</div>
+<div class="readable-text" data-hash="beb7a60a09e4124c43e87513ae110c25" data-text-hash="d4cdd91450d6443872d73a07e51611f3" id="212" refid="212">
+<p><span>To delete a ReplicaSet and all Pods it controls, run the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="d8302b1672d2f55750c4807410006a9d" data-text-hash="32da0e9be323234403f842d3a898541c" id="213" refid="213">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete rs kiada
+replicaset.apps "kiada" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="f2698773b0278aef4ae3beaccfdd44f8" data-text-hash="38b23080fb7c3892a9d64a8ee53afa3d" id="214" refid="214">
+<p><span>As expected, this also deletes the Pods:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="28b6292a0b075c8e9982df28ee6d8113" data-text-hash="4853d6e75cd2d83e0891e63d286cad6e" id="215" refid="215">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl get pods -l app=kiada
+NAME          READY   STATUS        RESTARTS   AGE
+kiada-2dq4f   0/2     Terminating   0          7m29s
+kiada-f5nff   0/2     Terminating   0          7m29s
+kiada-khmj5   0/2     Terminating   0          7m29s</pre>
+<div class="code-annotations-overlay-container" data-annotations=""></div>
+</div>
+</div>
+<div class="readable-text" data-hash="5dc030ad23ee98b40a47b3792e317a6f" data-text-hash="5395df73c44a7fa7615330a272495396" id="216" refid="216">
+<p><span>But in some cases, you don&#8217;t want that. So how can you prevent the garbage collector from removing the Pods? Before we get to that, recreate the ReplicaSet by reapplying the</span> <code>rs.kiada.versionLabel.yaml</code> <span>file.</span></p>
+</div>
+<div class="readable-text" data-hash="7edf070acac1e1082f75e4fd81813bb7" data-text-hash="31e07c7310cd932dc236e5b7b2a36fa2" id="217" refid="217">
+<h3 id="sigil_toc_id_248">13.4.2&#160;Deleting a ReplicaSet while preserving the Pods</h3>
+</div>
+<div class="readable-text" data-hash="0b31fe94d82d8db9db8b6d80277f5214" data-text-hash="033696d5c894dfb5da6d8868c0586eed" id="218" refid="218">
+<p><span>At the beginning of this chapter you learned that the label selector in a ReplicaSet is immutable. If you want to change the label selector, you have to delete the ReplicaSet object and create a new one. In doing so, however, you may not want the Pods to be deleted, because that would cause your service to become unavailable. Fortunately, you can tell Kubernetes to orphan the Pods instead of deleting them.</span></p>
+</div>
+<div class="readable-text" data-hash="84fdc51e4e2fe04799723a0d755c8ce5" data-text-hash="545e94f13c9f75045017680194db05e3" id="219" refid="219">
+<p><span>To preserve the Pods when you delete the ReplicaSet object, use the following command:</span></p>
+</div>
+<div class="browsable-container listing-container" data-hash="1358c775d0a98e991dbc118d5bd7e97c" data-text-hash="9bec308b5b4f35a193abca6b80fabc2a" id="220" refid="220">
+<div class="code-area-container">
+<pre class="code-area">$ kubectl delete rs kiada --cascade=orphan    #A
+replicaset.apps "kiada" deleted</pre>
+<div class="code-annotations-overlay-container" data-annotations="I0EgVGhlIC0tY2FzY2FkZT1vcnBoYW4gb3B0aW9ucyBlbnN1cmVzIHRoYXQgb25seSB0aGUgUmVwbGljYVNldCBpcyBkZWxldGVkLCB3aGlsZSB0aGUgUG9kcyBhcmUgcHJlc2VydmVkLg=="></div>
+</div>
+</div>
+<div class="readable-text" data-hash="37c9ede0f720230c8ea777d7768c6fe8" data-text-hash="00a443eb9a9379729e594ae36b39d6b3" id="221" refid="221">
+<p><span>Now, if you list the Pods, you&#8217;ll find that they&#8217;ve been preserved. If you look at their manifests, you&#8217;ll notice that the ReplicaSet object has been removed from</span> <code>ownerReferences</code><span>. These Pods are now orphaned, but if you create a new ReplicaSet with the same label selector, it&#8217;ll take these Pods under its wing. Apply the</span> <code>rs.kiada.versionLabel.yaml</code> <span>file again to see this for yourself.</span></p>
+</div>
+<div class="readable-text" data-hash="ab4bc1f839cbaf4a3d0d6d71884e0429" data-text-hash="e929646d79ffb6405bc2922ea91aa05c" id="222" refid="222">
+<h2 id="sigil_toc_id_249">13.5&#160;Summary</h2>
+</div>
+<div class="readable-text" data-hash="ed1c131acf2e53cbaecddfabedf971b6" data-text-hash="66b69a98496c3ac560da551d8397f915" id="223" refid="223">
+<p><span>In this chapter, you learned that:</span></p>
+</div>
+<ul>
+<li class="readable-text" data-hash="99a429187ac0b6bb9eb50120f2a0ea47" data-text-hash="c7178de4a54b203432bbd41c89789877" id="224" refid="224"><span>A ReplicaSet represents a group of identical Pods that you manage as a unit. In the ReplicaSet, you specify a Pod template, the desired number of replicas, and a label selector.</span></li>
+<li class="readable-text" data-hash="36931183dfc272893a4e1294c7df3203" data-text-hash="372eb3fb1925c418b98242a2c86af3f3" id="225" refid="225"><span>Almost all Kubernetes API object types have an associated controller that processes objects of that type. In each controller, a reconciliation control loop runs that constantly reconciles the actual state with the desired state.</span></li>
+<li class="readable-text" data-hash="e06457d2e672e9681c1738a16d1c9f8d" data-text-hash="d303108d152ea55fe67f2f7fade5b5d1" id="226" refid="226"><span>The ReplicaSet controller ensures that the actual number of Pods always matches the desired number specified in the ReplicaSet. When these two numbers diverge, the controller immediately reconciles them by creating or deleting Pod objects.</span></li>
+<li class="readable-text" data-hash="cde715024f4dd9403b88e44ee49886ff" data-text-hash="1a628fadbc18ee225add9685fb64625b" id="227" refid="227"><span>You can change the number of replicas you want at any time and the controller will take the necessary steps to honor your request. However, when you update the Pod template, the controller won&#8217;t update the existing Pods.</span></li>
+<li class="readable-text" data-hash="b99013d7e9a0a444fa006395fbc0bfeb" data-text-hash="7dcaf250892b71d3898023dff9a0a89e" id="228" refid="228"><span>Pods created by a ReplicaSet are owned by that ReplicaSet. If you delete the owner, the dependents are deleted by the garbage collector, but you can tell</span> <code>kubectl</code> <span>to orphan them instead.</span></li>
+</ul>
+<div class="readable-text" data-hash="74b984550f42cebcbd4337cbf9e959a1" data-text-hash="a496e7a25afce0ec1a489ac1d8d1c374" id="229" refid="229">
+<p><span>In the next chapter, you&#8217;ll replace the ReplicaSet with a Deployment object.</span></p>
+</div></div>
+
+        </body>
+        
+        
