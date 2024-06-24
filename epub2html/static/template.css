@@ -21,32 +21,32 @@ h1,h2,h3,h4,h5,h6,strong,input,select,textarea,button,body,code {
 }
 h1 {
     font-size: 2.25em;
-    font-weight: 900;
+    font-weight: 500;
 }
 
 h2 {
     font-size: 1.75em;
-    font-weight: 900;
+    font-weight: 500;
 }
 
 h3 {
     font-size: 1.5em;
-    font-weight: 900
+    font-weight: 500
 }
 
 h4 {
     font-size: 1.2em;
-    font-weight: 900
+    font-weight: 300
 }
 
 h5 {
     font-size: 1.0em;
-    font-weight: 900
+    font-weight: 300
 }
 
 h6 {
     font-size: .8em;
-    font-weight: 900
+    font-weight: 200
 }
 table>tbody>tr:hover{
     background-color: #F5F5F5;
@@ -1165,7 +1165,7 @@ table>tbody>tr:hover{
     line-height: 1.7;
 }
 .markdown-body h1,.markdown-body h2,.markdown-body h3,.markdown-body h4,.markdown-body h5,.markdown-body h6{
-    font-weight: 400 !important;
+    font-weight: 600 !important;
 }
 .markdown-body{font-size: 1.14em !important;line-height: 2;}
 .editormd-preview-container ol.linenums li, .editormd-html-preview ol.linenums li{
