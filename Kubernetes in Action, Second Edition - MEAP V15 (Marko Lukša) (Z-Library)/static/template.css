@@ -123,7 +123,7 @@ table>tbody>tr:hover{
     line-height: 54px;
     color: #333;
     font-size: 16px;
-    font-weight: bold;
+    font-weight: 900;
 }
 .m-manual .manual-tab {
     position: absolute;
