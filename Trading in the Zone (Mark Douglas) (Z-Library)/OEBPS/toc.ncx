@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ncx version="2005-1" xmlns="http://www.daisy.org/z3986/2005/ncx/">
+  <head>
+    <meta content="9781440625411" name="dtb:uid"/>
+  </head>
+  <docTitle>
+    <text>Trading in the Zone</text>
+  </docTitle>
+  <navMap>
+    <navPoint id="navPoint1" playOrder="1">
+      <navLabel>
+        <text>Title Page</text>
+      </navLabel>
+      <content src="Text/03_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint2" playOrder="2">
+      <navLabel>
+        <text>Copyright Page</text>
+      </navLabel>
+      <content src="Text/04_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint3" playOrder="3">
+      <navLabel>
+        <text>Dedication</text>
+      </navLabel>
+      <content src="Text/05_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint4" playOrder="4">
+      <navLabel>
+        <text>Foreword</text>
+      </navLabel>
+      <content src="Text/06_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint5" playOrder="5">
+      <navLabel>
+        <text>Contents</text>
+      </navLabel>
+      <content src="Text/02_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint6" playOrder="6">
+      <navLabel>
+        <text>CHAPTER 1 - THE ROAD TO SUCCESS: FUNDAMENTAL, TECHNICAL, OR MENTAL ANALYSIS?</text>
+      </navLabel>
+      <content src="Text/10_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint7" playOrder="7">
+      <navLabel>
+        <text>CHAPTER 2 - THE LURE (AND THE DANGERS) OF TRADING</text>
+      </navLabel>
+      <content src="Text/11_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint8" playOrder="8">
+      <navLabel>
+        <text>CHAPTER 3 - TAKING RESPONSIBILITY</text>
+      </navLabel>
+      <content src="Text/12_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint9" playOrder="9">
+      <navLabel>
+        <text>CHAPTER 4 - CONSISTENCY: A STATE OF MIND</text>
+      </navLabel>
+      <content src="Text/13_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint10" playOrder="10">
+      <navLabel>
+        <text>CHAPTER 5 - THE DYNAMICS OF PERCEPTION</text>
+      </navLabel>
+      <content src="Text/14_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint11" playOrder="11">
+      <navLabel>
+        <text>CHAPTER 6 - THE MARKET'S PERSPECTIVE</text>
+      </navLabel>
+      <content src="Text/15_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint12" playOrder="12">
+      <navLabel>
+        <text>CHAPTER 7 - THE TRADER’S EDGE: THINKING IN PROBABILITIES</text>
+      </navLabel>
+      <content src="Text/16_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint13" playOrder="13">
+      <navLabel>
+        <text>CHAPTER 8 - WORKING WITH YOUR BELIEFS</text>
+      </navLabel>
+      <content src="Text/17_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint14" playOrder="14">
+      <navLabel>
+        <text>CHAPTER 9 - THE NATURE OF BELIEFS</text>
+      </navLabel>
+      <content src="Text/18_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint15" playOrder="15">
+      <navLabel>
+        <text>CHAPTER 10 - THE IMPACT OF BELIEFS ON TRADING</text>
+      </navLabel>
+      <content src="Text/19_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint16" playOrder="16">
+      <navLabel>
+        <text>CHAPTER 11 - THINKING LIKE A TRADER</text>
+      </navLabel>
+      <content src="Text/20_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint17" playOrder="17">
+      <navLabel>
+        <text>ATTITUDE SURVEY</text>
+      </navLabel>
+      <content src="Text/21_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+    <navPoint id="navPoint18" playOrder="18">
+      <navLabel>
+        <text>Index</text>
+      </navLabel>
+      <content src="Text/22_doug_9780735201446_oe.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>

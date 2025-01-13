@@ -1,0 +1,102 @@
+<?xml version="1.0"  encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Trading in the Zone</dc:title>
+    <dc:creator xmlns:ns0="http://www.idpf.org/2007/opf" ns0:role="aut" ns0:file-as="Douglas, Mark">Mark Douglas</dc:creator>
+    <dc:identifier id="bookid">9781440625411</dc:identifier>
+    <dc:publisher>Prentice Hall Press</dc:publisher>
+    <dc:date>2001-01-01T05:00:00+00:00</dc:date>
+    <dc:description>Maximizing the trader's state of mind is the key to successful results. Conflicts, contradictions, and paradoxes in thinking can spell disaster for even a highly motivated, astute and well grounded trader. Mark Douglas, a trader, personal trading coach, and industry consultant since 1982, sends the message that "thinking strategy" will profoundly influence a trader's success rate. Douglas addresses five very specific issues to give traders the insight and understanding about themselves that will make them consistent winners in the market.
+
+Trading in the Zone offers specific solutions to the "people factor" of commodity price movement. It uncovers the true culprit for lack of consistency when it comes to stock picking: lack of focus and self-confidence. Through simple exercises, traders will learn how to think in terms of probabilities and adopt the specific beliefs necessary to developing a winner's mindset. Along the way, they'll gain valuable insights into their own entrenched misconceptions about the market.
+
+Backed by compelling examples, Trading in the Zone adds a new dimension to getting an edge on the market. Through a better understanding of themselves, as well as of Wall Street's realities, traders will come to leverage the power of their psyche for unprecedented profitability.
+
+Reviews
+Douglas, president of the seminar firm Trading Behavior Dynamics, focuses on the psychology of successful traders. Instead of offering specific strategies, he advises readers, "The first step on the road...is to understand and completely accept the psychological realities of trading." It may be too abstract for some, but given trading's risks, this book could assist experienced investors willing to engage in self-reflection.
+
+About the Author
+Mark Douglas is author of "The Disciplined Trader™-Developing Winning Attitudes" considered an industry classic ~ and one of the first books to introduce the investment industry to the concept of trading psychology.  Mark began coaching traders in 1982, and has continued to develop seminar and training programs on trading psychology for the investment industry,and for individual traders.  He has been a frequent speaker at seminars across the world, as well as in the U.S.,teaching traders how to become consistently successful.  Mark Douglas is also author of "The Definitive Guide"  published in 2015, "The Little Book of Trading Performance" real-life coaching sessions co-written with Behavioral Finance coach Paula T. Webb. More information at markdouglas.com.</dc:description>
+    <dc:date xmlns:opf="http://www.idpf.org/2007/opf" opf:event="modification">2018-02-12</dc:date>
+    <dc:contributor xmlns:ns1="http://www.idpf.org/2007/opf" ns1:role="bkp">calibre (3.40.1) [https://calibre-ebook.com]</dc:contributor>
+    <dc:language>en-US</dc:language>
+    <dc:identifier xmlns:ns2="http://www.idpf.org/2007/opf" ns2:scheme="calibre">4fdb84a0-8ab9-4978-81ac-a2c06c0d44b7</dc:identifier>
+    <dc:identifier xmlns:ns3="http://www.idpf.org/2007/opf" ns3:scheme="ISBN">9780735201446</dc:identifier>
+    <meta content="2010-03-01" name="created"/>
+    <meta name="cover" content="cover"/>
+    <meta content="0.9.2" name="Sigil version"/>
+    <meta name="calibre:title_sort" content="Trading in the Zone"/>
+    <meta name="calibre:author_link_map" content="{&quot;Mark Douglas&quot;: &quot;&quot;}"/>
+    <meta name="calibre:user_metadata:#on_cookyes" content="{&quot;colnum&quot;: 1, &quot;table&quot;: &quot;custom_column_1&quot;, &quot;link_column&quot;: &quot;value&quot;, &quot;#value#&quot;: null, &quot;is_editable&quot;: true, &quot;is_multiple&quot;: null, &quot;kind&quot;: &quot;field&quot;, &quot;is_csp&quot;: false, &quot;rec_index&quot;: 22, &quot;label&quot;: &quot;on_cookyes&quot;, &quot;search_terms&quot;: [&quot;#on_cookyes&quot;], &quot;#extra#&quot;: null, &quot;datatype&quot;: &quot;bool&quot;, &quot;display&quot;: {}, &quot;is_custom&quot;: true, &quot;column&quot;: &quot;value&quot;, &quot;name&quot;: &quot;Cookyes&quot;, &quot;is_category&quot;: false, &quot;category_sort&quot;: &quot;value&quot;, &quot;is_multiple2&quot;: {}}"/>
+  </metadata>
+  <manifest>
+    <item href="Text/01_doug_9780735201446_oe.xhtml" id="x01_doug_9780735201446_oe.xhtml" media-type="application/xhtml+xml"/>
+    <item href="Text/03_doug_9780735201446_oe.xhtml" id="tp" media-type="application/xhtml+xml"/>
+    <item href="Text/04_doug_9780735201446_oe.xhtml" id="cop" media-type="application/xhtml+xml"/>
+    <item href="Text/05_doug_9780735201446_oe.xhtml" id="ded" media-type="application/xhtml+xml"/>
+    <item href="Text/02_doug_9780735201446_oe.xhtml" id="toc" media-type="application/xhtml+xml"/>
+    <item href="Text/06_doug_9780735201446_oe.xhtml" id="frw" media-type="application/xhtml+xml"/>
+    <item href="Text/07_doug_9780735201446_oe.xhtml" id="fm1" media-type="application/xhtml+xml"/>
+    <item href="Text/08_doug_9780735201446_oe.xhtml" id="fm2" media-type="application/xhtml+xml"/>
+    <item href="Text/10_doug_9780735201446_oe.xhtml" id="c01" media-type="application/xhtml+xml"/>
+    <item href="Text/11_doug_9780735201446_oe.xhtml" id="c02" media-type="application/xhtml+xml"/>
+    <item href="Text/12_doug_9780735201446_oe.xhtml" id="c03" media-type="application/xhtml+xml"/>
+    <item href="Text/13_doug_9780735201446_oe.xhtml" id="c04" media-type="application/xhtml+xml"/>
+    <item href="Text/14_doug_9780735201446_oe.xhtml" id="c05" media-type="application/xhtml+xml"/>
+    <item href="Text/15_doug_9780735201446_oe.xhtml" id="c06" media-type="application/xhtml+xml"/>
+    <item href="Text/16_doug_9780735201446_oe.xhtml" id="c07" media-type="application/xhtml+xml"/>
+    <item href="Text/17_doug_9780735201446_oe.xhtml" id="c08" media-type="application/xhtml+xml"/>
+    <item href="Text/18_doug_9780735201446_oe.xhtml" id="c09" media-type="application/xhtml+xml"/>
+    <item href="Text/19_doug_9780735201446_oe.xhtml" id="c10" media-type="application/xhtml+xml"/>
+    <item href="Text/20_doug_9780735201446_oe.xhtml" id="c11" media-type="application/xhtml+xml"/>
+    <item href="Text/21_doug_9780735201446_oe.xhtml" id="bm1" media-type="application/xhtml+xml"/>
+    <item href="Text/22_doug_9780735201446_oe.xhtml" id="in1" media-type="application/xhtml+xml"/>
+    <item href="Text/next-reads.xhtml" id="next-reads.xhtml" media-type="application/xhtml+xml"/>
+    <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>
+    <item href="Styles/doug_9780735201446_oeb_css_r1.css" id="style" media-type="text/css"/>
+    <item href="Images/cover.jpg" id="cover" media-type="image/jpeg"/>
+    <item href="Images/doug_9780735201446_oeb_001_r1.jpg" id="doug_9780735201446_oeb_001_r1" media-type="image/jpeg"/>
+    <item href="Images/doug_9780735201446_oeb_002_r1.gif" id="doug_9780735201446_oeb_002_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_003_r1.gif" id="doug_9780735201446_oeb_003_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_004_r1.gif" id="doug_9780735201446_oeb_004_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_005_r1.gif" id="doug_9780735201446_oeb_005_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_006_r1.gif" id="doug_9780735201446_oeb_006_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_007_r1.gif" id="doug_9780735201446_oeb_007_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_008_r1.gif" id="doug_9780735201446_oeb_008_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_009_r1.gif" id="doug_9780735201446_oeb_009_r1" media-type="image/gif"/>
+    <item href="Images/doug_9780735201446_oeb_010_r1.gif" id="doug_9780735201446_oeb_010_r1" media-type="image/gif"/>
+    <item href="Images/next-reads_logo.jpg" id="next-reads_logo.jpg" media-type="image/jpeg"/>
+    <item href="Fonts/Fort-Book.otf" id="Fort-Book.otf" media-type="application/vnd.ms-opentype"/>
+    <item href="Fonts/Shift-BoldItalic.otf" id="Shift-BoldItalic.otf" media-type="application/vnd.ms-opentype"/>
+    <item href="Fonts/Shift-Light.otf" id="Shift-Light.otf" media-type="application/vnd.ms-opentype"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="x01_doug_9780735201446_oe.xhtml"/>
+    <itemref idref="tp"/>
+    <itemref idref="cop"/>
+    <itemref idref="ded"/>
+    <itemref idref="toc"/>
+    <itemref idref="frw"/>
+    <itemref idref="fm1"/>
+    <itemref idref="fm2"/>
+    <itemref idref="c01"/>
+    <itemref idref="c02"/>
+    <itemref idref="c03"/>
+    <itemref idref="c04"/>
+    <itemref idref="c05"/>
+    <itemref idref="c06"/>
+    <itemref idref="c07"/>
+    <itemref idref="c08"/>
+    <itemref idref="c09"/>
+    <itemref idref="c10"/>
+    <itemref idref="c11"/>
+    <itemref idref="bm1"/>
+    <itemref idref="in1"/>
+    <itemref idref="next-reads.xhtml"/>
+  </spine>
+  <guide>
+    <reference href="Text/02_doug_9780735201446_oe.xhtml" title="Table of Contents" type="toc"/>
+    <reference href="Text/01_doug_9780735201446_oe.xhtml" title="Start Here" type="text"/>
+    <reference href="Text/01_doug_9780735201446_oe.xhtml" title="Cover" type="cover"/>
+  </guide>
+</package>
