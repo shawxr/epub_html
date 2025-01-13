@@ -6,6 +6,8 @@
 
 结合GithubAction 可以生成访问的站点: [https://zxcvbnmzsedr.github.io/epub_html/](https://zxcvbnmzsedr.github.io/epub_html/)
 
+我的 [https://shawxr.github.io/epub_html/](https://shawxr.github.io/epub_html/)
+
 ## 用法
 
 将epub文件丢到book目录下即可,然后运行python epub2html/epub2html.py
